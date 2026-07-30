@@ -1,0 +1,166 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==========================================
+    // دالات التحقق والمساعدة (Reusable Helpers)
+    // ==========================================
+
+    // التحقق من أن المستخدم مسجل الدخول
+    function isLoggedIn() {
+      return request.auth != null;
+    }
+
+    // التحقق من أن المستخدم هو المشرف (Admin)
+    function isAdmin() {
+      return isLoggedIn() && request.auth.token.email == 'attouabdelkarim2@gmail.com';
+    }
+
+    // التحقق من مطابقة حساب المستخدم مع الوثيقة
+    function isOwner(userId) {
+      return isLoggedIn() && request.auth.uid == userId;
+    }
+
+    // ==========================================
+    // قواعد الحماية للمجموعات (Collection Rules)
+    // ==========================================
+
+    // 1. حسابات المستخدمين (Users)
+    match /users/{userId} {
+      allow read, write: if isAdmin() || isOwner(userId);
+
+      // الإشعارات الفرعية للمستخدم (Notifications)
+      match /notifications/{notifId} {
+        allow read, update, delete: if isAdmin() || isOwner(userId);
+        allow create: if isAdmin();
+      }
+    }
+
+    // 2. الطلبات والفواتير (Orders)
+    match /orders/{orderId} {
+      // السماح بقراءة فاتورة معينة للجميع عبر معرفها الفريد لتسهيل مشاركة رابط الفاتورة للزبون وضمان التحقق بـ QR Code
+      allow get: if true;
+      
+      // السماح بسرد وإدراج جميع الطلبات للمشرف فقط، أو للمستخدم لمشاهدة قائمة طلباته الخاصة
+      allow list: if isAdmin() || (isLoggedIn() && resource.data.customerUserId == request.auth.uid);
+      
+      // السماح بإنشاء طلب جديد:
+      // - إذا كان مسجلاً، يجب أن يطابق معرّفه الفريد.
+      // - إذا كان زائراً (Guest)، يتم تسجيل الطلب تحت معرّف "guest".
+      // - المشرف يمكنه الإنشاء في كل الأحوال.
+      allow create: if isAdmin() || 
+                    (isLoggedIn() && request.resource.data.customerUserId == request.auth.uid) ||
+                    (!isLoggedIn() && request.resource.data.customerUserId == 'guest');
+      
+      // السماح بالتعديل للمشرف (تغيير الحالة، إضافة إثبات الطباعة) أو للمستخدم المسجل لتحديث معلومات الطلب (مثل chargilyCheckoutId)
+      allow update: if isAdmin() || (isLoggedIn() && resource.data.customerUserId == request.auth.uid);
+      
+      // الحذف حصري للمشرف فقط
+      allow delete: if isAdmin();
+    }
+
+    // 3. المنتجات والخدمات (Products)
+    match /products/{productId} {
+      // المنتجات والأسعار والخيارات مقروءة للجميع (زوار وأعضاء) لعرض الخدمات بالمنصة
+      allow read: if true;
+      // الإضافة والتعديل والحذف حكر على المشرف فقط
+      allow write: if isAdmin();
+    }
+
+    // 4. أكواد الخصم والكوبونات (Promo Codes)
+    match /promoCodes/{codeId} {
+      // السماح بقراءة كود معين للتحقق من صلاحيته وتطبيقه أثناء الدفع بالسلة للزوار والأعضاء
+      allow get: if true;
+      // المشرف فقط من يمكنه استعراض قائمة الأكواد بالكامل
+      allow list: if isAdmin();
+      
+      // السماح بإنشاء كود خصم:
+      // - للمشرف.
+      // - للمستخدم المسجل عند فوزه في عجلة الحظ أو استبداله لنقاطه (بشرط أن يكون هو مالك الكود المسجل في الحقل ownerId)
+      // - مع التحقق الصارم من نوع وقيمة الخصم لمنع توليد أكواد غير مصرح بها خارج النظام
+      allow create: if isAdmin() || (
+                      isLoggedIn() && 
+                      request.resource.data.ownerId == request.auth.uid &&
+                      request.resource.data.isReward == true &&
+                      request.resource.data.active == true &&
+                      (
+                        (request.resource.data.discountType == 'percent' && (
+                          request.resource.data.discountValue == 10 || 
+                          request.resource.data.discountValue == 15 || 
+                          (request.resource.data.discountValue == 0 && request.resource.data.isFreeShipping == true)
+                        )) ||
+                        (request.resource.data.discountType == 'fixed' && (
+                          request.resource.data.discountValue == 500 || 
+                          request.resource.data.discountValue == 600 || 
+                          request.resource.data.discountValue == 1000
+                        ))
+                      )
+                    );
+      
+      // التعديل والحذف محصور بالمشرف فقط
+      allow update, delete: if isAdmin();
+    }
+
+    // 5. سجل معاملات النقاط (Point Transactions)
+    match /pointTransactions/{txId} {
+      // تمكين المستخدم المسجل من رؤية تاريخ نقاطه الخاص فقط، وتمكين المشرف من رؤية الجميع
+      allow read, list: if isAdmin() || (isLoggedIn() && resource.data.userId == request.auth.uid);
+      
+      // السماح بإضافة معاملة نقاط جديدة:
+      // - للمشرف.
+      // - للمستخدم المسجل إذا كانت المعاملة موجهة لحسابه الشخصي (مثل كسب نقاط، استبدال، لعب العجلة).
+      // - السماح بإضافة معاملة 50 نقطة كهدية إحالة صديق (نوع المعاملة won والنقاط 50) لحساب الموصي (Referrer)
+      allow create: if isAdmin() || (
+                      isLoggedIn() && (
+                        (request.resource.data.userId == request.auth.uid && (
+                          (request.resource.data.points < 0 && (request.resource.data.type == 'redeemed' || request.resource.data.type == 'spin_cost')) ||
+                          (request.resource.data.points == 0 && (request.resource.data.type == 'won' || request.resource.data.type == 'spin_cost')) ||
+                          (request.resource.data.type == 'won' && (request.resource.data.points == 20 || request.resource.data.points == 50 || request.resource.data.points == 100))
+                        )) ||
+                        (request.resource.data.points == 50 && request.resource.data.type == 'won')
+                      )
+                    );
+      
+      // لا يُسمح بتعديل أو حذف معاملات النقاط المسجلة إطلاقاً لضمان سلامة ونزاهة نظام الولاء ومنع التزوير
+      allow update, delete: if isAdmin();
+    }
+
+    // 6. رموز الإحالة للمستخدمين (Referral Codes)
+    match /referralCodes/{codeId} {
+      // السماح للمستخدمين المسجلين بالبحث عن كود إحالة للتحقق من وجوده وصلاحيته عند تطبيقه
+      allow get: if isLoggedIn();
+      // المشرف فقط من يسرد قائمة الأكواد
+      allow list: if isAdmin();
+      
+      // السماح للمستخدم بإنشاء أو تحديث رمز إحالته الخاص
+      allow create, update: if isAdmin() || (isLoggedIn() && request.resource.data.userId == request.auth.uid);
+      
+      // الحذف للمشرف فقط
+      allow delete: if isAdmin();
+    }
+
+    // 7. إعدادات المنصة (Settings)
+    match /settings/{docId} {
+      // السماح للجميع بقراءة وثيقة إعدادات الواجهة (settings/ui) لمعرفة حالة الصيانة وتكاليف الشحن والقيود
+      allow get: if docId == 'ui';
+      // الإضافة والتعديل والسرد محصور بالمشرف
+      allow list, write: if isAdmin();
+    }
+
+    // 8. مشتركو الصيانة (Maintenance Subscribers)
+    match /maintenance_subscribers/{subId} {
+      // السماح لأي زائر بإرسال بريده لتلقي إشعار الافتتاح عند تشغيل نمط الصيانة
+      allow create: if true;
+      // القراءة والحذف حصريان للمشرف لمراسلتهم وإدارة القائمة
+      allow read, update, delete: if isAdmin();
+    }
+
+    // 9. سجلات الأمان (Security Logs)
+    match /securityLogs/{logId} {
+      // السماح للجميع بإنشاء سجل أمني (مثلا عند محاولات تسجيل الدخول الخاطئة أو الهجمات)
+      allow create: if true;
+      // قراءة وإدارة السجلات حصري للمشرف
+      allow read, update, delete: if isAdmin();
+    }
+  }
+}

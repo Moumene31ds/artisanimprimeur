@@ -1,0 +1,70 @@
+{
+  "name": "L'Artisan Imprimeur | الحرفي للطباعة",
+  "short_name": "Artisan Print",
+  "description": "Votre partenaire premium pour l'impression et le design en Algérie",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "lang": "fr",
+  "dir": "ltr",
+  "categories": ["business", "shopping", "lifestyle"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/home.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Accueil - L'Artisan Imprimeur"
+    },
+    {
+      "src": "/screenshots/products.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Nos produits d'impression"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mes commandes",
+      "short_name": "Commandes",
+      "description": "Suivre mes commandes",
+      "url": "/orders",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Panier",
+      "short_name": "Panier",
+      "description": "Voir mon panier",
+      "url": "/cart",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Contact Support",
+      "short_name": "Support",
+      "description": "Contacter le support",
+      "url": "/contact",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "any" }]
+    }
+  ],
+  "related_applications": [],
+  "scope": "/",
+  "display_override": ["window-controls-overlay", "standalone", "browser"]
+}
