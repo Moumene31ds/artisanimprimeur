@@ -97,7 +97,7 @@ export default function QRMakerPage() {
         <div className="w-full md:w-auto flex flex-col items-center justify-center shrink-0">
           <div className="w-64 h-64 bg-white rounded-3xl shadow-inner border-2 border-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
             {qrUrl ? (
-              <img src={qrUrl} alt="Generated QR Code" className="w-full h-full object-contain animate-fadeIn" />
+              <img src={qrUrl} alt="Generated QR Code" loading="lazy" decoding="async" className="w-full h-full object-contain animate-fadeIn" />
             ) : (
               <div className="text-center text-slate-300 flex flex-col items-center">
                 <QrCode size={64} className="mb-2 opacity-50" />

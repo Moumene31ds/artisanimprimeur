@@ -10,41 +10,11 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Sparkles, Star, StarHalf, MapPin, Truck, Loader2, Phone, Globe, Gift, X, Copy, Check } from "lucide-react";
 import { WILAYAS, SHIPPING_RATES } from "@/lib/constants";
+import { FEATURED_PRODUCTS } from "@/lib/catalog";
 import { db } from "@/lib/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "sonner";
 import { useSwipe } from "@/hooks/useSwipe";
-
-const FEATURED_PRODUCTS = [
-  {
-    id: "p1",
-    name: "Cartes de Visite Premium",
-    price: 2500,
-    image: "https://img.magnific.com/psd-gratuit/modele-conception-carte-visite-professionnelle_47987-19617.jpg?semt=ais_hybrid&w=740&q=80",
-    category: "Cartes",
-  },
-  {
-    id: "p2",
-    name: "Flyers Publicitaires (A5)",
-    price: 4500,
-    image: "https://images.unsplash.com/photo-1563298723-dcfebaa392e3?auto=format&fit=crop&q=80&w=800",
-    category: "Flyers",
-  },
-  {
-    id: "p3",
-    name: "Stickers Personnalisés",
-    price: 1200,
-    image: "https://lesgommettesfrancaises.com/wp-content/uploads/2024/01/GF506-stickers-joyeux-anniversaire-personnalise-gommettes-francaises.jpg",
-    category: "Goodies",
-  },
-  {
-    id: "p4",
-    name: "Affiches de Luxe (A3)",
-    price: 3000,
-    image: "https://images.unsplash.com/photo-1572044162444-ad60f128bdea?auto=format&fit=crop&q=80&w=800",
-    category: "Impression",
-  },
-];
 
 const TESTIMONIALS = [
   { name: "Moumene A.", role: "CEO, TechDz", text: "Meilleure qualité d'impression. Rapide et très professionnel !", rating: 5 },
@@ -186,7 +156,7 @@ export default function Home() {
     },
     {
       question: "هل يمكنني الدفع عبر الإنترنت باستخدام بطاقة الذهبية أو CIB؟",
-      answer: "نعم، يمكنك الدفع مباشرة عبر الموقع ببطاقتك الذهبية أو بطاقة CIB البنكية بكل أمان وسهولة بفضل اندماجنا مع بوابة الدفع الجزائرية الرسمية Chargily."
+      answer: "نعم، نقدم خيار الدفع الإلكتروني (الذهبية / CIB) بالإضافة إلى الدفع عند الاستلام. يمكنك أيضاً تأكيد طلبك بنقل مبلغ الفاتورة عبر بريدي موب ورفع وصل الدفع في صفحة تأكيد الدفع ليتحقق فريقنا منه بسرعة."
     },
     {
       question: "ماذا لو لم يكن لدي تصميم جاهز للطباعة؟",
@@ -203,7 +173,7 @@ export default function Home() {
     },
     {
       question: "Puis-je payer en ligne avec Edahabia ou CIB ?",
-      answer: "Oui, notre passerelle de paiement intégrée Chargily Pay sécurise à 100 % vos transactions avec les cartes Edahabia d'Algérie Poste et les cartes interbancaires CIB."
+      answer: "Oui, nous proposons le paiement électronique (Edahabia / CIB) en plus du paiement à la livraison. Vous pouvez aussi transférer le montant via BaridiMob et téléverser votre reçu sur la page de confirmation de paiement pour une vérification rapide par notre équipe."
     },
     {
       question: "Comment faire si je n'ai pas de design prêt ?",

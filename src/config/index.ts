@@ -14,9 +14,14 @@ export const config = {
     measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || process.env.FIREBASE_MEASUREMENT_ID,
   },
 
-  // Google Gemini AI
-  googleAI: {
-    apiKey: process.env.GOOGLE_API_KEY, // هذا المفتاح يجب أن يكون سرياً (Server-side only)
+  // Free AI Provider (Ollama local → OpenRouter free fallback)
+  ai: {
+    provider: (process.env.AI_PROVIDER || 'auto') as 'auto' | 'ollama' | 'openrouter',
+    ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
+    ollamaModel: process.env.OLLAMA_MODEL || 'qwen3:8b',
+    ollamaVisionModel: process.env.OLLAMA_VISION_MODEL || 'qwen3-vl:latest',
+    openRouterModel: process.env.OPENROUTER_MODEL || 'openrouter/free',
+    enabled: true, // free providers need no paid key
   },
 
   // Cloudinary
@@ -53,20 +58,11 @@ export const config = {
   // قائمة الإيميلات المديرين (من .env.local)
   adminEmails: (process.env.ADMIN_EMAILS || '').split(','),
 
-  // Payment Providers
+  // طريقة الدفع: الدفع عند الاستلام (COD) + التحقق اليدوي من وصولات الدفع.
+  // لا يوجد أي مزود دفع إلكتروني (لا Stripe، لا PayPal، لا Chargily).
   payment: {
-    stripe: {
-      publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
-      enabled: !!process.env.STRIPE_SECRET_KEY,
-    },
-    paypal: {
-      clientId: process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID,
-      mode: (process.env.PAYPAL_MODE || 'sandbox') as 'sandbox' | 'live',
-      enabled: !!process.env.PAYPAL_CLIENT_ID,
-    },
-    chargily: {
-      enabled: !!process.env.CHARGILY_API_SECRET,
-    },
+    method: 'cod' as const,
+    label: 'Paiement à la livraison',
   },
 
   // App URL

@@ -4,10 +4,15 @@ const nextConfig = {
   // three.js module graph, causing .tsx files to be parsed as plain JS.
   // Forcing transpilation through Next.js restores the correct TSX pipeline.
   transpilePackages: ['three', '@react-three/fiber', '@react-three/drei'],
-  typescript: {
-    // Warning: This allows production builds to successfully complete even if
-    // your project has type errors.
-    ignoreBuildErrors: true,
+  images: {
+    formats: ['image/avif', 'image/webp'],
+    remotePatterns: [
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: 'res.cloudinary.com' },
+      { protocol: 'https', hostname: 'image.pollinations.ai' },
+      { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
+      { protocol: 'https', hostname: 'firebasestorage.googleapis.com' },
+    ],
   },
   async headers() {
     return [

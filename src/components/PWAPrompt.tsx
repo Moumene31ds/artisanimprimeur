@@ -5,9 +5,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Download, Bell, Smartphone, Shield } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { createTranslator } from "@/lib/translations";
+import { auth } from "@/lib/firebase";
 import {
   registerServiceWorker,
   requestNotificationPermission,
+  subscribeToPushNotifications,
+  unsubscribeFromPushNotifications,
   canInstallPWA,
 } from "@/lib/pwa";
 
@@ -72,10 +75,39 @@ export default function PWAPrompt() {
     const permission = await requestNotificationPermission();
 
     if (permission === "granted") {
-      setPushStep("granted");
+      try {
+        const subscription = await subscribeToPushNotifications();
+        if (subscription) {
+          await saveSubscription(subscription);
+        }
+        setPushStep("granted");
+      } catch (error) {
+        console.error("Failed to subscribe to push notifications:", error);
+        setPushStep("denied");
+      }
     } else {
+      // Permission denied or blocked: clean up any stale subscription locally
+      try {
+        await unsubscribeFromPushNotifications();
+      } catch {
+        // Ignore cleanup errors
+      }
       setPushStep("denied");
     }
+  }, []);
+
+  const saveSubscription = useCallback(async (subscription: PushSubscription) => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    await fetch("/api/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: user.uid,
+        subscription: subscription.toJSON(),
+      }),
+    });
   }, []);
 
   const handleDismiss = useCallback(() => {

@@ -1,146 +1,156 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
-import {
-  doc, updateDoc, getDoc, collection, addDoc,
-  serverTimestamp, query, orderBy, getDocs
-} from "firebase/firestore";
-import { getFirestore } from "firebase-admin/firestore";
+import { verifyIdToken, bearerToken } from "@/lib/auth-verify";
+import { fsGet, fsPatch, fsCreate, fsQuery } from "@/lib/firestore-rest";
+import { ORDER_STATUSES, buildStatusHistory, getStepIndex } from "@/lib/order-status";
 
-const PRODUCTION_STAGES = [
-  "En attente", "Conception", "Impression", "Découpage",
-  "Façonnage", "Contrôle qualité", "Prêt", "Terminé", "Annulé"
-];
+// Same admin list the Firestore rules use (see firestore.rules isAdmin()).
+const RULES_ADMIN_EMAIL = "attouabdelkarim2@gmail.com";
+
+const ADMIN_EMAILS = new Set(
+  [
+    ...(process.env.ADMIN_EMAILS || "").split(","),
+    RULES_ADMIN_EMAIL,
+  ]
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+async function requireAdmin(request: NextRequest): Promise<{ uid: string; email: string } | null> {
+  const user = await verifyIdToken(bearerToken(request.headers.get("authorization")));
+  if (!user?.email) return null;
+  if (!ADMIN_EMAILS.has(user.email.toLowerCase())) return null;
+  return { uid: user.uid, email: user.email };
+}
+
+function error(message: string, status: number) {
+  return NextResponse.json({ error: message }, { status });
+}
 
 export async function POST(request: NextRequest) {
   try {
+    const admin = await requireAdmin(request);
+    if (!admin) return error("Unauthorized", 401);
+
     const body = await request.json();
     const { orderId, action, stage } = body;
 
-    if (!orderId) {
-      return NextResponse.json({ error: "Order ID is required" }, { status: 400 });
-    }
+    if (!orderId) return error("Order ID is required", 400);
 
-    const orderRef = doc(db, "orders", orderId);
-    const orderSnap = await getDoc(orderRef);
+    const order = await fsGet(admin.uid, `orders/${orderId}`);
+    if (!order) return error("Order not found", 404);
 
-    if (!orderSnap.exists()) {
-      return NextResponse.json({ error: "Order not found" }, { status: 404 });
-    }
+    const currentStatus = order.status || "En attente";
+    const currentIndex = getStepIndex(currentStatus);
+    // سلسلة الإنتاج لا تتضمن "Annulé" (حالة إلغاء وليست مرحلة)
+    const stageChain = ORDER_STATUSES.slice(0, -1);
 
-    const orderData = orderSnap.data();
-
+    let nextStage: string | null = null;
     switch (action) {
-      case "advance": {
-        const currentIndex = PRODUCTION_STAGES.indexOf(orderData.status || "En attente");
-        if (currentIndex < PRODUCTION_STAGES.length - 1) {
-          const nextStage = PRODUCTION_STAGES[currentIndex + 1];
-          await updateDoc(orderRef, {
-            status: nextStage,
-            lastProductionUpdate: serverTimestamp(),
-          });
-
-          await addDoc(collection(db, `orders/${orderId}/productionLog`), {
-            from: orderData.status,
-            to: nextStage,
-            timestamp: serverTimestamp(),
-            action: "advance",
-          });
-
-          return NextResponse.json({
-            success: true,
-            previousStatus: orderData.status,
-            newStatus: nextStage,
-          });
+      case "advance":
+        if (currentIndex < 0 || currentIndex >= stageChain.length - 1) {
+          return error("Already at final stage", 400);
         }
-        return NextResponse.json({ error: "Already at final stage" }, { status: 400 });
-      }
-
-      case "regress": {
-        const currentIndex = PRODUCTION_STAGES.indexOf(orderData.status || "En attente");
-        if (currentIndex > 0) {
-          const prevStage = PRODUCTION_STAGES[currentIndex - 1];
-          await updateDoc(orderRef, {
-            status: prevStage,
-            lastProductionUpdate: serverTimestamp(),
-          });
-
-          await addDoc(collection(db, `orders/${orderId}/productionLog`), {
-            from: orderData.status,
-            to: prevStage,
-            timestamp: serverTimestamp(),
-            action: "regress",
-          });
-
-          return NextResponse.json({
-            success: true,
-            previousStatus: orderData.status,
-            newStatus: prevStage,
-          });
+        nextStage = stageChain[currentIndex + 1];
+        break;
+      case "regress":
+        if (currentIndex <= 0) return error("Already at initial stage", 400);
+        nextStage = stageChain[currentIndex - 1];
+        break;
+      case "set_stage":
+        if (!stage || !ORDER_STATUSES.includes(stage)) {
+          return error("Invalid stage", 400);
         }
-        return NextResponse.json({ error: "Already at initial stage" }, { status: 400 });
-      }
-
-      case "set_stage": {
-        if (!stage || !PRODUCTION_STAGES.includes(stage)) {
-          return NextResponse.json({ error: "Invalid stage" }, { status: 400 });
-        }
-
-        await updateDoc(orderRef, {
-          status: stage,
-          lastProductionUpdate: serverTimestamp(),
-        });
-
-        await addDoc(collection(db, `orders/${orderId}/productionLog`), {
-          from: orderData.status,
-          to: stage,
-          timestamp: serverTimestamp(),
-          action: "set_stage",
-        });
-
-        return NextResponse.json({
-          success: true,
-          previousStatus: orderData.status,
-          newStatus: stage,
-        });
-      }
-
+        nextStage = stage;
+        break;
       default:
-        return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+        return error("Invalid action", 400);
     }
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 }
+
+    if (!nextStage) return error("Invalid action", 400);
+
+    const statusHistory = buildStatusHistory(
+      order.statusHistory,
+      nextStage,
+      action === "set_stage" && stage ? `Manuel: ${stage}` : undefined
     );
+
+    await fsPatch(admin.uid, `orders/${orderId}`, {
+      status: nextStage,
+      statusHistory,
+      lastProductionUpdate: new Date().toISOString(),
+    });
+
+    try {
+      await fsCreate(admin.uid, `orders/${orderId}/productionLog`, {
+        orderId,
+        from: currentStatus,
+        to: nextStage,
+        timestamp: new Date().toISOString(),
+        action,
+      });
+    } catch (logErr) {
+      console.error("[production] Failed to write productionLog:", (logErr as Error)?.message);
+    }
+
+    // إشعار فوري للزبون بتغيير الحالة (واتساب + بريد) — دون إبطاء الاستجابة
+    try {
+      fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/orders/notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "status",
+          order: {
+            id: orderId,
+            phone: order.phone,
+            customerName: order.customerName,
+            customerEmail: order.customerEmail || null,
+            status: nextStage,
+          },
+        }),
+      }).catch(() => {});
+    } catch (notifyErr) {
+      console.error("[production] Notify dispatch failed:", (notifyErr as Error)?.message);
+    }
+
+    return NextResponse.json({
+      success: true,
+      previousStatus: currentStatus,
+      newStatus: nextStage,
+    });
+  } catch (err: any) {
+    return error(err.message || "Internal server error", 500);
   }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const orderId = searchParams.get("orderId");
+    const admin = await requireAdmin(request);
+    if (!admin) return error("Unauthorized", 401);
+
+    const orderId = request.nextUrl.searchParams.get("orderId");
 
     if (orderId) {
-      const logsRef = collection(db, `orders/${orderId}/productionLog`);
-      const q = query(logsRef, orderBy("timestamp", "asc"));
-      const snap = await getDocs(q);
-      const logs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
+      const logs = await fsQuery(admin.uid, {
+        from: [{ collectionId: "productionLog", allDescendants: true }],
+        where: {
+          fieldFilter: {
+            field: { fieldPath: "orderId" },
+            op: "EQUAL",
+            value: { stringValue: orderId },
+          },
+        },
+        orderBy: [{ field: { fieldPath: "timestamp" }, direction: "ASCENDING" }],
+      });
       return NextResponse.json({ logs });
     }
 
-    const ordersRef = collection(db, "orders");
-    const q = query(ordersRef, orderBy("createdAt", "desc"));
-    const snap = await getDocs(q);
-    const orders = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((o: any) => !["Terminé"].includes(o.status));
-
-    return NextResponse.json({ orders });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 }
-    );
+    const orders = await fsQuery(admin.uid, {
+      from: [{ collectionId: "orders" }],
+      orderBy: [{ field: { fieldPath: "createdAt" }, direction: "DESCENDING" }],
+    });
+    const filtered = orders.filter((order: any) => !["Terminé"].includes(order.status));
+    return NextResponse.json({ orders: filtered });
+  } catch (err: any) {
+    return error(err.message || "Internal server error", 500);
   }
 }

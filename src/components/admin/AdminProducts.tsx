@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { 
   Plus, Trash2, Edit3, Save, X, Loader2, Image as ImageIcon 
 } from "lucide-react";
+import { PRODUCT_CATEGORIES } from "@/lib/catalog";
 
 interface AdminProductsProps {
   products: any[];
@@ -46,13 +47,13 @@ export default function AdminProducts({
     >
       <form 
         onSubmit={saveProduct} 
-        className="premium-glass p-8 rounded-[2.5rem] border border-white/60 dark:border-white/5 grid grid-cols-1 md:grid-cols-4 gap-4 items-end shadow-xl"
+        className="premium-glass p-8 rounded-[2.5rem] border border-white/60 dark:border-white/5 grid grid-cols-1 md:grid-cols-5 gap-4 items-end shadow-xl"
       >
         <div className="md:col-span-1">
           <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">Image du produit</label>
           <div className="relative h-32 w-full bg-slate-100 dark:bg-slate-800/50 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center overflow-hidden hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
             {newProduct.image ? (
-              <img src={newProduct.image} className="w-full h-full object-cover" alt="Aperçu" />
+              <img src={newProduct.image} loading="lazy" decoding="async" className="w-full h-full object-cover" alt="Aperçu" />
             ) : (
               <div className="text-center">
                 {uploadingImage ? (
@@ -80,6 +81,18 @@ export default function AdminProducts({
             onChange={e => setNewProduct({ ...newProduct, name: e.target.value })} 
             className="w-full p-4 bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-accent text-slate-800 dark:text-slate-100 font-bold" 
           />
+        </div>
+        <div className="md:col-span-1">
+          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">Catégorie</label>
+          <select
+            value={newProduct.category}
+            onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
+            className="w-full p-4 bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-accent text-slate-800 dark:text-slate-100 font-bold cursor-pointer"
+          >
+            {PRODUCT_CATEGORIES.map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
         </div>
         <div className="md:col-span-1">
           <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">Prix (DA)</label>
@@ -114,7 +127,7 @@ export default function AdminProducts({
               >
                 <Trash2 size={14}/>
               </button>
-              <img src={p.image} className="w-full h-28 rounded-lg object-cover mb-3" alt={p.name} />
+              <img src={p.image} loading="lazy" decoding="async" className="w-full h-28 rounded-lg object-cover mb-3" alt={p.name} />
               <h4 className="font-bold text-xs truncate text-slate-800 dark:text-slate-200">{p.name}</h4>
             </div>
             

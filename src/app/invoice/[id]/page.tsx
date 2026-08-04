@@ -104,7 +104,7 @@ export default function InvoicePage() {
   const qrData = currentUrl || `https://lartisan.dz/invoice/${order.id}`;
 
   return (
-    <div className="min-h-screen bg-slate-200 py-8 px-4 font-sans text-slate-800 print:p-0 print:bg-white" dir="ltr">
+    <div className="min-h-dvh bg-slate-200 py-8 px-4 font-sans text-slate-800 print:p-0 print:bg-white" dir="ltr">
       
       {/* أزرار التحكم (تختفي عند الطباعة) */}
       <div className="max-w-[210mm] mx-auto mb-8 flex flex-col sm:flex-row justify-between items-center gap-4 print:hidden">

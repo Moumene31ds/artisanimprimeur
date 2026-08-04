@@ -6,9 +6,9 @@ import { TRANSLATIONS } from "@/lib/translations";
 import { 
   Trash2, Plus, Minus, ShoppingBag, CheckCircle, 
   UploadCloud, FileCheck, Loader2, ArrowRight, Tag, MapPin, Heart, AlertTriangle, Sparkles, Wand2, ShieldCheck, HelpCircle,
-  Truck
+  Truck, Smartphone, Banknote
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { auth, db } from "@/lib/firebase";
@@ -18,6 +18,10 @@ import Link from "next/link";
 import { GlobalLoader } from "@/components/GlobalLoader";
 import { WILAYAS, SHIPPING_RATES } from "@/lib/constants";
 import SecurityVerification from "@/components/SecurityVerification";
+import SmartCartUpsell from "@/components/SmartCartUpsell";
+import GooglePayButton from "@/components/GooglePayButton";
+import PullToRefresh from "@/components/PullToRefresh";
+import { buildStatusHistory } from "@/lib/order-status";
 
 export default function CartPage() {
   // جلب الخصائص والدوال بشكل منفصل تماماً عبر الـ Selectors لمنع تدمير المراجع بعد الـ Minification
@@ -56,8 +60,8 @@ export default function CartPage() {
   const [shippingMethod, setShippingMethod] = useState<'national' | 'local_express' | 'collect'>('national');
   const [designReady, setDesignReady] = useState<boolean>(true);
 
-  // --- طريقة الدفع ---
-  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'chargily'>('cod');
+  // --- طريقة الدفع: COD (افتراضي) أو دفع إلكتروني عبر Google Pay ---
+  const [paymentMode, setPaymentMode] = useState<'cod' | 'online'>('cod');
 
   // --- بيانات العميل ---
   const [formData, setFormData] = useState({ name: "", phone: "", wilaya: "", notes: "" });
@@ -74,6 +78,18 @@ export default function CartPage() {
     recaptchaSiteKey: ""
   });
   const [securityVerified, setSecurityVerified] = useState(false);
+
+  // إعادة جلب الإعدادات السحابية الحية (للـ Pull-to-Refresh على الموبايل)
+  const refreshSettings = useCallback(async () => {
+    try {
+      const snap = await getDoc(doc(db, "settings", "ui"));
+      if (snap.exists()) {
+        setUiConfig(snap.data());
+      }
+    } catch (err) {
+      console.error("Error refreshing settings from Firestore:", err);
+    }
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -151,8 +167,17 @@ export default function CartPage() {
   const totalBeforeDelivery = Math.max(0, subtotal - discountAmount);
   const finalTotal = totalBeforeDelivery + deliveryFee;
 
-  const runPreflightCheck = async (url: string, width?: number, height?: number) => {
-    setIsCheckingPreflight(true);
+  const handleGooglePaySuccess = (orderId: string) => {
+    clearCart();
+    toast.success(
+      isRtl
+        ? "تم الدفع بنجاح عبر Google Pay! سيتم تجهيز طلبك فوراً. 🎉"
+        : "Paiement Google Pay réussi ! Votre commande est en cours de préparation. 🎉"
+    );
+    router.push(`/success?orderId=${orderId}&paid=1`);
+  };
+
+  const runPreflightCheck = async (url: string, width?: number, height?: number) => {    setIsCheckingPreflight(true);
     try {
       const response = await fetch('/api/preflight', {
         method: 'POST',
@@ -385,6 +410,13 @@ export default function CartPage() {
     e.preventDefault();
     if (cart.length === 0) return;
 
+    // في وضع الدفع الإلكتروني، لا نقوم بتسجيل طلب COD —
+    // الطلب يُنشأ فقط بعد نجاح الدفع عبر خادم Google Pay.
+    if (paymentMode === 'online') {
+      toast.info(isRtl ? "أكمل الدفع عبر Google Pay في قسم طريقة الدفع أعلاه." : "Terminez le paiement Google Pay dans la section ci-dessus.");
+      return;
+    }
+
     // التحقق الإضافي الصارم من حالة المتجر قبل ترحيل الفاتورة للاحتياط الأمني
     if (uiConfig.storeOpen === false) {
       toast.error(isRtl ? "المتجر مغلق حالياً، لا يمكن إرسال طلبات جديدة." : "La boutique est fermée.");
@@ -423,6 +455,7 @@ export default function CartPage() {
         deliveryFee: deliveryFee,
         total: finalTotal,
         status: "En attente", 
+        statusHistory: buildStatusHistory(null, "En attente", "Commande créée"),
         paymentMethod: "Paiement à la livraison",
         paymentStatus: "unpaid",
         createdAt: serverTimestamp(),
@@ -446,6 +479,30 @@ export default function CartPage() {
       toast.success(isRtl ? "تم تسجيل طلبك بنجاح! سنتصل بك قريباً عبر الهاتف أو الواتساب لتأكيده." : "Commande enregistrée avec succès !");
       router.push(`/success?orderId=${orderId}`);
 
+      // إرسال إشعارات تأكيد الطلب (واتساب + بريد) + أتمتة التسويق (خارج مسار الدفع)
+      try {
+        const token = user ? await user.getIdToken() : undefined;
+        fetch("/api/orders/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "created",
+            order: {
+              id: orderId,
+              orderNumber: orderId,
+              phone: formData.phone,
+              customerName: formData.name,
+              customerEmail: user?.email || null,
+              customerUserId: user ? user.uid : "guest",
+              total: finalTotal,
+            },
+            token,
+          }),
+        }).catch(() => {});
+      } catch (err) {
+        console.error("Notification dispatch failed:", err);
+      }
+
     } catch (error: any) {
       console.error("Checkout process failed:", error);
       toast.error(isRtl ? `فشلت العملية: ${error.message || "حدث خطأ غير متوقع"}` : `Erreur : ${error.message || "Erreur lors de la commande"}`);
@@ -455,7 +512,8 @@ export default function CartPage() {
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={`pb-24 max-w-7xl mx-auto ${isRtl ? "text-right" : "text-left"}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <PullToRefresh onRefresh={refreshSettings} language={language}>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={`pb-24 max-w-7xl mx-auto ${isRtl ? "text-right" : "text-left"}`} dir={isRtl ? 'rtl' : 'ltr'}>
       
       <div className="flex justify-between items-center mb-10">
         <h1 className="text-4xl font-black text-slate-900 dark:text-white flex items-center gap-3">
@@ -536,7 +594,7 @@ export default function CartPage() {
                 <motion.div layout key={item.id} className="premium-glass p-5 rounded-[2rem] flex flex-col gap-5 hover:shadow-xl transition-shadow border border-white/60 dark:border-white/10">
                   <div className="flex flex-col sm:flex-row gap-5 items-center w-full">
                     <div className="w-full sm:w-28 h-32 sm:h-28 rounded-2xl bg-white dark:bg-slate-800 overflow-hidden shrink-0 border border-slate-100 dark:border-slate-700">
-                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                      <img src={item.image} alt={item.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 text-center sm:text-start">
                       <span className="text-[10px] font-black text-accent uppercase tracking-widest">{item.category}</span>
@@ -879,6 +937,7 @@ export default function CartPage() {
           </div>
           
           <div className="w-full lg:w-[420px]">
+            <SmartCartUpsell cart={cart} />
             <form onSubmit={handleCheckout} className="premium-glass p-8 rounded-[2.5rem] border border-white/60 dark:border-white/10 sticky top-24 shadow-2xl">
               <h3 className="text-2xl font-black mb-6 text-slate-900 dark:text-white">{t.confirm}</h3>
               
@@ -1013,20 +1072,104 @@ export default function CartPage() {
                   )}
                 </div>
 
-                <div className="space-y-2 pt-1">
+                <div className="space-y-2.5 pt-1">
                   <label className="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                     {isRtl ? "طريقة الدفع" : "Mode de Paiement"}
                   </label>
-                  <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-2xl border border-emerald-500/20 dark:border-emerald-500/10 flex justify-between items-center">
-                    <div>
-                      <p className="text-sm font-black text-slate-800 dark:text-slate-200">
-                        {isRtl ? "الدفع عند الاستلام (COD)" : "Paiement à la livraison (COD)"}
-                      </p>
-                      <p className="text-[11px] text-emerald-600 dark:text-emerald-450 mt-0.5 font-bold">
-                        {isRtl ? "ادفع نقداً بكل أمان بعد استلام طلبيتك وفحص جودة المطبوعات بنفسك." : "Payez en espèces en toute sécurité après réception et vérification de vos impressions."}
-                      </p>
+
+                  {/* MODE 1 — Paiement en ligne (Google Pay) */}
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMode('online')}
+                    className={`w-full p-4 rounded-2xl border text-start flex items-center justify-between gap-3 transition-all active:scale-[0.99] ${
+                      paymentMode === 'online'
+                        ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg scale-[1.01]'
+                        : 'bg-white/40 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-white/60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2.5 rounded-xl ${paymentMode === 'online' ? 'bg-white/20 dark:bg-slate-100/20' : 'bg-slate-100 dark:bg-slate-850'}`}>
+                        <Smartphone size={18} className={paymentMode === 'online' ? '' : 'text-slate-500 dark:text-slate-400'} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black flex items-center gap-1.5">
+                          <span>{isRtl ? "دفع إلكتروني فوري (Google Pay / Apple Pay)" : "Paiement en ligne (Google Pay / Apple Pay)"}</span>
+                          <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase ${paymentMode === 'online' ? 'bg-white/20' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'}`}>
+                            {isRtl ? "أسرع وأأمن" : "Rapide"}
+                          </span>
+                        </p>
+                        <p className="text-[10px] opacity-60 font-semibold mt-0.5">
+                          {isRtl ? "ادفع الآن ببطاقتك مباشرة من هاتفك، مشفّر بالكامل وبتأكيد فوري." : "Payez immédiatement par carte depuis votre téléphone, chiffré et confirmé en direct."}
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                    <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg shrink-0 ${paymentMode === 'online' ? 'bg-white/20' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'}`}>
+                      {isRtl ? "G Pay" : "G Pay"}
+                    </span>
+                  </button>
+
+                  {paymentMode === 'online' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="p-4 bg-white/50 dark:bg-slate-900/40 rounded-2xl border border-slate-200/60 dark:border-slate-800"
+                    >
+                      <GooglePayButton
+                        amount={finalTotal}
+                        items={cart.map((it) => ({
+                          id: it.id,
+                          name: it.name,
+                          price: Number(it.price) || 0,
+                          quantity: it.quantity || 1,
+                          category: it.category,
+                        }))}
+                        deliveryFee={deliveryFee}
+                        discountAmount={discountAmount}
+                        customer={{
+                          name: formData.name,
+                          phone: formData.phone,
+                          wilaya: formData.wilaya,
+                          notes: formData.notes,
+                        }}
+                        delivery={{
+                          type: deliveryType,
+                          shippingMethod,
+                          promoCode: appliedPromo ? appliedPromo.id : null,
+                        }}
+                        language={language}
+                        onSuccess={handleGooglePaySuccess}
+                      />
+                    </motion.div>
+                  )}
+
+                  {/* MODE 2 — Paiement à la livraison (COD) */}
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMode('cod')}
+                    className={`w-full p-4 rounded-2xl border text-start flex items-center justify-between gap-3 transition-all active:scale-[0.99] ${
+                      paymentMode === 'cod'
+                        ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-transparent shadow-lg scale-[1.01]'
+                        : 'bg-white/40 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-white/60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2.5 rounded-xl ${paymentMode === 'cod' ? 'bg-white/20 dark:bg-slate-100/20' : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'}`}>
+                        <Banknote size={18} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black">
+                          {isRtl ? "الدفع عند الاستلام (COD)" : "Paiement à la livraison (COD)"}
+                        </p>
+                        <p className="text-[10px] opacity-60 font-semibold mt-0.5">
+                          {isRtl ? "ادفع نقداً بعد استلام طلبيتك وفحص جودة المطبوعات بنفسك." : "Payez en espèces après réception et vérification de vos impressions."}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg shrink-0 ${paymentMode === 'cod' ? 'bg-white/20' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'}`}>
+                      {isRtl ? "نقداً" : "Cash"}
+                    </span>
+                  </button>
                 </div>
                 
                 <textarea value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder={t.orderDetails} rows={3} className="w-full p-4 rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-accent transition-all resize-none font-medium text-sm"></textarea>
@@ -1119,15 +1262,15 @@ export default function CartPage() {
                 </div>
               ) : (
                 <button 
-                  disabled={isSubmitting || fileStatus === 'uploading' || !securityVerified} 
+                  disabled={isSubmitting || fileStatus === 'uploading' || !securityVerified || paymentMode === 'online'} 
                   type="submit" 
                   className="w-full py-5 bg-gradient-to-r from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 text-white rounded-3xl font-black text-lg shadow-xl hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center gap-3 relative overflow-hidden group cursor-pointer"
                 >
                   <span className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></span>
                   {isSubmitting ? (
                     <><Loader2 className="animate-spin" size={24} /> {isRtl ? "جاري إرسال طلبك..." : "Enregistrement..."}</>
-                  ) : paymentMethod === 'chargily' ? (
-                    <><CheckCircle size={24} className="drop-shadow-md"/> {isRtl ? "الدفع الإلكتروني الآمن" : "Payer en ligne sécurisé"}</>
+                  ) : paymentMode === 'online' ? (
+                    <><ShieldCheck size={24} className="drop-shadow-md" /> {isRtl ? "الدفع يتم أعلاه عبر Google Pay" : "Paiement via Google Pay ci-dessus"}</>
                   ) : (
                     <><CheckCircle size={24} className="drop-shadow-md"/> {isRtl ? "تأكيد الطلب (الدفع عند الاستلام)" : "Confirmer (Paiement à la livraison)"}</>
                   )}
@@ -1139,5 +1282,6 @@ export default function CartPage() {
         </div>
       )}
     </motion.div>
+    </PullToRefresh>
   );
 }

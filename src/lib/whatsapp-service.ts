@@ -1,3 +1,5 @@
+import { formatWhatsAppPhone } from './phone-utils';
+
 const WHATSAPP_API_BASE = 'https://graph.facebook.com/v18.0';
 
 interface WhatsAppConfig {
@@ -40,7 +42,7 @@ export async function sendWhatsAppMessage(message: WhatsAppMessage): Promise<{
     const body: any = {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
-      to: formatPhone(message.to),
+      to: formatWhatsAppPhone(message.to),
       type: 'template',
     };
 
@@ -208,16 +210,4 @@ export async function verifyWebhook(mode: string, token: string, challenge: stri
     return challenge;
   }
   return null;
-}
-
-function formatPhone(phone: string): string {
-  let cleaned = phone.replace(/[^\d+]/g, '');
-  if (cleaned.startsWith('0')) {
-    cleaned = '213' + cleaned.slice(1);
-  }
-  if (!cleaned.startsWith('+') && !cleaned.startsWith('00')) {
-    cleaned = '+' + cleaned;
-  }
-  cleaned = cleaned.replace(/^00/, '+');
-  return cleaned;
 }

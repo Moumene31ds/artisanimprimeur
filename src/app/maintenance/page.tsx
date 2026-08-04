@@ -76,7 +76,7 @@ export default function MaintenancePage() {
 
   if (loadingSettings) {
     return (
-      <div className="min-h-screen w-full bg-slate-950 flex items-center justify-center">
+      <div className="min-h-dvh w-full bg-slate-950 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="w-12 h-12 rounded-full border-4 border-indigo-500/30 border-t-indigo-500 animate-spin" />
           <span className="text-xs text-indigo-400 font-bold tracking-widest uppercase">
@@ -88,7 +88,7 @@ export default function MaintenancePage() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-slate-950 text-white flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans select-none selection:bg-accent">
+    <div className="min-h-dvh w-full bg-slate-950 text-white flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans select-none selection:bg-accent">
       {/* Background Grid */}
       <div className="absolute inset-0 z-0 opacity-10 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] animate-pulse" />
       

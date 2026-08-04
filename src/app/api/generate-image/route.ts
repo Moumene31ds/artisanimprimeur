@@ -38,8 +38,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'A valid prompt is required.' }, { status: 400 });
     }
 
-    const googleApiKey = process.env.GOOGLE_API_KEY;
-
     const styleSuffix =
       style === 'pro'
         ? 'professional premium vector logo graphic style'
@@ -49,55 +47,9 @@ export async function POST(req: Request) {
 
     const finalPrompt = `${prompt.trim()}, ${styleSuffix}, isolated on solid background, printable high resolution, design prototype`;
 
-    let base64Image: string | null = null;
-    let fallback = false;
-
-    // 1. Try Google Imagen 3 API
-    if (googleApiKey) {
-      try {
-        const imagenUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${googleApiKey}`;
-        const response = await fetch(imagenUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            instances: [{ prompt: finalPrompt }],
-            parameters: {
-              sampleCount: 1,
-              aspectRatio: '4:3',
-              outputMimeType: 'image/jpeg',
-              personGeneration: 'dont_allow',
-            },
-          }),
-        });
-
-        if (response.ok) {
-          const result = await response.json();
-          const encoded = result?.predictions?.[0]?.bytesBase64Encoded;
-          if (encoded) {
-            base64Image = `data:image/jpeg;base64,${encoded}`;
-          } else {
-            console.warn('Imagen API returned no image data, falling back to Pollinations.');
-          }
-        } else {
-          const errText = await response.text();
-          console.warn(`Imagen API error (${response.status}), falling back:`, errText);
-        }
-      } catch (err) {
-        console.warn('Imagen API fetch error, falling back to Pollinations:', err);
-      }
-    } else {
-      console.warn('GOOGLE_API_KEY not set — skipping Imagen, using Pollinations fallback.');
-    }
-
-    // 2. Fallback to Pollinations.ai if Imagen failed
-    let uploadTarget: string;
-    if (base64Image) {
-      uploadTarget = base64Image;
-    } else {
-      fallback = true;
-      const seed = Math.floor(Math.random() * 100000);
-      uploadTarget = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?width=800&height=600&nologo=true&seed=${seed}`;
-    }
+    // Free image generation via Pollinations.ai (no API key required).
+    const seed = Math.floor(Math.random() * 100000);
+    const uploadTarget = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?width=800&height=600&nologo=true&seed=${seed}`;
 
     // 3. Upload result to Cloudinary for a permanent, fast-loading URL
     const uploadResponse = await cloudinary.uploader.upload(uploadTarget, {
@@ -109,7 +61,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       imageUrl: uploadResponse.secure_url,
-      fallback,
+      fallback: true,
       publicId: uploadResponse.public_id,
     });
 

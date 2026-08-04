@@ -1,7 +1,8 @@
 // src/app/actions/promo-actions.ts
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { doc, getDoc, updateDoc, increment } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 interface ValidatePromoResult {
   success: boolean;
@@ -16,6 +17,17 @@ interface ValidatePromoResult {
   };
 }
 
+// Normalizes a Firestore Timestamp or Date into a JS Date
+const toDate = (value: any): Date | null => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "object" && typeof value.toDate === "function") {
+    return value.toDate();
+  }
+  const parsed = new Date(value);
+  return isNaN(parsed.getTime()) ? null : parsed;
+};
+
 /**
  * Validates a database-driven promo code against current order details and user context.
  */
@@ -27,27 +39,30 @@ export async function validatePromoCodeAction(
   try {
     const codeClean = promoCodeInput.trim().toUpperCase();
 
-    // Query database for the promo code
-    const promo = await prisma.promoCode.findUnique({
-      where: { code: codeClean },
-    });
+    // Fetch the promo code document (doc id = normalized code)
+    const promoSnap = await getDoc(doc(db, "promoCodes", codeClean));
 
-    if (!promo) {
+    if (!promoSnap.exists()) {
       return { success: false, error: "Code promo invalide ou expiré." };
     }
 
+    const promo = promoSnap.data();
+
     // 1. Check if promo code is active
-    if (!promo.active) {
+    if (promo.active !== true) {
       return { success: false, error: "Ce code promo est inactif." };
     }
 
     // 2. Check expiration date
-    if (promo.expiresAt && promo.expiresAt < new Date()) {
+    const expiresAt = toDate(promo.expiresAt);
+    if (expiresAt && expiresAt < new Date()) {
       return { success: false, error: "Ce code promo a expiré." };
     }
 
     // 3. Check total usage limits
-    if (promo.usageLimit !== null && promo.usageCount >= promo.usageLimit) {
+    const usageLimit = promo.usageLimit != null ? Number(promo.usageLimit) : null;
+    const usageCount = promo.usageCount != null ? Number(promo.usageCount) : 0;
+    if (usageLimit !== null && usageCount >= usageLimit) {
       return { success: false, error: "Ce code promo a atteint sa limite d'utilisation." };
     }
 
@@ -56,9 +71,9 @@ export async function validatePromoCodeAction(
       return { success: false, error: "Ce code promo est réservé à un autre compte." };
     }
 
-    const minAmount = Number(promo.minAmount);
-    const discountValue = Number(promo.discountValue);
-    const maxDiscount = promo.maxDiscount ? Number(promo.maxDiscount) : null;
+    const minAmount = Number(promo.minAmount || 0);
+    const discountValue = Number(promo.discountValue || 0);
+    const maxDiscount = promo.maxDiscount != null ? Number(promo.maxDiscount) : null;
 
     // 5. Check minimum order value threshold
     if (orderSubtotal < minAmount) {
@@ -85,8 +100,8 @@ export async function validatePromoCodeAction(
     return {
       success: true,
       promo: {
-        code: promo.code,
-        discountType: promo.discountType,
+        code: codeClean,
+        discountType: promo.discountType === "FIXED" ? "FIXED" : "PERCENT",
         discountValue,
         minAmount,
         maxDiscount,
@@ -104,13 +119,9 @@ export async function validatePromoCodeAction(
  */
 export async function usePromoCodeAction(code: string) {
   try {
-    await prisma.promoCode.update({
-      where: { code: code.toUpperCase().trim() },
-      data: {
-        usageCount: {
-          increment: 1,
-        },
-      },
+    const codeClean = code.trim().toUpperCase();
+    await updateDoc(doc(db, "promoCodes", codeClean), {
+      usageCount: increment(1),
     });
     return { success: true };
   } catch (error) {

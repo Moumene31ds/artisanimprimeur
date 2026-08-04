@@ -7,6 +7,8 @@ import canvasConfetti from "canvas-confetti";
 
 interface SecurityVerificationProps {
   onVerify: (verified: boolean) => void;
+  /** إرجاع رمز reCAPTCHA الفعلي (يُستخدم مع Firebase Phone Auth) */
+  onToken?: (token: string) => void;
   language: "ar" | "fr";
   captchaMode: "disabled" | "slider" | "recaptcha" | "recaptcha_v3";
   siteKey?: string;
@@ -14,6 +16,7 @@ interface SecurityVerificationProps {
 
 export default function SecurityVerification({
   onVerify,
+  onToken,
   language,
   captchaMode = "slider",
   siteKey = "",
@@ -85,6 +88,7 @@ export default function SecurityVerification({
           try {
             const token = await (window as any).grecaptcha.execute(siteKey, { action: "submit" });
             if (token) {
+              onToken?.(token);
               onVerify(true);
               setRecaptchaLoaded(true);
               setRecaptchaError(false);
@@ -124,6 +128,7 @@ export default function SecurityVerification({
       // Dynamic loading for reCAPTCHA v2 (Checkbox)
       const handleRecaptchaSuccess = (token: string) => {
         if (token) {
+          onToken?.(token);
           onVerify(true);
         }
       };

@@ -5,6 +5,7 @@ import { PieChart, Pie, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianG
 import { Sparkles, Target, TrendingUp, Users, Zap, Mail, MessageSquare, Send, CheckCircle2, ShieldAlert, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/lib/store';
+import { auth } from '@/lib/firebase';
 
 interface DashboardData {
   totalCampaigns: number;
@@ -33,6 +34,79 @@ export const MarketingDashboard: React.FC = () => {
   const [campaignChannel, setCampaignChannel] = useState<'email' | 'sms' | 'push'>('email');
   const [generating, setGenerating] = useState(false);
   const [generatedCampaign, setGeneratedCampaign] = useState<{ title: string; subject: string; body: string } | null>(null);
+  const [sending, setSending] = useState(false);
+  const [lastSend, setLastSend] = useState<{ total: number; sent: number; skipped: number; failed: number } | null>(null);
+  const [recipientStats, setRecipientStats] = useState<{ matched: number; totalBase: number } | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+
+  // معاينة عدد المستلمين للقطاع المحدد (تحديث مباشر عند تغيير القطاع)
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setStatsLoading(true);
+      try {
+        const user = auth.currentUser;
+        const token = user ? await user.getIdToken() : null;
+        if (!token) return;
+        const res = await fetch(`/api/marketing/recipients?segment=${targetSegment}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) setRecipientStats({ matched: data.matched, totalBase: data.totalBase });
+        }
+      } catch {
+        /* تجاهل أخطاء المعاينة */
+      } finally {
+        if (!cancelled) setStatsLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [targetSegment]);
+
+  const handleSendCampaign = async () => {
+    if (!generatedCampaign) return;
+    if (recipientStats && recipientStats.matched === 0) {
+      toast.warning(t('لا يوجد مستلمون في هذا القطاع', 'Aucun destinataire dans ce segment'));
+      return;
+    }
+    setSending(true);
+    try {
+      const user = auth.currentUser;
+      const token = user ? await user.getIdToken() : null;
+      if (!token) {
+        toast.error(t('تحتاج لتسجيل الدخول كمشرف', 'Connectez-vous en tant qu\'admin'));
+        return;
+      }
+      const res = await fetch('/api/marketing/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          segment: targetSegment,
+          channel: campaignChannel,
+          subject: generatedCampaign.subject,
+          body: generatedCampaign.body,
+          title: generatedCampaign.title,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setLastSend(data.summary);
+        toast.success(
+          t(`تم الإرسال: ${data.summary.sent} من ${data.summary.total}`, `Envoyé : ${data.summary.sent} / ${data.summary.total}`)
+        );
+      } else {
+        toast.error(data.error || t('فشل الإرسال', 'Échec de l\'envoi'));
+      }
+    } catch {
+      toast.error(t('فشل الإرسال', 'Échec de l\'envoi'));
+    } finally {
+      setSending(false);
+    }
+  };
 
   useEffect(() => {
     const fetchAnalytics = async () => {
@@ -126,7 +200,8 @@ export const MarketingDashboard: React.FC = () => {
         inactive: { title: 'Campagne Réactivation', subject: 'Vous nous avez manqué ! 500 DA offerts', body: 'Revenez découvrir nos nouveaux produits et impressions 3D. Utilisez le code COMEBACK500.' },
         new: { title: 'Campagne Bienvenue', subject: 'Bienvenue chez L\'Artisan - 10% sur votre première commande', body: 'Essayez nos impressions premium avec le code WELCOME10.' },
       };
-      setGeneratedCampaign(fallback[targetSegment] || fallback.new);
+      const fallbackKey = targetSegment === 'all' ? 'new' : (targetSegment as keyof typeof fallback);
+      setGeneratedCampaign(fallback[fallbackKey]);
       toast.success(isRtl ? 'تم توليد الحملة محلياً!' : 'Campagne générée localement !');
     } finally {
       setGenerating(false);
@@ -219,6 +294,7 @@ export const MarketingDashboard: React.FC = () => {
             <label className="block text-xs font-bold text-slate-300 mb-2">{t('القطاع المستهدف:', 'Segment cible:')}</label>
             <div className="flex gap-2">
               {[
+                { id: 'all', label: t('جميع العملاء', 'Tous les clients') },
                 { id: 'premium', label: t('العملاء المميزين', 'VIP Premium') },
                 { id: 'new', label: t('العملاء الجدد', 'Nouveaux') },
                 { id: 'inactive', label: t('غير النشطين', 'Inactifs') },
@@ -260,10 +336,51 @@ export const MarketingDashboard: React.FC = () => {
               <span className="text-xs font-black text-emerald-400 flex items-center gap-1.5">
                 <CheckCircle2 size={16} /> {generatedCampaign.title}
               </span>
-              <button onClick={() => toast.success(t('تم تجهيز الحملة!', 'Campagne prête !'))} className="px-4 py-1.5 bg-emerald-500 text-slate-950 rounded-lg text-xs font-black hover:bg-emerald-400">
-                {t('اعتماد وإرسال', 'Approuver & envoyer')}
+              <button
+                onClick={handleSendCampaign}
+                disabled={sending || (recipientStats !== null && recipientStats.matched === 0)}
+                className="px-4 py-1.5 bg-emerald-500 text-slate-950 rounded-lg text-xs font-black hover:bg-emerald-400 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                {sending ? (
+                  t('جاري الإرسال...', 'Envoi...')
+                ) : (
+                  <><Send size={13} /> {t('إرسال الحملة', 'Envoyer la campagne')}</>
+                )}
               </button>
             </div>
+            {statsLoading ? (
+              <div className="text-[11px] font-bold text-slate-400 pt-2">
+                {t('جاري حساب المستلمين...', 'Calcul des destinataires...')}
+              </div>
+            ) : recipientStats ? (
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                <span className="px-2 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 text-[11px] font-black">
+                  {t('المستلمون', 'Destinataires')}: {recipientStats.matched}
+                  <span className="opacity-70"> / {recipientStats.totalBase}</span>
+                </span>
+                {recipientStats.matched === 0 && (
+                  <span className="px-2 py-1 rounded-lg bg-rose-500/20 text-rose-300 text-[11px] font-black">
+                    {t('لا يوجد مستلمون — اختر قطاعاً آخر', 'Aucun destinataire — choisissez un autre segment')}
+                  </span>
+                )}
+              </div>
+            ) : null}
+            {lastSend && (
+              <div className="flex flex-wrap gap-2 pt-2 text-[11px] font-black">
+                <span className="px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300">
+                  {t('تم الإرسال', 'Envoyés')}: {lastSend.sent}
+                </span>
+                <span className="px-2 py-1 rounded-lg bg-amber-500/20 text-amber-300">
+                  {t('تخطي', 'Ignorés')}: {lastSend.skipped}
+                </span>
+                <span className="px-2 py-1 rounded-lg bg-rose-500/20 text-rose-300">
+                  {t('فشل', 'Échecs')}: {lastSend.failed}
+                </span>
+                <span className="px-2 py-1 rounded-lg bg-slate-500/20 text-slate-300">
+                  {t('الإجمالي', 'Total')}: {lastSend.total}
+                </span>
+              </div>
+            )}
             <div>
               <span className="text-[10px] text-slate-400 uppercase font-black">{t('الموضوع:', 'Sujet:')}</span>
               <p className="text-sm font-bold text-white mt-0.5">{generatedCampaign.subject}</p>

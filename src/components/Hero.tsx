@@ -46,14 +46,14 @@ export default function Hero() {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8">
           <Link 
             href="#products" 
-            className="w-full sm:w-auto px-8 py-4 bg-accent hover:bg-blue-600 text-white rounded-xl font-bold transition-all transform hover:scale-105 hover:shadow-lg hover:shadow-blue-500/30 flex items-center justify-center gap-2"
+            className="w-full sm:w-auto px-8 py-4 bg-accent hover:bg-blue-600 text-white rounded-xl font-bold transition-all transform hover:scale-105 hover:shadow-lg hover:shadow-blue-500/30 flex items-center justify-center gap-2 active:scale-95"
           >
             <span>{t.orderNow}</span>
             {isRtl ? <ArrowLeft size={20} /> : <ArrowRight size={20} />}
           </Link>
           <Link 
             href="/services" 
-            className="w-full sm:w-auto px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-all backdrop-blur-md flex items-center justify-center"
+            className="w-full sm:w-auto px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-all backdrop-blur-md flex items-center justify-center active:scale-95"
           >
             {t.services}
           </Link>

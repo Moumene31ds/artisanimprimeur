@@ -14,6 +14,11 @@ import { useAppStore } from "@/lib/store";
 import { createTranslator, getLanguageDirection, normalizeLanguage } from "@/lib/translations";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
+import PullToRefresh from "@/components/PullToRefresh";
+import {
+  getStepIndex, isCompleted, isCancelled, isActive, statusLabel, formatDate, formatDateTime,
+  type StatusHistoryEntry,
+} from "@/lib/order-status";
 
 // ============================================================
 // Types
@@ -43,42 +48,18 @@ interface Order {
   wilaya?: string;
   notes?: string;
   customerUserId?: string;
+  statusHistory?: StatusHistoryEntry[];
 }
 
 // ============================================================
-// Status Config
+// Status Config (من المكتبة الموحّدة)
 // ============================================================
-const STATUS_STEPS = ["En attente", "Conception", "Impression", "Découpage", "Façonnage", "Contrôle qualité", "Prêt", "Terminé"] as const;
-
-function getStepIndex(status: string): number {
-  const idx = STATUS_STEPS.indexOf(status as any);
-  if (idx >= 0) return idx;
-  if (status === "Annulé") return -1;
-  if (["Expédié", "En livraison", "Livré"].includes(status)) return 6;
-  return 0;
-}
-
-function isCompleted(status: string) {
-  return ["Terminé", "Livré"].includes(status);
-}
-function isCancelled(status: string) {
-  return status === "Annulé";
-}
-function isActive(status: string) {
-  return !isCompleted(status) && !isCancelled(status);
-}
 
 function getStatusBadgeStyle(status: string): string {
   if (isCancelled(status)) return "bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400";
   if (isCompleted(status)) return "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400";
   if (status === "En attente") return "bg-orange-100 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400";
   return "bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400";
-}
-
-function formatDate(ts: any): string {
-  if (!ts) return "";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleDateString("fr-DZ", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 // ============================================================
@@ -230,6 +211,63 @@ function OrderStepper({ status, isRtl, t }: { status: string; isRtl: boolean; t:
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// الخط الزمني للسجل (statusHistory) — تتبع لحظي لجميع المراحل
+function StatusTimeline({
+  history,
+  isRtl,
+}: {
+  history?: StatusHistoryEntry[];
+  isRtl: boolean;
+}) {
+  if (!history || history.length === 0) return null;
+
+  const lang = isRtl ? "ar" : "fr";
+  return (
+    <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800">
+      <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+        <Clock size={14} />
+        {isRtl ? "سجل تتبع الطلب" : "Historique de suivi"}
+      </h4>
+      <div className="relative pl-5">
+        <div className="absolute left-[5px] top-2 bottom-2 w-0.5 bg-slate-100 dark:bg-slate-800" />
+        <div className="space-y-4">
+          {history.map((entry, idx) => {
+            const last = idx === history.length - 1;
+            const cancelled = isCancelled(entry.status);
+            const done = isCompleted(entry.status);
+            return (
+              <div key={idx} className="relative">
+                <span className={`absolute -left-5 top-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-slate-900 ${
+                  cancelled
+                    ? "bg-red-500"
+                    : done
+                    ? "bg-emerald-500"
+                    : last
+                    ? "bg-blue-500 animate-pulse"
+                    : "bg-slate-300 dark:bg-slate-600"
+                }`} />
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                  <p className={`text-sm font-black ${last ? "text-blue-600 dark:text-blue-400" : "text-slate-700 dark:text-slate-200"}`}>
+                    {statusLabel(entry.status, lang as "ar" | "fr")}
+                  </p>
+                  <span className="text-[10px] font-bold text-slate-400">
+                    {formatDateTime(entry.at)}
+                  </span>
+                </div>
+                {entry.note && (
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium mt-0.5">
+                    {entry.note}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -392,6 +430,9 @@ function OrderCard({
                   {isRtl ? "لا توجد تفاصيل منتجات متاحة" : "Pas de détails d'articles disponibles"}
                 </p>
               )}
+
+              {/* سجل التتبع الزمني */}
+              <StatusTimeline history={order.statusHistory} isRtl={isRtl} />
 
               {/* Additional Info */}
               {(order.wilaya || order.notes) && (
@@ -644,6 +685,7 @@ export default function OrdersPage() {
   );
 
   return (
+    <PullToRefresh onRefresh={() => window.location.reload()} language={language}>
     <div
       className={`max-w-4xl mx-auto pb-28 px-4 ${isRtl ? "text-right" : "text-left"}`}
       dir={isRtl ? "rtl" : "ltr"}
@@ -798,5 +840,6 @@ export default function OrdersPage() {
         </AnimatePresence>
       </div>
     </div>
+    </PullToRefresh>
   );
 }

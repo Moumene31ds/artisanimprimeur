@@ -192,7 +192,7 @@ export default function VerifiedReviews({ userId }: VerifiedReviewsProps) {
                       {/* Avatar */}
                       <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-tr from-accent to-blue-400 text-white flex items-center justify-center text-sm font-bold border border-white/20">
                         {review.user?.photoUrl ? (
-                          <img src={review.user.photoUrl} alt="User" className="w-full h-full object-cover" />
+                          <img src={review.user.photoUrl} alt="User" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                         ) : (
                           <User size={18} />
                         )}

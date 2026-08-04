@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { loadOptionalFonts } from "@/lib/fonts";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Environment, ContactShadows, Center } from "@react-three/drei";
 import * as THREE from "three";
@@ -427,6 +428,7 @@ export default function CustomizerPage() {
   // Mounted checking
   useEffect(() => {
     setMounted(true);
+    loadOptionalFonts();
     return () => {
       // Clean up camera streams if any
       if (streamRef.current) {

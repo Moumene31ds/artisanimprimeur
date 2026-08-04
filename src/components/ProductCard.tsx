@@ -1,11 +1,13 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { ShoppingCart, Heart, Eye, Check, X, Plus, Minus, Layers } from "lucide-react";
+import Image from "next/image";
+import { ShoppingCart, Heart, Eye, Check, Plus, Minus, Layers } from "lucide-react";
 import { useAppStore, Product } from "@/lib/store";
 import { TRANSLATIONS } from "@/lib/translations";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
+import BottomSheet from "@/components/BottomSheet";
 import { triggerHapticFeedback } from "@/lib/utils"; // افتراض أنك أنشأت هذه الدالة، وإلا يمكنك إزالتها
 
 export default function ProductCard({ product }: { product: Product }) {
@@ -53,7 +55,14 @@ export default function ProductCard({ product }: { product: Product }) {
         className="premium-glass rounded-[2rem] overflow-hidden group flex flex-col h-full shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/60 dark:border-white/5 relative"
       >
         <div className="relative h-64 w-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-          <img src={product.image} alt={product.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+          <Image
+            src={product.image}
+            alt={product.name}
+            fill
+            sizes="(max-width: 768px) 50vw, 33vw"
+            priority={false}
+            className="object-cover transition-transform duration-700 group-hover:scale-110"
+          />
           
           <div className="absolute inset-0 bg-brand/40 dark:bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-4">
             <motion.button 
@@ -144,151 +153,142 @@ export default function ProductCard({ product }: { product: Product }) {
         </div>
       </motion.div>
 
-      {/* --- نافذة المعاينة السريعة (Quick View Modal) --- */}
-      <AnimatePresence>
-        {isQuickViewOpen && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setIsQuickViewOpen(false)}
-              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+      {/* --- نافذة المعاينة السريعة (Quick View) — BottomSheet على الموبايل / Modale على الديسكتوب --- */}
+      <BottomSheet
+        open={isQuickViewOpen}
+        onClose={() => setIsQuickViewOpen(false)}
+        isRtl={isRtl}
+        title={product.name}
+      >
+        <div className="flex flex-col md:flex-row gap-0 md:gap-8 pb-2">
+          <div className="w-full md:w-1/2 h-56 sm:h-72 md:h-[420px] relative overflow-hidden bg-slate-900 flex items-center justify-center rounded-3xl md:rounded-[2rem] shrink-0">
+            <style>{`
+              @keyframes shimmer-gloss {
+                0% { transform: translateX(-100%) rotate(30deg); }
+                100% { transform: translateX(150%) rotate(30deg); }
+              }
+              .glossy-sheen-overlay {
+                position: absolute;
+                inset: -100px;
+                background: linear-gradient(
+                  to right,
+                  rgba(255, 255, 255, 0) 0%,
+                  rgba(255, 255, 255, 0.05) 20%,
+                  rgba(255, 255, 255, 0.55) 50%,
+                  rgba(255, 255, 255, 0.05) 80%,
+                  rgba(255, 255, 255, 0) 100%
+                );
+                animation: shimmer-gloss 3.5s infinite cubic-bezier(0.4, 0, 0.2, 1);
+                pointer-events: none;
+                z-index: 10;
+                mix-blend-mode: overlay;
+              }
+              .matte-velvet-overlay {
+                position: absolute;
+                inset: 0;
+                backdrop-filter: contrast(0.95) saturate(1.05) brightness(1.02);
+                background-image: radial-gradient(rgba(0,0,0,0.15) 0.5px, transparent 0);
+                background-size: 3px 3px;
+                opacity: 0.25;
+                pointer-events: none;
+                z-index: 10;
+              }
+            `}</style>
+            <Image
+              src={product.image}
+              alt={product.name}
+              fill
+              sizes="(max-width: 768px) 100vw, 50vw"
+              className={`object-cover transition-all duration-700 ${
+                finition === "Matte" ? "filter brightness-[0.98] contrast-[0.97] saturate-[1.02]" : ""
+              }`}
             />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className={`relative z-10 w-full max-w-4xl bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl overflow-hidden flex flex-col md:flex-row ${isRtl ? 'text-right' : 'text-left'}`}
-              dir={isRtl ? 'rtl' : 'ltr'}
-            >
-              <button onClick={() => setIsQuickViewOpen(false)} className={`absolute top-4 ${isRtl ? 'left-4' : 'right-4'} p-2 bg-white/50 dark:bg-black/50 backdrop-blur-md rounded-full text-slate-500 hover:text-slate-900 dark:hover:text-white z-20 transition-colors`}>
-                <X size={20} />
-              </button>
 
-              <div className="w-full md:w-1/2 h-64 md:h-[500px] relative overflow-hidden bg-slate-900 flex items-center justify-center">
-                <style>{`
-                  @keyframes shimmer-gloss {
-                    0% { transform: translateX(-100%) rotate(30deg); }
-                    100% { transform: translateX(150%) rotate(30deg); }
-                  }
-                  .glossy-sheen-overlay {
-                    position: absolute;
-                    inset: -100px;
-                    background: linear-gradient(
-                      to right,
-                      rgba(255, 255, 255, 0) 0%,
-                      rgba(255, 255, 255, 0.05) 20%,
-                      rgba(255, 255, 255, 0.55) 50%,
-                      rgba(255, 255, 255, 0.05) 80%,
-                      rgba(255, 255, 255, 0) 100%
-                    );
-                    animation: shimmer-gloss 3.5s infinite cubic-bezier(0.4, 0, 0.2, 1);
-                    pointer-events: none;
-                    z-index: 10;
-                    mix-blend-mode: overlay;
-                  }
-                  .matte-velvet-overlay {
-                    position: absolute;
-                    inset: 0;
-                    backdrop-filter: contrast(0.95) saturate(1.05) brightness(1.02);
-                    background-image: radial-gradient(rgba(0,0,0,0.15) 0.5px, transparent 0);
-                    background-size: 3px 3px;
-                    opacity: 0.25;
-                    pointer-events: none;
-                    z-index: 10;
-                  }
-                `}</style>
-                <img 
-                  src={product.image} 
-                  alt={product.name} 
-                  className={`w-full h-full object-cover transition-all duration-700 ${
-                    finition === "Matte" ? "filter brightness-[0.98] contrast-[0.97] saturate-[1.02]" : ""
-                  }`} 
-                />
-                
-                {/* Visual Finish Overlay */}
-                {finition === "Brillante" && <div className="glossy-sheen-overlay" />}
-                {finition === "Matte" && <div className="matte-velvet-overlay" />}
-                
-                {/* Curated Interactive Finish Badge */}
-                <div className="absolute bottom-6 right-6 z-25 bg-black/60 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/10 text-white text-[10px] font-black tracking-wider uppercase flex items-center gap-1.5">
-                  {finition === "Brillante" && <><span>💎</span> {isRtl ? "لامع برّاق" : "Ultra Glossy"}</>}
-                  {finition === "Matte" && <><span>🌓</span> {isRtl ? "مطفأ مخملي" : "Satin Matte"}</>}
-                  {finition === "Standard" && <><span>📄</span> {isRtl ? "ورق قياسي" : "Standard"}</>}
-                </div>
-              </div>
-              
-              <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-center">
-                <span className="text-xs font-black text-accent uppercase tracking-widest mb-3">{product.category}</span>
-                <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-4">{product.name}</h2>
-                <p className="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">
-                  {isRtl ? "تصميم احترافي وجودة طباعة عالية لضمان أفضل صورة لعلامتك التجارية. مثالي للاستخدام الشخصي والتجاري. يمكنك رفع ملف التصميم الخاص بك في السلة." : "Design professionnel et impression de haute qualité pour garantir la meilleure image de votre marque. Vous pourrez uploader votre design dans le panier."}
-                </p>
-                
-                {/* خيارات النافذة المنبثقة */}
-                <div className="mb-6 space-y-4">
-                  <p className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
-                    <Layers size={14} className="text-indigo-500" />
-                    {isRtl ? "اختر نوع وتغليف الورق (معاينة حية في الصورة):" : "Type de Papier & Finition (Aperçu en direct):"}
-                  </p>
-                  <div className="flex gap-2">
-                    {[
-                      { id: 'Standard', label: isRtl ? "📄 قياسي" : "📄 Standard" },
-                      { id: 'Matte', label: isRtl ? "🌓 مطفأ فاخر" : "🌓 Soft Matte" },
-                      { id: 'Brillante', label: isRtl ? "💎 لامع برّاق" : "💎 High Gloss" }
-                    ].map(opt => (
-                      <button 
-                        key={opt.id} onClick={() => {
-                          setFinition(opt.id);
-                          try { triggerHapticFeedback('light'); } catch(e){}
-                        }}
-                        className={`flex-1 py-3.5 rounded-2xl text-[11px] font-black uppercase transition-all border ${
-                          finition === opt.id 
-                            ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg scale-[1.03]' 
-                            : 'bg-slate-50 dark:bg-slate-800 text-slate-650 dark:text-slate-350 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
+            {/* Visual Finish Overlay */}
+            {finition === "Brillante" && <div className="glossy-sheen-overlay" />}
+            {finition === "Matte" && <div className="matte-velvet-overlay" />}
 
-                  {/* Finish description card */}
-                  <motion.div 
-                    key={finition}
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="p-4 rounded-2xl bg-indigo-50/40 dark:bg-slate-800/40 border border-indigo-100/50 dark:border-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300 leading-relaxed"
-                  >
-                    {finition === "Standard" && (
-                      <p>{isRtl ? "✨ ورق كوشيه متين 350غ بلمسة طبيعية خفيفة ومناسبة لجميع أنواع بطاقات الأعمال والمطبوعات الإعلانية اليومية." : "✨ Papier couché 350g solide avec un toucher naturel, idéal pour tous les types de cartes de visite et imprimés publicitaires."}</p>
-                    )}
-                    {finition === "Matte" && (
-                      <p>{isRtl ? "🌓 طبقة ناعمة ومخملية مضادة للخدش والانعكاسات، تضفي لمسة هادئة وراقية للغاية، وهي المفضلة للشركات الكبرى والأطباء." : "🌓 Finition veloutée antireflet et anti-rayures, offrant un aspect sobre et très haut de gamme, privilégié par les grandes marques."}</p>
-                    )}
-                    {finition === "Brillante" && (
-                      <p>{isRtl ? "💎 طبقة لامعة ونابضة بالحياة تعكس الضوء وتجعل الألوان والصور تظهر ببريق استثنائي وتباين مذهل للملصقات والمجلات." : "💎 Couche ultra-brillante protectrice qui ravive les couleurs et magnifie vos visuels avec un contraste éclatant, parfait pour les stickers."}</p>
-                    )}
-                  </motion.div>
-                </div>
-
-                <div className="text-3xl font-black text-accent mb-8 border-t border-slate-100 dark:border-slate-800 pt-6">
-                  {product.price} <span className="text-lg text-slate-500">{t.currency}</span>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-center gap-4">
-                  <div className="flex items-center w-full sm:w-auto bg-slate-100 dark:bg-slate-800 rounded-2xl p-2 border border-slate-200 dark:border-slate-700">
-                    <button onClick={() => setQty(Math.max(1, qty - 1))} className="p-3 text-slate-500 hover:text-slate-900 dark:hover:text-white"><Minus size={18}/></button>
-                    <span className="w-10 text-center font-bold">{qty}</span>
-                    <button onClick={() => setQty(qty + 1)} className="p-3 text-slate-500 hover:text-slate-900 dark:hover:text-white"><Plus size={18}/></button>
-                  </div>
-
-                  <button onClick={() => handleAddToCart(qty, finition)} className="w-full py-5 bg-slate-900 dark:bg-accent text-white rounded-2xl font-black text-sm shadow-xl hover:scale-105 active:scale-95 transition-transform flex items-center justify-center gap-3">
-                    <ShoppingCart size={20} /> {isRtl ? "أضف إلى السلة" : "Ajouter au panier"}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
+            {/* Curated Interactive Finish Badge */}
+            <div className="absolute bottom-4 right-4 z-25 bg-black/60 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/10 text-white text-[10px] font-black tracking-wider uppercase flex items-center gap-1.5">
+              {finition === "Brillante" && <><span>💎</span> {isRtl ? "لامع برّاق" : "Ultra Glossy"}</>}
+              {finition === "Matte" && <><span>🌓</span> {isRtl ? "مطفأ مخملي" : "Satin Matte"}</>}
+              {finition === "Standard" && <><span>📄</span> {isRtl ? "ورق قياسي" : "Standard"}</>}
+            </div>
           </div>
-        )}
-      </AnimatePresence>
+
+          <div className="w-full md:w-1/2 py-5 md:py-2 flex flex-col justify-center">
+            <span className="text-xs font-black text-accent uppercase tracking-widest mb-2 hidden md:block">{product.category}</span>
+            <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-3">{product.name}</h2>
+            <p className="text-slate-500 dark:text-slate-400 mb-6 leading-relaxed text-sm">
+              {isRtl ? "تصميم احترافي وجودة طباعة عالية لضمان أفضل صورة لعلامتك التجارية. مثالي للاستخدام الشخصي والتجاري. يمكنك رفع ملف التصميم الخاص بك في السلة." : "Design professionnel et impression de haute qualité pour garantir la meilleure image de votre marque. Vous pourrez uploader votre design dans le panier."}
+            </p>
+
+            {/* خيارات النافذة المنبثقة */}
+            <div className="mb-6 space-y-4">
+              <p className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                <Layers size={14} className="text-indigo-500" />
+                {isRtl ? "اختر نوع وتغليف الورق (معاينة حية في الصورة):" : "Type de Papier & Finition (Aperçu en direct):"}
+              </p>
+              <div className="flex gap-2">
+                {[
+                  { id: 'Standard', label: isRtl ? "📄 قياسي" : "📄 Standard" },
+                  { id: 'Matte', label: isRtl ? "🌓 مطفأ فاخر" : "🌓 Soft Matte" },
+                  { id: 'Brillante', label: isRtl ? "💎 لامع برّاق" : "💎 High Gloss" }
+                ].map(opt => (
+                  <button
+                    key={opt.id}
+                    onClick={() => {
+                      setFinition(opt.id);
+                      try { triggerHapticFeedback('light'); } catch(e){}
+                    }}
+                    className={`flex-1 py-3.5 rounded-2xl text-[11px] font-black uppercase transition-all border active:scale-[0.97] ${
+                      finition === opt.id
+                        ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg scale-[1.03]'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-650 dark:text-slate-350 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Finish description card */}
+              <motion.div
+                key={finition}
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-4 rounded-2xl bg-indigo-50/40 dark:bg-slate-800/40 border border-indigo-100/50 dark:border-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300 leading-relaxed"
+              >
+                {finition === "Standard" && (
+                  <p>{isRtl ? "✨ ورق كوشيه متين 350غ بلمسة طبيعية خفيفة ومناسبة لجميع أنواع بطاقات الأعمال والمطبوعات الإعلانية اليومية." : "✨ Papier couché 350g solide avec un toucher naturel, idéal pour tous les types de cartes de visite et imprimés publicitaires."}</p>
+                )}
+                {finition === "Matte" && (
+                  <p>{isRtl ? "🌓 طبقة ناعمة ومخملية مضادة للخدش والانعكاسات، تضفي لمسة هادئة وراقية للغاية، وهي المفضلة للشركات الكبرى والأطباء." : "🌓 Finition veloutée antireflet et anti-rayures, offrant un aspect sobre et très haut de gamme, privilégié par les grandes marques."}</p>
+                )}
+                {finition === "Brillante" && (
+                  <p>{isRtl ? "💎 طبقة لامعة ونابضة بالحياة تعكس الضوء وتجعل الألوان والصور تظهر ببريق استثنائي وتباين مذهل للملصقات والمجلات." : "💎 Couche ultra-brillante protectrice qui ravive les couleurs et magnifie vos visuels avec un contraste éclatant, parfait pour les stickers."}</p>
+                )}
+              </motion.div>
+            </div>
+
+            <div className="text-3xl font-black text-accent mb-6 border-t border-slate-100 dark:border-slate-800 pt-5">
+              {product.price} <span className="text-lg text-slate-500">{t.currency}</span>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-4 sticky sm:static bottom-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md py-3 -mx-6 px-6 sm:p-0 sm:bg-transparent sm:dark:bg-transparent sm:backdrop-blur-none sm:-mx-0 sm:px-0 sm:rounded-none">
+              <div className="flex items-center w-full sm:w-auto bg-slate-100 dark:bg-slate-800 rounded-2xl p-2 border border-slate-200 dark:border-slate-700">
+                <button onClick={() => setQty(Math.max(1, qty - 1))} className="p-3 text-slate-500 hover:text-slate-900 dark:hover:text-white active:scale-90 transition-transform"><Minus size={18}/></button>
+                <span className="w-10 text-center font-bold">{qty}</span>
+                <button onClick={() => setQty(qty + 1)} className="p-3 text-slate-500 hover:text-slate-900 dark:hover:text-white active:scale-90 transition-transform"><Plus size={18}/></button>
+              </div>
+
+              <button onClick={() => handleAddToCart(qty, finition)} className="w-full py-4 sm:py-5 bg-slate-900 dark:bg-accent text-white rounded-2xl font-black text-sm shadow-xl hover:scale-[1.02] active:scale-95 transition-transform flex items-center justify-center gap-3">
+                <ShoppingCart size={20} /> {isRtl ? "أضف إلى السلة" : "Ajouter au panier"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </BottomSheet>
     </>
   );
 }

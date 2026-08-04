@@ -1,13 +1,44 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Download, RefreshCw, ChevronDown } from 'lucide-react';
+import { Search, Filter, Download, RefreshCw, ChevronDown, Loader2, AlertCircle } from 'lucide-react';
 import { Transaction, PaymentStatus } from '@/lib/payment-types';
+import { db } from '@/lib/firebase';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 
 interface PaymentDashboardProps {
   title?: string;
   showAnalytics?: boolean;
 }
+
+const toDate = (ts: any): Date => {
+  if (!ts) return new Date();
+  if (typeof ts.toDate === 'function') return ts.toDate();
+  if (typeof ts.seconds === 'number') return new Date(ts.seconds * 1000);
+  return new Date(ts);
+};
+
+// Normalize the stored payment method into a stable provider key
+const mapProvider = (order: any): string => {
+  const method = (order.paymentMethod || '').toLowerCase();
+  if (method.includes('baridi')) return 'baridimob';
+  if (method.includes('chargily')) return 'chargily';
+  if (method.includes('en ligne') || method.includes('carte') || method.includes('cb')) return 'online';
+  return 'cod';
+};
+
+// Derive a payment status from the order's verification data
+const mapStatus = (order: any): PaymentStatus => {
+  const verdict = order.aiVerification?.verdict;
+  if (verdict === 'approved') return 'succeeded';
+  if (verdict === 'rejected') return 'failed';
+  if (verdict === 'needs_manual_review') return 'processing';
+  if (order.paymentStatus === 'refunded' || order.status === 'Remboursé') return 'refunded';
+  if (order.paymentStatus === 'Envoyé' || order.paymentStatus === 'paid' || order.paymentStatus === 'Confirmé') {
+    return 'processing';
+  }
+  return 'pending';
+};
 
 export const PaymentDashboard: React.FC<PaymentDashboardProps> = ({
   title = 'Tableau de bord des paiements',
@@ -15,6 +46,7 @@ export const PaymentDashboard: React.FC<PaymentDashboardProps> = ({
 }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'all'>('all');
   const [providerFilter, setProviderFilter] = useState<string>('all');
@@ -22,16 +54,46 @@ export const PaymentDashboard: React.FC<PaymentDashboardProps> = ({
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
-    // Dans un vrai tableau de bord, vous récupéreriez les transactions d'un endpoint admin
-    // Pour la démo, on simule avec des données vides
-    setLoading(false);
+    // Live-load payment-related fields from the orders collection
+    const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const fetched = snap.docs.map((d) => {
+          const data = d.data();
+          const order: Record<string, any> = { id: d.id, ...data };
+          return {
+            id: d.id,
+            orderId: d.id,
+            invoiceNumber: d.id.slice(-6).toUpperCase(),
+            provider: mapProvider(order),
+            amount: Number(order.total) || Number(order.paidAmount) || 0,
+            currency: 'DA',
+            status: mapStatus(order),
+            createdAt: toDate(order.createdAt),
+            userId: order.customerUserId || '',
+            customerName: order.customerName || '',
+          } as Transaction & { customerName: string };
+        });
+        setTransactions(fetched);
+        setLoading(false);
+        setError(null);
+      },
+      (err) => {
+        console.error('Payment dashboard Firestore error:', err);
+        setError('Échec du chargement des paiements.');
+        setLoading(false);
+      }
+    );
+    return () => unsub();
   }, []);
 
   const filteredTransactions = transactions.filter(t => {
     const matchesSearch =
-      t.orderId.includes(searchTerm) ||
-      t.invoiceNumber?.includes(searchTerm) ||
-      t.userId.includes(searchTerm);
+      t.orderId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.invoiceNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t as any).customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.userId.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
     const matchesProvider = providerFilter === 'all' || t.provider === providerFilter;
@@ -51,17 +113,16 @@ export const PaymentDashboard: React.FC<PaymentDashboardProps> = ({
 
   const handleExport = () => {
     const csv = [
-      ['ID', 'Commande', 'Facture', 'Provider', 'Montant', 'Devise', 'Statut', 'Date', 'Utilisateur'],
+      ['ID', 'Commande', 'Facture', 'Provider', 'Montant (DA)', 'Statut', 'Date', 'Client'],
       ...sortedTransactions.map(t => [
         t.id,
         t.orderId,
         t.invoiceNumber || '',
         t.provider,
-        (t.amount / 100).toFixed(2),
-        t.currency,
+        t.amount,
         t.status,
         new Date(t.createdAt).toLocaleDateString('fr-FR'),
-        t.userId,
+        (t as any).customerName || t.userId,
       ]),
     ]
       .map(row => row.map(cell => `"${cell}"`).join(','))
@@ -77,7 +138,7 @@ export const PaymentDashboard: React.FC<PaymentDashboardProps> = ({
 
   const totalAmount = sortedTransactions
     .filter(t => t.status === 'succeeded')
-    .reduce((sum, t) => sum + t.amount, 0) / 100;
+    .reduce((sum, t) => sum + t.amount, 0);
 
   const successCount = sortedTransactions.filter(t => t.status === 'succeeded').length;
   const failureCount = sortedTransactions.filter(t => t.status === 'failed').length;
@@ -103,16 +164,16 @@ export const PaymentDashboard: React.FC<PaymentDashboardProps> = ({
             <p className="text-3xl font-bold mt-2">{sortedTransactions.length}</p>
           </div>
           <div className="p-4 bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg">
-            <p className="text-sm opacity-75">Transactions réussies</p>
+            <p className="text-sm opacity-75">Paiements confirmés</p>
             <p className="text-3xl font-bold mt-2">{successCount}</p>
           </div>
           <div className="p-4 bg-gradient-to-br from-red-500 to-red-600 text-white rounded-lg">
-            <p className="text-sm opacity-75">Transactions échouées</p>
+            <p className="text-sm opacity-75">Paiements rejetés</p>
             <p className="text-3xl font-bold mt-2">{failureCount}</p>
           </div>
           <div className="p-4 bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg">
             <p className="text-sm opacity-75">Total des revenus</p>
-            <p className="text-3xl font-bold mt-2">{totalAmount.toFixed(2)} €</p>
+            <p className="text-3xl font-bold mt-2">{totalAmount.toLocaleString()} DA</p>
           </div>
         </div>
       )}
@@ -126,7 +187,7 @@ export const PaymentDashboard: React.FC<PaymentDashboardProps> = ({
               <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Chercher par commande, facture ou utilisateur..."
+                placeholder="Chercher par commande, facture, client ou utilisateur..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
@@ -141,10 +202,10 @@ export const PaymentDashboard: React.FC<PaymentDashboardProps> = ({
             className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
           >
             <option value="all">Tous les statuts</option>
-            <option value="succeeded">Succès</option>
-            <option value="failed">Échoué</option>
+            <option value="succeeded">Confirmé</option>
+            <option value="failed">Rejeté</option>
+            <option value="processing">En vérification</option>
             <option value="pending">En attente</option>
-            <option value="processing">Traitement</option>
             <option value="refunded">Remboursé</option>
           </select>
 
@@ -154,10 +215,10 @@ export const PaymentDashboard: React.FC<PaymentDashboardProps> = ({
             onChange={(e) => setProviderFilter(e.target.value)}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
           >
-            <option value="all">Tous les providers</option>
-            <option value="stripe">Stripe</option>
-            <option value="paypal">PayPal</option>
-            <option value="chargily">Chargily</option>
+            <option value="all">Tous les modes</option>
+            <option value="cod">Paiement à la livraison</option>
+            <option value="baridimob">BaridiMob</option>
+            <option value="online">Paiement en ligne</option>
           </select>
 
           {/* Sort */}
@@ -186,6 +247,11 @@ export const PaymentDashboard: React.FC<PaymentDashboardProps> = ({
             <RefreshCw className="w-6 h-6 animate-spin mx-auto text-gray-400" />
             <p className="mt-2 text-gray-500">Chargement des transactions...</p>
           </div>
+        ) : error ? (
+          <div className="p-8 text-center text-red-500">
+            <AlertCircle className="w-6 h-6 mx-auto mb-2" />
+            <p>{error}</p>
+          </div>
         ) : sortedTransactions.length === 0 ? (
           <div className="p-8 text-center text-gray-500">Aucune transaction trouvée</div>
         ) : (
@@ -195,17 +261,17 @@ export const PaymentDashboard: React.FC<PaymentDashboardProps> = ({
                 <tr>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Commande</th>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Facture</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Provider</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Mode</th>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Montant</th>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Statut</th>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Date</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Utilisateur</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Client</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {sortedTransactions.map((transaction) => (
                   <tr key={transaction.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-3 text-sm font-medium text-blue-600">#{transaction.orderId}</td>
+                    <td className="px-6 py-3 text-sm font-medium text-blue-600">#{transaction.orderId.slice(0, 8)}</td>
                     <td className="px-6 py-3 text-sm text-gray-600">{transaction.invoiceNumber || '-'}</td>
                     <td className="px-6 py-3 text-sm">
                       <span className="px-2 py-1 bg-gray-100 rounded text-xs font-medium">
@@ -213,7 +279,7 @@ export const PaymentDashboard: React.FC<PaymentDashboardProps> = ({
                       </span>
                     </td>
                     <td className="px-6 py-3 text-sm font-semibold">
-                      {(transaction.amount / 100).toFixed(2)} {transaction.currency}
+                      {transaction.amount.toLocaleString()} {transaction.currency}
                     </td>
                     <td className="px-6 py-3 text-sm">
                       <span
@@ -233,7 +299,9 @@ export const PaymentDashboard: React.FC<PaymentDashboardProps> = ({
                     <td className="px-6 py-3 text-sm text-gray-600">
                       {new Date(transaction.createdAt).toLocaleDateString('fr-FR')}
                     </td>
-                    <td className="px-6 py-3 text-sm text-gray-600">{transaction.userId}</td>
+                    <td className="px-6 py-3 text-sm text-gray-600">
+                      {(transaction as any).customerName || transaction.userId || '-'}
+                    </td>
                   </tr>
                 ))}
               </tbody>

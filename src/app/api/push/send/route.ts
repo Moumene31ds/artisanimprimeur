@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
+import webpush from "web-push";
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,9 +28,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "VAPID keys not configured" }, { status: 500 });
     }
 
-    const webpush = require("web-push");
     webpush.setVapidDetails(
-      "mailto:imprimeurlartisan@gmail.com",
+      process.env.VAPID_SUBJECT || "mailto:imprimeurlartisan@gmail.com",
       vapidPublicKey,
       vapidPrivateKey
     );

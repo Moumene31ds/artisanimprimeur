@@ -44,9 +44,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [otpCode, setOtpCode] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
   
   const [passwordStrength, setPasswordStrength] = useState<"weak" | "medium" | "strong">("weak");
   const [formMessage, setFormMessage] = useState("");
@@ -252,44 +249,6 @@ export default function LoginPage() {
   }, [mounted]);
 
   if (!mounted) return <GlobalLoader />;
-
-  // Phone SMS OTP Login Handler (Simulated regional Algerian OTP +213)
-  const handlePhoneAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormMessage("");
-    if (!phoneNumber || phoneNumber.length < 8) {
-      const msg = isRtl ? "يرجى إدخال رقم هاتف جزائري صحيح (مثال: 0555123456)." : "Veuillez saisir un numéro algérien valide.";
-      setFormMessage(msg);
-      toast.error(msg);
-      return;
-    }
-
-    if (!otpSent) {
-      setLoading(true);
-      setTimeout(() => {
-        setLoading(false);
-        setOtpSent(true);
-        toast.success(isRtl ? "تم إرسال رمز التحقق (OTP) عبر SMS!" : "Code de vérification envoyé par SMS !");
-      }, 1200);
-    } else {
-      if (otpCode.length < 4) {
-        const msg = isRtl ? "رمز التحقق يتكون من 4 إلى 6 أرقام." : "Le code doit comporter au moins 4 chiffres.";
-        setFormMessage(msg);
-        toast.error(msg);
-        return;
-      }
-      setLoading(true);
-      try {
-        await signInAnonymously(auth);
-        toast.success(isRtl ? "تم الدخول بنجاح عبر الهاتف!" : "Connexion réussie via Téléphone !");
-        router.push("/");
-      } catch (err) {
-        toast.error(isRtl ? "رمز التحقق غير صحيح." : "Code OTP incorrect.");
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
 
   // Email authentication handler
   const handleEmailAuth = async (e: React.FormEvent) => {
@@ -582,7 +541,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className={`min-h-screen flex ${isRtl ? 'flex-row-reverse' : 'flex-row'} bg-slate-50 dark:bg-[#020617] relative overflow-hidden`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`min-h-dvh flex ${isRtl ? 'flex-row-reverse' : 'flex-row'} bg-slate-50 dark:bg-[#020617] relative overflow-hidden`} dir={isRtl ? 'rtl' : 'ltr'}>
       
       {/* Background Animated Blobs */}
       <div className="absolute top-0 -left-10 w-96 h-96 bg-blue-500/20 rounded-full blur-[120px] pointer-events-none animate-pulse"></div>
@@ -750,51 +709,35 @@ export default function LoginPage() {
 
           {/* Form: Phone Mode vs Email/Password Mode */}
           {authMode === "phone" ? (
-            <form onSubmit={handlePhoneAuth} className="space-y-4">
-              <div className="relative">
-                <div className={`absolute inset-y-0 ${isRtl ? 'right-0 pr-4' : 'left-0 pl-4'} flex items-center pointer-events-none text-slate-400 text-xs font-bold`}>
-                  🇩🇿 +213
-                </div>
-                <input 
-                  required 
-                  type="tel" 
-                  value={phoneNumber} 
-                  onChange={e => setPhoneNumber(e.target.value)} 
-                  placeholder={isRtl ? "555 12 34 56" : "555 12 34 56"} 
-                  disabled={otpSent}
-                  className={`w-full ${isRtl ? 'pr-20 pl-4' : 'pl-20 pr-4'} py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-sm`} 
-                />
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl border border-blue-200/60 bg-blue-50/60 p-5 text-center space-y-4 dark:border-blue-500/20 dark:bg-blue-950/20"
+            >
+              <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                <Smartphone size={24} className="text-white" />
               </div>
 
-              {otpSent && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}>
-                  <input 
-                    required 
-                    type="text" 
-                    maxLength={6}
-                    value={otpCode} 
-                    onChange={e => setOtpCode(e.target.value)} 
-                    placeholder={isRtl ? "أدخل الرمز (مثال: 1234)" : "Entrez le code OTP (ex: 1234)"} 
-                    className="w-full text-center tracking-[0.5em] py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-mono font-black text-lg" 
-                  />
-                </motion.div>
-              )}
+              <div>
+                <p className="text-base font-black text-slate-800 dark:text-slate-100">
+                  {isRtl ? "تسجيل دخول سريع وآمن برقم الهاتف" : "Connexion rapide et sécurisée par téléphone"}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed font-medium">
+                  {isRtl
+                    ? "استلام رمز تحقق فوري عبر SMS مع استخراج تلقائي للرمز (WebOTP) وحماية خفية من Google reCAPTCHA."
+                    : "Recevez un code SMS instantané avec saisie automatique (WebOTP) et protection invisible Google reCAPTCHA."}
+                </p>
+              </div>
 
-              {/* Alert Message Box */}
-              {formMessage && (
-                <div className="rounded-2xl border px-4 py-3 text-xs font-semibold flex items-center gap-2 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-400">
-                  <AlertCircle size={16} />
-                  <span>{formMessage}</span>
-                </div>
-              )}
-
-              <button disabled={loading} type="submit" className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-black text-base shadow-xl hover:scale-[1.01] active:scale-95 transition-all disabled:opacity-50 flex justify-center items-center gap-2 cursor-pointer mt-2">
-                {loading ? <Loader2 className="animate-spin" size={20} /> : (
-                  otpSent ? (isRtl ? "تأكيد والدخول" : "Valider et Connecter") : (isRtl ? "إرسال رمز SMS" : "Envoyer le code SMS")
-                )}
-                {!loading && <ArrowRight size={18} className={isRtl ? 'rotate-180' : ''} />}
+              <button
+                onClick={() => router.push("/login/phone")}
+                className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-black text-base shadow-xl hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Smartphone size={18} />
+                {isRtl ? "الدخول برقم الهاتف" : "Continuer avec le téléphone"}
+                <ArrowRight size={18} className={isRtl ? 'rotate-180' : ''} />
               </button>
-            </form>
+            </motion.div>
           ) : (
             <form onSubmit={handleEmailAuth} className="space-y-4 relative">
               <AnimatePresence>

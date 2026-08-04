@@ -96,3 +96,53 @@ export async function sendAbandonedCartEmail(
     return { success: false, error };
   }
 }
+
+/**
+ * Generic plain-text email used by marketing automations and order
+ * notifications. Safe no-op when RESEND_API_KEY is not configured.
+ */
+export async function sendSimpleEmail(
+  to: string,
+  subject: string,
+  textBody: string
+): Promise<{ success: boolean; id?: string; reason?: string; error?: unknown }> {
+  if (!process.env.RESEND_API_KEY) {
+    console.warn("⚠️ Resend skipped: RESEND_API_KEY is missing.");
+    return { success: false, reason: "Missing API Key" };
+  }
+  if (!to) return { success: false, reason: "Missing recipient email" };
+
+  try {
+    const resendInstance = getResendInstance();
+    const data = await resendInstance.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject,
+      text: textBody,
+    });
+    console.log(`✉️ Email dispatched to ${to} — "${subject}". Message ID: ${data.data?.id}`);
+    return { success: true, id: data.data?.id };
+  } catch (error) {
+    console.error("❌ Failed to send email:", error);
+    return { success: false, error };
+  }
+}
+
+/**
+ * Order status change notification email (lightweight, no template needed).
+ */
+export async function sendOrderStatusEmail(
+  to: string,
+  customerName: string,
+  orderId: string,
+  status: string
+) {
+  const text =
+    `L'Artisan Imprimeur — Mise à jour de votre commande\n\n` +
+    `Bonjour ${customerName},\n\n` +
+    `Votre commande #${orderId.slice(-6).toUpperCase()} est maintenant : ${status}.\n\n` +
+    `Suivez votre commande ici : ${process.env.NEXT_PUBLIC_APP_URL || 'https://artisanimprimeur.vercel.app'}/orders\n\n` +
+    `Merci de votre confiance.`;
+
+  return sendSimpleEmail(to, `Commande #${orderId.slice(-6).toUpperCase()} — ${status}`, text);
+}

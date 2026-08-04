@@ -1,17 +1,6 @@
 import { Metadata } from "next";
-import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { getCatalogProducts, CatalogProduct } from "@/lib/catalog";
 import Link from "next/link";
-
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  image: string;
-  category: string;
-  active: boolean;
-  createdAt?: string;
-}
 import { ArrowRight, Printer, MapPin, ShieldCheck, Truck } from "lucide-react";
 
 // List of top Algerian cities to pre-render statically for fast load times and SEO indexing
@@ -70,33 +59,8 @@ export default async function CityPrintingPage({ params }: PageProps) {
   const cityKey = city.toLowerCase();
   const cityName = CITIES_MAP[cityKey] || { fr: city, ar: city };
 
-  // Fetch active products from the Firestore database
-  let products: Product[] = [];
-  try {
-    const q = query(collection(db, "products"), where("active", "==", true));
-    const snap = await getDocs(q);
-    products = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
-    
-    // Sort by createdAt descending
-    products.sort((a, b) => {
-      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return bTime - aTime;
-    });
-  } catch (err) {
-    console.error("Error fetching products from Firestore:", err);
-  }
-
-  // Fallback to static products list if database is empty
-  if (products.length === 0) {
-    products = [
-      { id: "p1", name: "Cartes de Visite Premium(100)", price: 2500, image: "https://img.magnific.com/psd-gratuit/modele-conception-carte-visite-professionnelle_47987-19617.jpg?semt=ais_hybrid&w=740&q=80", category: "Cartes", active: true },
-      { id: "p2", name: "Flyers Publicitaires (A4)", price: 4500, image: "https://images.unsplash.com/photo-1563298723-dcfebaa392e3?auto=format&fit=crop&q=80&w=800", category: "Flyers", active: true },
-      { id: "p3", name: "Stickers Personnalisés", price: 1200, image: "https://lesgommettesfrancaises.com/wp-content/uploads/2024/01/GF506-stickers-joyeux-anniversaire-personnalise-gommettes-francaises.jpg", category: "Goodies", active: true },
-      { id: "p4", name: "Affiches (A3)", price: 3000, image: "https://www.procopy.fr/media/products/02-08-affiche-a3-imprimee.jpg", category: "Flyers", active: true },
-      { id: "p6", name: "Invitations Mariage", price: 5000, image: "https://images.unsplash.com/photo-1515934751635-c81c6bc9a2d8?auto=format&fit=crop&q=80&w=800", category: "Cartes", active: true },
-    ];
-  }
+  // Fetch the unified catalog (live Firestore data with static fallback)
+  const products = await getCatalogProducts();
 
   // LocalBusiness structured schema markup for SEO
   const jsonLd = {
@@ -180,7 +144,7 @@ export default async function CityPrintingPage({ params }: PageProps) {
                 Aucun produit d'impression configuré pour le moment.
               </div>
             ) : (
-              products.map((product: Product) => (
+              products.map((product: CatalogProduct) => (
                 <div 
                   key={product.id}
                   className="premium-glass p-5 rounded-[2.5rem] border border-white/60 dark:border-white/10 flex flex-col justify-between hover:shadow-2xl hover:scale-101 transition-all group"
@@ -191,6 +155,7 @@ export default async function CityPrintingPage({ params }: PageProps) {
                       <img 
                         src={product.image} 
                         alt={`${product.name} à ${cityName.fr}`} 
+                        loading="lazy" decoding="async"
                         className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300"
                       />
                     </div>

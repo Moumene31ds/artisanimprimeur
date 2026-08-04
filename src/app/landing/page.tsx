@@ -111,7 +111,7 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className={`min-h-screen relative overflow-hidden bg-slate-50 dark:bg-[#020617] flex flex-col ${isRtl ? 'text-right' : 'text-left'}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`min-h-dvh relative overflow-hidden bg-slate-50 dark:bg-[#020617] flex flex-col ${isRtl ? 'text-right' : 'text-left'}`} dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Background Animated Blobs */}
       <div className="absolute top-0 -left-4 w-96 h-96 bg-purple-500/20 rounded-full mix-blend-multiply filter blur-[120px] opacity-70 animate-pulse pointer-events-none"></div>
       <div className="absolute top-1/3 -right-4 w-[30rem] h-[30rem] bg-blue-500/20 rounded-full mix-blend-multiply filter blur-[140px] opacity-70 animate-pulse pointer-events-none" style={{animationDelay: '2s'}}></div>

@@ -41,7 +41,7 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className={`min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#020617] p-6 relative overflow-hidden`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`min-h-dvh flex items-center justify-center bg-slate-50 dark:bg-[#020617] p-6 relative overflow-hidden`} dir={isRtl ? 'rtl' : 'ltr'}>
       
       {/* عناصر خلفية سحرية */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/20 rounded-full blur-[120px] animate-pulse"></div>

@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateTextWithFallback } from './ai';
 
 export interface MarketingAIInput {
   orders: Array<{ total?: number; status?: string; wilaya?: string }>;
@@ -40,16 +40,7 @@ function buildFallbackInsight(input: MarketingAIInput): MarketingAIInsight {
 }
 
 export async function buildMarketingInsight(input: MarketingAIInput): Promise<MarketingAIInsight> {
-  const apiKey = process.env.GOOGLE_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
-
-  if (!apiKey) {
-    return buildFallbackInsight(input);
-  }
-
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
     const lang = input.language || 'fr';
     const langInstruction = lang === 'ar'
       ? 'أجب باللغة العربية الفصحى'
@@ -90,8 +81,8 @@ Format JSON:
   "focus": ["mot1", "mot2", "mot3"]
 }`;
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    const result = await generateTextWithFallback({ prompt, temperature: 0.7 });
+    const text = result.text;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
 
     if (jsonMatch) {

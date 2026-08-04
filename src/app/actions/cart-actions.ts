@@ -1,7 +1,8 @@
 // src/app/actions/cart-actions.ts
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { doc, setDoc, deleteDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 interface SaveCartSessionParams {
   userId?: string | null;
@@ -10,8 +11,17 @@ interface SaveCartSessionParams {
   phone?: string | null;
 }
 
+// Deterministic session id for guest carts so upserts don't create duplicates
+const guestSessionId = (email: string) => {
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) {
+    hash = (hash * 31 + email.charCodeAt(i)) | 0;
+  }
+  return `guest_${Math.abs(hash).toString(36)}`;
+};
+
 /**
- * Saves or updates a CartSession in PostgreSQL.
+ * Saves or updates a CartSession in Firestore.
  * Used for tracking abandoned carts before order completion.
  */
 export async function saveCartSessionAction(data: SaveCartSessionParams) {
@@ -20,65 +30,39 @@ export async function saveCartSessionAction(data: SaveCartSessionParams) {
 
     if (!items || items.length === 0) {
       if (userId) {
-        await prisma.cartSession.deleteMany({
-          where: { userId },
-        });
+        await deleteDoc(doc(db, "cartSessions", userId));
       }
       return { success: true, message: "Cart is empty, session cleared." };
     }
 
     if (userId) {
-      // Upsert by userId for logged-in users
-      const session = await prisma.cartSession.upsert({
-        where: { userId },
-        update: {
-          items,
-          email: email || undefined,
-          phone: phone || undefined,
-          isAbandoned: false, // Reset status on active change
-          emailSent: false,
-          updatedAt: new Date(),
-        },
-        create: {
-          userId,
-          items,
-          email,
-          phone,
-          isAbandoned: false,
-          emailSent: false,
-        },
-      });
-      return { success: true, session };
+      // Upsert by userId for logged-in users (doc id = userId)
+      const sessionRef = doc(db, "cartSessions", userId);
+      const session = {
+        userId,
+        items,
+        email: email || null,
+        phone: phone || null,
+        isAbandoned: false, // Reset status on active change
+        emailSent: false,
+        updatedAt: new Date(),
+      };
+      await setDoc(sessionRef, session, { merge: true });
+      return { success: true, session: { id: sessionRef.id, ...session } };
     } else if (email) {
-      // Upsert by email where userId is null for guest checkout flows
-      const existingSession = await prisma.cartSession.findFirst({
-        where: { userId: null, email },
-      });
-
-      if (existingSession) {
-        const session = await prisma.cartSession.update({
-          where: { id: existingSession.id },
-          data: {
-            items,
-            phone: phone || existingSession.phone,
-            isAbandoned: false,
-            emailSent: false,
-            updatedAt: new Date(),
-          },
-        });
-        return { success: true, session };
-      } else {
-        const session = await prisma.cartSession.create({
-          data: {
-            items,
-            email,
-            phone,
-            isAbandoned: false,
-            emailSent: false,
-          },
-        });
-        return { success: true, session };
-      }
+      // Upsert by email for guest checkout flows (deterministic doc id)
+      const sessionRef = doc(db, "cartSessions", guestSessionId(email));
+      const session = {
+        userId: null,
+        items,
+        email,
+        phone: phone || null,
+        isAbandoned: false,
+        emailSent: false,
+        updatedAt: new Date(),
+      };
+      await setDoc(sessionRef, session, { merge: true });
+      return { success: true, session: { id: sessionRef.id, ...session } };
     }
 
     return { success: false, error: "Neither userId nor email provided." };
@@ -95,13 +79,9 @@ export async function saveCartSessionAction(data: SaveCartSessionParams) {
 export async function clearCartSessionAction(userId: string | null, email?: string | null) {
   try {
     if (userId) {
-      await prisma.cartSession.deleteMany({
-        where: { userId },
-      });
+      await deleteDoc(doc(db, "cartSessions", userId));
     } else if (email) {
-      await prisma.cartSession.deleteMany({
-        where: { userId: null, email },
-      });
+      await deleteDoc(doc(db, "cartSessions", guestSessionId(email)));
     }
     return { success: true };
   } catch (error) {

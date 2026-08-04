@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import html2canvas from "html2canvas";
 import { toast } from "sonner";
+import { loadOptionalFonts } from "@/lib/fonts";
 
 export default function AIStudioPage() {
   const { language, addToCart } = useAppStore();
@@ -24,6 +25,15 @@ export default function AIStudioPage() {
   const [threeDModelType, setThreeDModelType] = useState<'mug' | 'tshirt' | 'box' | 'poster'>('mug');
   const [selectedStyle, setSelectedStyle] = useState('pro');
   const [errorMsg, setErrorMsg] = useState("");
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  interface DesignHistoryItem {
+    id: string;
+    prompt: string;
+    imageUrl: string;
+    timestamp: number;
+  }
 
   interface TextLayer {
     id: string;
@@ -47,6 +57,8 @@ export default function AIStudioPage() {
   const [isSavingCustom, setIsSavingCustom] = useState(false);
   const [showPreflight, setShowPreflight] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const [designHistory, setDesignHistory] = useState<DesignHistoryItem[]>([]);
 
   // --- Advanced Image Filters ---
   const [brightness, setBrightness] = useState(100);
@@ -250,7 +262,28 @@ export default function AIStudioPage() {
 
   useEffect(() => {
     setMounted(true);
+    loadOptionalFonts();
+    try {
+      const saved = localStorage.getItem('ai-studio-history');
+      if (saved) {
+        const parsed: DesignHistoryItem[] = JSON.parse(saved);
+        setDesignHistory(parsed.slice(0, 5));
+      }
+    } catch { /* ignore */ }
   }, []);
+
+  useEffect(() => {
+    if (designHistory.length > 0) {
+      localStorage.setItem('ai-studio-history', JSON.stringify(designHistory.slice(0, 5)));
+    }
+  }, [designHistory]);
+
+  const deleteHistoryItem = (id: string) => {
+    setDesignHistory(prev => prev.filter(item => item.id !== id));
+    if (designHistory.length <= 1) {
+      localStorage.removeItem('ai-studio-history');
+    }
+  };
 
   if (!mounted) return null;
 
@@ -312,6 +345,13 @@ export default function AIStudioPage() {
       
       if (data.imageUrl) {
         setGeneratedImage(data.imageUrl);
+        const newItem: DesignHistoryItem = {
+          id: `design-${Date.now()}`,
+          prompt,
+          imageUrl: data.imageUrl,
+          timestamp: Date.now(),
+        };
+        setDesignHistory(prev => [newItem, ...prev].slice(0, 5));
         if (data.fallback) {
           setErrorMsg(isRtl ? "مفتاح API غير مفعل. هذه صورة افتراضية للتجربة." : "Clé API non configurée. Image par défaut affichée.");
         }
@@ -324,6 +364,42 @@ export default function AIStudioPage() {
       setGeneratedImage("https://images.unsplash.com/photo-1626785774573-4b799315345d?w=800&q=80");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleEnhancePrompt = async () => {
+    if (!prompt.trim()) return;
+    setIsEnhancing(true);
+    try {
+      const res = await fetch('/api/marketing/insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `Améliore et détaille cette description de design pour une agence d'impression professionnelle. Ajoute des détails sur les couleurs, la typographie, la mise en page et le style. Réponds uniquement avec la description améliorée en français:\n\n${prompt}`
+        }),
+      });
+      const data = await res.json();
+      if (data.insight) {
+        setPrompt(data.insight.replace(/^["']|["']$/g, ''));
+        toast.success(isRtl ? 'تم تحسين الوصف بنجاح!' : 'Description améliorée avec succès !');
+      } else {
+        throw new Error(data.error || 'No insight returned');
+      }
+    } catch {
+      toast.error(isRtl ? 'فشل تحسين الوصف. حاول مرة أخرى.' : 'Échec de l\'amélioration. Réessayez.');
+    } finally {
+      setIsEnhancing(false);
+    }
+  };
+
+  const copyPromptToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true);
+      toast.success(isRtl ? 'تم نسخ الوصف!' : 'Description copiée !');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error(isRtl ? 'فشل النسخ' : 'Échec de la copie');
     }
   };
 
@@ -431,6 +507,32 @@ export default function AIStudioPage() {
               ></textarea>
             </div>
 
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest block">
+                {isRtl ? '🎨 أنماط سريعة (انقر للإضافة)' : '🎨 Styles rapides (cliquez pour ajouter)'}
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: isRtl ? 'أنيق وبسيط' : 'Minimaliste élégant', color: '#e2e8f0', desc: isRtl ? 'تصميم أنيق وبسيط بألوان هادئة وخطوط نظيفة ومساحة بيضاء واسعة' : 'Design minimaliste élégant aux couleurs douces, typographie sobre et grand espace négatif' },
+                  { label: isRtl ? 'حديث ملون' : 'Moderne coloré', color: '#8b5cf6', desc: isRtl ? 'تصميم حديث بألوان جريئة ونابضة بالحياة مع تدرجات وتأثيرات زاهية' : 'Design moderne aux couleurs vives et audacieuses avec dégradés et effets dynamiques' },
+                  { label: isRtl ? 'فاخر وذهبي' : 'Luxe et doré', color: '#d97706', desc: isRtl ? 'تصميم فاخر بلمسات ذهبية معدنية وألوان داكنة وأنيقة مع خطوط زخرفية' : 'Design luxueux aux accents dorés métalliques, tons foncés élégants et ornements raffinés' },
+                  { label: isRtl ? 'مهني جاد' : 'Professionnel sobre', color: '#1e293b', desc: isRtl ? 'تصميم مهني جاد بألوان محايدة وخطوط مرتبة تناسب الشركات والمؤسسات' : 'Design professionnel sobre aux tons neutres, mise en page structurée pour entreprises' },
+                ].map((card, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setPrompt(prev => (prev ? `${prev}. ${card.desc}` : card.desc))}
+                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/70 dark:bg-slate-800 border border-slate-200/50 dark:border-slate-700 hover:border-purple-500 hover:shadow-md transition-all active:scale-95 cursor-pointer group"
+                  >
+                    <span className="w-6 h-6 rounded-full border border-black/10 shadow-sm" style={{ backgroundColor: card.color }} />
+                    <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 group-hover:text-purple-600 text-center leading-tight">
+                      {card.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-3">
               <label className="text-sm font-bold text-slate-700 dark:text-slate-300 block flex items-center gap-2">
                 <Sliders size={16} className="text-purple-500" />
@@ -460,19 +562,35 @@ export default function AIStudioPage() {
               </div>
             </div>
 
-            <motion.button 
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              type="submit" 
-              disabled={!prompt.trim() || isGenerating} 
-              className="w-full bg-slate-900/90 dark:bg-accent text-white py-4 rounded-2xl font-black text-lg shadow-xl shadow-slate-900/20 transition flex justify-center items-center gap-3 disabled:opacity-50 mt-6"
-            >
-              {isGenerating ? (
-                <><Loader2 className="animate-spin" size={20}/> {isRtl ? 'جاري صنع السحر...' : 'Génération en cours...'}</>
-              ) : (
-                <><Wand2 size={20}/> {isRtl ? 'توليد التصميم' : 'Générer le Design'}</>
-              )}
-            </motion.button>
+            <div className="flex gap-3 mt-6">
+              <motion.button 
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                type="submit" 
+                disabled={!prompt.trim() || isGenerating} 
+                className="flex-1 bg-slate-900/90 dark:bg-accent text-white py-4 rounded-2xl font-black text-lg shadow-xl shadow-slate-900/20 transition flex justify-center items-center gap-3 disabled:opacity-50"
+              >
+                {isGenerating ? (
+                  <><Loader2 className="animate-spin" size={20}/> {isRtl ? 'جاري صنع السحر...' : 'Génération en cours...'}</>
+                ) : (
+                  <><Wand2 size={20}/> {isRtl ? 'توليد التصميم' : 'Générer le Design'}</>
+                )}
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                type="button"
+                onClick={handleEnhancePrompt}
+                disabled={!prompt.trim() || isEnhancing}
+                className="flex-[0.45] bg-gradient-to-r from-purple-600 to-blue-600 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-purple-500/20 transition flex justify-center items-center gap-2 disabled:opacity-50 border border-white/10"
+              >
+                {isEnhancing ? (
+                  <><Loader2 className="animate-spin" size={18}/> {isRtl ? 'تحسين...' : 'Amélioration...'}</>
+                ) : (
+                  <><Sparkles size={18}/> {isRtl ? 'تحسين الوصف' : 'Améliorer le Prompt'}</>
+                )}
+              </motion.button>
+            </div>
           </form>
         </motion.div>
 
@@ -526,6 +644,16 @@ export default function AIStudioPage() {
                       >
                         <Sparkles size={14}/> {isRtl ? 'تخصيص متقدم' : 'Personnaliser'}
                       </button>
+                      <button 
+                        onClick={copyPromptToClipboard} 
+                        className={`backdrop-blur-md text-white px-5 py-3 rounded-xl font-black text-xs shadow-lg flex items-center gap-1.5 border active:scale-95 transition-all ${
+                          copied 
+                            ? 'bg-emerald-500/90 border-emerald-400' 
+                            : 'bg-slate-600/80 hover:bg-slate-500/80 border-slate-500'
+                        }`}
+                      >
+                        {copied ? <><CheckCircle size={14}/> {isRtl ? 'تم النسخ!' : 'Copié !'}</> : <><Type size={14}/> {isRtl ? 'نسخ الوصف' : 'Copier le prompt'}</>}
+                      </button>
                     </div>
                     <button 
                       onClick={() => setIsThreeDPreviewOpen(true)} 
@@ -559,6 +687,14 @@ export default function AIStudioPage() {
                       className="flex-1 bg-purple-600 text-white py-3.5 px-4 rounded-xl font-black text-xs flex justify-center items-center gap-1.5 active:scale-95 transition-all"
                     >
                       <Sparkles size={14}/> {isRtl ? 'تخصيص' : 'Personnaliser'}
+                    </button>
+                    <button 
+                      onClick={copyPromptToClipboard} 
+                      className={`flex-1 text-white py-3.5 px-4 rounded-xl font-black text-xs flex justify-center items-center gap-1.5 active:scale-95 transition-all ${
+                        copied ? 'bg-emerald-500' : 'bg-slate-600'
+                      }`}
+                    >
+                      {copied ? <><CheckCircle size={14}/> {isRtl ? 'تم النسخ' : 'Copié'}</> : <><Type size={14}/> {isRtl ? 'نسخ' : 'Copier'}</>}
                     </button>
                   </div>
                   <button 
@@ -594,6 +730,81 @@ export default function AIStudioPage() {
           </AnimatePresence>
         </motion.div>
       </div>
+
+      {/* 📁 Design History */}
+      {designHistory.length > 0 && (
+        <motion.div variants={itemVariants} className="mt-10 premium-glass p-6 rounded-[2.5rem] shadow-xl border border-white/40 dark:border-slate-800">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <ImageIcon size={18} className="text-purple-500" />
+              <h3 className="text-lg font-black text-slate-900 dark:text-white">
+                {isRtl ? 'تصاميمي' : 'Mes Créations'}
+              </h3>
+              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                {designHistory.length}/5
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setDesignHistory([]);
+                localStorage.removeItem('ai-studio-history');
+                toast.success(isRtl ? 'تم مسح السجل' : 'Historique effacé');
+              }}
+              className="text-[10px] font-bold text-red-500 hover:text-red-600 flex items-center gap-1 transition-colors"
+            >
+              <Trash2 size={12} />
+              {isRtl ? 'مسح الكل' : 'Tout effacer'}
+            </button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            {designHistory.map((item) => (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="relative group rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrompt(item.prompt);
+                    setGeneratedImage(item.imageUrl);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="w-full aspect-[4/3] overflow-hidden block"
+                >
+                  <img
+                    src={item.imageUrl}
+                    alt={item.prompt}
+                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+                    <span className="text-[9px] font-bold text-white truncate w-full">
+                      {item.prompt.substring(0, 40)}...
+                    </span>
+                  </div>
+                </button>
+                <div className="flex items-center justify-between px-2 py-1.5 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+                  <span className="text-[9px] text-slate-400 font-medium">
+                    {new Date(item.timestamp).toLocaleDateString(isRtl ? 'ar' : 'fr', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDesignHistory(prev => prev.filter(h => h.id !== item.id));
+                      if (designHistory.length <= 1) localStorage.removeItem('ai-studio-history');
+                    }}
+                    className="text-red-400 hover:text-red-600 transition-colors p-0.5"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* 🎨 Customizer Overlay */}
       <AnimatePresence>
@@ -679,6 +890,7 @@ export default function AIStudioPage() {
                       <img 
                         src={generatedImage} 
                         alt="Canvas BG" 
+                        loading="lazy" decoding="async"
                         className="w-full h-full object-cover pointer-events-none select-none"
                         style={{
                           filter: `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) grayscale(${grayscale}%) blur(${blur}px)`
@@ -709,6 +921,7 @@ export default function AIStudioPage() {
                         <img 
                           src={logoOverlay} 
                           alt="Logo Overlay" 
+                          loading="lazy" decoding="async"
                           className="w-full h-auto pointer-events-none select-none object-contain"
                         />
                       </div>
@@ -1020,7 +1233,7 @@ export default function AIStudioPage() {
 
                             {/* Preview inside controls */}
                             <div className="flex justify-center bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
-                              <img src={logoOverlay} alt="Logo preview" className="max-h-20 object-contain rounded" />
+                              <img src={logoOverlay} alt="Logo preview" loading="lazy" decoding="async" className="max-h-20 object-contain rounded" />
                             </div>
 
                             {/* Logo Scale slider */}

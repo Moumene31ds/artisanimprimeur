@@ -2,24 +2,44 @@
 
 import { useState, useEffect, useRef, KeyboardEvent, DragEvent } from "react";
 import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
 import { useAppStore } from "@/lib/store";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { 
-  Sparkles, X, Send, MessageSquareCode, 
+import { toast } from "sonner";
+import {
+  Sparkles, X, Send, MessageSquareCode,
   Trash2, ArrowLeftRight, Truck, HelpCircle,
   Square, Copy, Check, RefreshCw, WifiOff, ArrowDown, Mic, MicOff,
-  Volume2, ThumbsUp, ThumbsDown, Paperclip, UploadCloud, ExternalLink
+  Volume2, ThumbsUp, ThumbsDown, Paperclip, UploadCloud, ExternalLink,
+  ShoppingCart, Cpu, BadgePercent, MapPin
 } from "lucide-react";
 
 const CHAT_STORAGE_KEY = "lartisan_chat_history";
 
+interface ProductResult {
+  id: string;
+  name: string;
+  price: number;
+  category: string;
+  image: string;
+}
+
+interface MetaInfo {
+  available: boolean;
+  provider?: string;
+  model?: string;
+  label?: { fr: string; ar: string };
+  message?: string;
+}
+
 export default function AntigravityChat() {
   const language = useAppStore((state) => state.language);
+  const addToCart = useAppStore((state) => state.addToCart);
   const pathname = usePathname();
-  const router = useRouter(); // <-- لإدارة التنقل
+  const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
-  
+
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -30,72 +50,97 @@ export default function AntigravityChat() {
   const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({});
   const [textInput, setTextInput] = useState("");
   const [selectedFile, setSelectedFile] = useState<{ file: File; preview: string } | null>(null);
-  const [isDragging, setIsDragging] = useState(false); // لحالة السحب والإفلات
+  const [isDragging, setIsDragging] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [meta, setMeta] = useState<MetaInfo | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isOpenRef = useRef(isOpen);
 
   const isRtl = language === "ar";
+
+  const welcomeText = isRtl
+    ? "مرحباً بك! أنا **L'Artisan AI**، مساعدك الذكي في مطبعة الحرفي. أعرف كل شيء عن أسعارنا وتوصيلنا 🚚، مثل **100 بطاقة زيارة = 2500 دج**. اسألني عن أي شيء! 🎨✨"
+    : "Bonjour ! Je suis **L'Artisan AI**, votre assistant intelligent chez L'Artisan Imprimeur. Je connais nos prix et livraison 🚚, par exemple **100 cartes de visite = 2500 DA**. Demandez-moi n'importe quoi ! 🎨✨";
 
   const defaultWelcome: any = {
     id: "welcome",
     role: "assistant" as const,
-    parts: [{
-      type: "text" as const,
-      text: isRtl 
-        ? "مرحباً بك! أنا **L'Artisan AI**، مساعدك الذكي في مطبعة الحرفي. كيف يمكنني مساعدتك في تصميم وطباعة مشاريعك اليوم؟ 🎨✨" 
-        : "Bonjour ! Je suis **L'Artisan AI**, votre assistant intelligent chez L'Artisan Imprimeur. Comment puis-je vous aider dans vos projets de conception et d'impression aujourd'hui ? 🎨✨"
-    }],
+    content: welcomeText,
     createdAt: new Date()
   };
 
   const getMessageTextContent = (msg: any): string => {
     if (!msg) return "";
     if (typeof msg.content === "string" && msg.content) return msg.content;
-    if (!msg.parts || !Array.isArray(msg.parts)) return "";
-    return msg.parts
-      .filter((part: any) => part.type === "text")
-      .map((part: any) => part.text)
-      .join("");
+    if (msg.parts && Array.isArray(msg.parts)) {
+      const text = msg.parts.filter((p: any) => p.type === "text").map((p: any) => p.text).join("");
+      if (text) return text;
+    }
+    return "";
   };
 
-  const { 
-    messages, 
-    status, 
-    stop, 
-    reload, 
-    setMessages,
-    append,
-    error 
-  } = useChat({
-    api: "/api/chat",
-    initialMessages: [defaultWelcome],
-    onFinish: () => {
-      scrollToBottom("smooth");
-    }
-  });
+  const scrollToBottom = (behavior: "smooth" | "auto" = "smooth") => {
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior });
+    });
+  };
+
+  const { messages, status, stop, setMessages, sendMessage, error, regenerate, clearError } =
+    useChat({
+      transport: new DefaultChatTransport({ api: "/api/chat" }),
+      messages: [defaultWelcome],
+      onFinish: () => {
+        scrollToBottom("smooth");
+        if (!isOpenRef.current) setUnreadCount((c) => c + 1);
+      }
+    });
 
   const isLoading = status === "submitted" || status === "streaming";
+  const hasError = status === "error" || !!error;
+
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  // Fetch provider/model meta when the panel opens.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    fetch("/api/chat/meta")
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setMeta(d); })
+      .catch(() => { if (!cancelled) setMeta(null); });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   // إعدادات البداية وحفظ المحادثات
   useEffect(() => {
     setMounted(true);
     setIsOnline(typeof window !== "undefined" ? navigator.onLine : true);
-    
+
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
-    
+
     const saved = localStorage.getItem(CHAT_STORAGE_KEY);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.length > 0) {
-          setMessages(parsed);
+          const normalized = parsed.map((m: any) => {
+            if (!m.content && m.parts?.length > 0) {
+              const text = m.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('');
+              return { ...m, content: text };
+            }
+            return m;
+          });
+          setMessages(normalized);
         }
       } catch (e) {
         console.error("Failed to parse chat history", e);
@@ -111,42 +156,37 @@ export default function AntigravityChat() {
 
   useEffect(() => {
     if (mounted && messages.length > 1) {
-      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
+      const clean = messages.map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        content: getMessageTextContent(m),
+        createdAt: m.createdAt,
+      }));
+      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(clean));
     }
   }, [messages, mounted]);
 
-  // --- جديد: مراقبة أدوات التوجيه (Navigation Tools) ---
+  // مراقبة أدوات التوجيه (Navigation Tools)
   useEffect(() => {
     if (messages.length === 0) return;
     const lastMessage = messages[messages.length - 1];
-    
-    // فحص ما إذا كان هناك استدعاء لأداة في الرسالة الأخيرة
-    if (lastMessage.role === 'assistant' && lastMessage.toolInvocations) {
-      lastMessage.toolInvocations.forEach((invocation: any) => {
-        // التحقق من أن الأداة هي navigateToPage وأنها أكملت الرد (state: 'result')
-        if (invocation.toolName === 'navigateToPage' && invocation.state === 'result') {
-          const route = invocation.result.route;
-          if (route && pathname !== route) {
-             // الانتظار قليلاً لضمان قراءة المستخدم للرسالة ثم توجيهه
-             setTimeout(() => {
-                router.push(route);
-                setIsOpen(false); // إغلاق الشات عند الانتقال (اختياري)
-             }, 1500);
-          }
-        }
-      });
+    if (lastMessage.role === 'assistant' && Array.isArray(lastMessage.parts)) {
+      const navigations = lastMessage.parts.filter(
+        (part: any) => part.toolName === 'navigateToPage' && part.state === 'output-available'
+      ) as any[];
+      const route = navigations[navigations.length - 1]?.output?.route;
+      if (route && pathname !== route) {
+        setTimeout(() => {
+          router.push(route);
+          setIsOpen(false);
+        }, 1500);
+      }
     }
   }, [messages, router, pathname]);
-  // -----------------------------------------------------
-
-  const scrollToBottom = (behavior: "smooth" | "auto" = "smooth") => {
-    requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior });
-    });
-  };
 
   useEffect(() => {
     if (isOpen) {
+      setUnreadCount(0);
       scrollToBottom("auto");
       document.body.style.overflow = "hidden";
       setTimeout(() => textareaRef.current?.focus(), 100);
@@ -180,7 +220,7 @@ export default function AntigravityChat() {
     adjustTextareaHeight();
   }, [textInput]);
 
-  // --- دوال السحب والإفلات ---
+  // دوال السحب والإفلات
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(true);
@@ -211,7 +251,6 @@ export default function AntigravityChat() {
     const previewUrl = URL.createObjectURL(file);
     setSelectedFile({ file, preview: previewUrl });
   };
-  // -------------------------
 
   useEffect(() => {
     return () => {
@@ -232,13 +271,19 @@ export default function AntigravityChat() {
   const handleCustomSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if ((!textInput.trim() && !selectedFile) || !isOnline || isLoading) return;
+    if (typeof sendMessage !== 'function') {
+      console.error("Chat API not ready yet");
+      return;
+    }
+
+    if (hasError) clearError?.();
 
     const userMessage = textInput.trim();
     const fileToUpload = selectedFile;
 
     setTextInput("");
     handleRemoveFile();
-    
+
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     const contextPrefix = messages.length <= 1 ? `[Context: Page ${pathname}]. ` : "";
@@ -248,14 +293,13 @@ export default function AntigravityChat() {
         const reader = new FileReader();
         reader.onloadend = async () => {
           const base64Url = reader.result as string;
-          await append({
-            role: 'user',
-            content: contextPrefix + (userMessage || (isRtl ? "صورة مرفقة" : "Image jointe")) + `\n![${fileToUpload.file.name}](${base64Url})`
+          await sendMessage({
+            text: contextPrefix + (userMessage || (isRtl ? "صورة مرفقة" : "Image jointe")) + `\n![${fileToUpload.file.name}](${base64Url})`
           });
         };
         reader.readAsDataURL(fileToUpload.file);
       } else {
-        await append({ role: 'user', content: contextPrefix + userMessage });
+        await sendMessage({ text: contextPrefix + userMessage });
       }
     } catch (error) {
       console.error("Failed to send message:", error);
@@ -299,13 +343,13 @@ export default function AntigravityChat() {
     }
 
     window.speechSynthesis.cancel();
-    const cleanText = text.replace(/\[Context:.*?\]\.\s*/g, "").replace(/[*`_]/g, "");
+    const cleanText = text.replace(/\[Context:.*?\]\.\s*/g, "").replace(/[*`_#]/g, "");
     const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = isRtl ? "ar-SA" : "fr-FR"; 
-    
+    utterance.lang = isRtl ? "ar-SA" : "fr-FR";
+
     utterance.onend = () => setPlayingId(null);
     utterance.onerror = () => setPlayingId(null);
-    
+
     setPlayingId(id);
     window.speechSynthesis.speak(utterance);
   };
@@ -313,7 +357,7 @@ export default function AntigravityChat() {
   const handleQuickPromptClick = async (promptText: string) => {
     if (!isOnline || isLoading) return;
     const contextPrefix = messages.length <= 1 ? `[Context: Page ${pathname}]. ` : "";
-    await append({ role: 'user', content: contextPrefix + promptText });
+    await sendMessage({ text: contextPrefix + promptText });
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -329,6 +373,7 @@ export default function AntigravityChat() {
       setMessages([defaultWelcome]);
       setTextInput("");
       setFeedback({});
+      if (clearError) clearError();
       if (isLoading) stop();
     }
   };
@@ -348,77 +393,296 @@ export default function AntigravityChat() {
     return text.replace(/\[Context:.*?\]\.?\s*/g, "").trim();
   };
 
-  // --- دالة تنسيق الرسائل ودعم الـ Tools UI ---
+  const addProductToCart = (p: ProductResult) => {
+    try {
+      addToCart({ id: p.id, name: p.name, price: p.price, image: p.image, category: p.category, quantity: 1 });
+      toast.success(isRtl ? `تمت إضافة ${p.name} إلى السلة` : `${p.name} ajouté au panier`);
+    } catch {
+      toast.error(isRtl ? "تعذر الإضافة إلى السلة" : "Impossible d'ajouter au panier");
+    }
+  };
+
+  // ---------- Markdown inline renderer ----------
+  const renderInline = (text: string): React.ReactNode => {
+    const parts = text.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return <strong key={index} className="font-extrabold text-indigo-600 dark:text-indigo-400">{part.slice(2, -2)}</strong>;
+      }
+      if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
+        return <em key={index} className="italic text-slate-600 dark:text-slate-400">{part.slice(1, -1)}</em>;
+      }
+      if (part.startsWith("`") && part.endsWith("`")) {
+        return <code key={index} className="bg-slate-100 dark:bg-slate-800 text-pink-600 dark:text-pink-400 px-1.5 py-0.5 rounded-md text-[11px] font-mono border border-slate-200 dark:border-slate-700">{part.slice(1, -1)}</code>;
+      }
+      const urlMatch = part.match(/(https?:\/\/[^\s)\]]+)/);
+      if (urlMatch && typeof urlMatch.index === "number") {
+        const before = part.slice(0, urlMatch.index);
+        const url = urlMatch[1];
+        const after = part.slice(urlMatch.index + url.length);
+        return (
+          <span key={index}>
+            {before}
+            <a href={url} target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 underline break-all">{url}</a>
+            {renderInline(after)}
+          </span>
+        );
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
+
+  // ---------- Markdown block renderer ----------
+  const renderBlocks = (text: string): React.ReactNode => {
+    const lines = text.split("\n");
+    const blocks: React.ReactNode[] = [];
+    lines.forEach((line, i) => {
+      const trim = line.trim();
+      if (!trim) return;
+      if (/^#{1,3}\s/.test(trim)) {
+        const isH1 = /^#\s/.test(trim);
+        const content = trim.replace(/^#+\s*/, "");
+        blocks.push(
+          <p key={`b${i}`} className={`block font-extrabold mt-2 ${isH1 ? "text-base" : "text-sm"} text-slate-900 dark:text-white`}>
+            {renderInline(content)}
+          </p>
+        );
+      } else if (/^[-*]\s/.test(trim)) {
+        blocks.push(
+          <div key={`b${i}`} className="flex gap-2 my-1 items-start">
+            <span className="text-indigo-500 mt-1 shrink-0 text-lg leading-none">•</span>
+            <span className="flex-1">{renderInline(trim.slice(2))}</span>
+          </div>
+        );
+      } else if (/^\d+[.)]\s/.test(trim)) {
+        const num = trim.match(/^\d+/)?.[0] ?? "1";
+        blocks.push(
+          <div key={`b${i}`} className="flex gap-2 my-1 items-start">
+            <span className="text-indigo-500 mt-0.5 shrink-0 font-bold text-sm min-w-[1.3rem] text-right">{num}.</span>
+            <span className="flex-1">{renderInline(trim.replace(/^\d+[.)]\s*/, ""))}</span>
+          </div>
+        );
+      } else {
+        blocks.push(<p key={`b${i}`} className="block min-h-[1.2rem]">{renderInline(trim)}</p>);
+      }
+    });
+    return blocks;
+  };
+
+  // ---------- Tool result cards ----------
+  const renderToolPart = (part: any, index: number): React.ReactNode => {
+    if (part.state !== "output-available") {
+      if (part.toolName === 'navigateToPage') {
+        return (
+          <div key={`tool-${index}`} className="mt-2 flex items-center gap-2 p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg border border-indigo-100 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 text-xs font-semibold animate-pulse">
+            <ExternalLink size={14} />
+            <span>{isRtl ? "جاري التوجيه..." : "Redirection en cours..."}</span>
+          </div>
+        );
+      }
+      return null;
+    }
+
+    const out = part.output ?? {};
+
+    if (part.toolName === 'calculatePrice') {
+      const label = (fr: string, ar: string) => (isRtl ? ar : fr);
+      return (
+        <div key={`tool-${index}`} className="mt-2 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1.5">
+          <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">💰 {label("Détails du prix :", "تفاصيل السعر :")}</span>
+          <div className="flex justify-between text-slate-600 dark:text-slate-400">
+            <span>{label("Quantité", "الكمية")} :</span>
+            <span className="font-bold">{out.quantity}</span>
+          </div>
+          <div className="flex justify-between text-slate-600 dark:text-slate-400">
+            <span>{label("Finition", "التشطيب")} :</span>
+            <span className="font-bold capitalize">{out.finish}</span>
+          </div>
+          {out.discountPercent > 0 && (
+            <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+              <span>{label("Remise", "الخصم")} ({out.discountPercent}%) :</span>
+              <span className="font-bold">-{out.discountDZD} DZD</span>
+            </div>
+          )}
+          <div className="flex justify-between font-black text-indigo-600 dark:text-indigo-400 pt-2 border-t border-slate-200 dark:border-slate-700">
+            <span>{label("TOTAL", "الإجمالي")} :</span>
+            <span>{out.totalDZD} DZD</span>
+          </div>
+          {out.nextTier && (
+            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold pt-1">
+              {label(
+                `Astuce : ajoutez ${out.nextTier.neededQty} unités pour obtenir -${out.nextTier.discountPercent}% !`,
+                `نصيحة : أضف ${out.nextTier.neededQty} وحدة لتحصل على خصم ${out.nextTier.discountPercent}%!`
+              )}
+            </p>
+          )}
+        </div>
+      );
+    }
+
+    if (part.toolName === 'getShippingEstimate') {
+      if (!out.success) {
+        return (
+          <div key={`tool-${index}`} className="mt-2 p-2.5 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs font-semibold">
+            ⚠️ {out.message}
+          </div>
+        );
+      }
+      return (
+        <div key={`tool-${index}`} className="mt-2 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1.5">
+          <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+            <MapPin size={13} className="text-cyan-500" /> {out.wilaya} ({isRtl ? "ولاية" : "Wilaya"} {out.code})
+          </span>
+          <div className="flex justify-between text-slate-600 dark:text-slate-400">
+            <span>{isRtl ? "🕐 المدة المتوقعة" : "🕐 Délai"} :</span>
+            <span className="font-bold">{out.deliveryTime}</span>
+          </div>
+          <div className="flex justify-between text-slate-600 dark:text-slate-400">
+            <span>{isRtl ? "🏠 توصيل للمنزل" : "🏠 À domicile"} :</span>
+            <span className="font-bold">{out.homeDeliveryDZD} DZD</span>
+          </div>
+          <div className="flex justify-between text-slate-600 dark:text-slate-400">
+            <span>{isRtl ? "🏢 استلام من المكتب" : "🏢 Retrait bureau"} :</span>
+            <span className="font-bold text-cyan-600 dark:text-cyan-400">{out.bureauPickupDZD} DZD</span>
+          </div>
+          {typeof out.totalWithProductDZD === "number" && (
+            <div className="flex justify-between font-black text-indigo-600 dark:text-indigo-400 pt-2 border-t border-slate-200 dark:border-slate-700">
+              <span>{isRtl ? "الإجمالي (مع الشحن)" : "Total avec livraison"} :</span>
+              <span>{out.totalWithProductDZD} DZD</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (part.toolName === 'searchProducts') {
+      const results: ProductResult[] = Array.isArray(out.results) ? out.results : [];
+      if (!out.success || results.length === 0) {
+        return (
+          <div key={`tool-${index}`} className="mt-2 p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
+            {isRtl ? "لم يتم العثور على منتجات مطابقة" : "Aucun produit trouvé"}
+          </div>
+        );
+      }
+      return (
+        <div key={`tool-${index}`} className="mt-2">
+          <p className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+            {isRtl ? "🛍️ منتجات من كتالوجنا:" : "🛍️ Produits du catalogue :"}
+          </p>
+          <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1 -mx-1 px-1">
+            {results.map((p) => (
+              <div key={p.id} className="shrink-0 w-[132px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
+                <div className="h-20 w-full bg-slate-100 dark:bg-slate-800 relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={p.image} alt={p.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                </div>
+                <div className="p-2">
+                  <p className="text-[10px] font-black text-slate-800 dark:text-white leading-tight line-clamp-2 h-7">{p.name}</p>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{p.category}</p>
+                  <div className="flex items-center justify-between mt-1.5">
+                    <span className="text-[11px] font-black text-indigo-600 dark:text-indigo-400">{p.price} DZD</span>
+                    <button
+                      onClick={() => addProductToCart(p)}
+                      className="p-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 active:scale-95 transition-all cursor-pointer"
+                      title={isRtl ? "أضف للسلة" : "Ajouter au panier"}
+                    >
+                      <ShoppingCart size={12} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (part.toolName === 'checkPromoCode') {
+      if (!out.success) {
+        return (
+          <div key={`tool-${index}`} className="mt-2 p-2.5 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs font-semibold">
+            🎟️ {out.message}
+          </div>
+        );
+      }
+      return (
+        <div key={`tool-${index}`} className="mt-2 p-3 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800 text-xs flex items-center gap-3">
+          <BadgePercent size={20} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <div>
+            <p className="font-black text-emerald-700 dark:text-emerald-400">{out.code}</p>
+            <p className="text-emerald-600/80 dark:text-emerald-500/80 font-semibold">
+              {isRtl ? out.descriptionAr : out.descriptionFr}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (part.toolName === 'createOrder') {
+      return (
+        <div key={`tool-${index}`} className={`mt-2 p-2.5 rounded-xl border text-xs font-semibold ${out.success ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400" : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400"}`}>
+          {out.success
+            ? (isRtl ? `✅ تم تسجيل طلبك (${out.orderId || ""})` : `✅ Commande enregistrée (${out.orderId || ""})`)
+            : `❌ ${out.message}`}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   const formatMessageContent = (message: any) => {
     const text = getMessageTextContent(message);
     const cleanText = cleanMessageContext(text);
-    
-    let contentElements = [];
 
-    // عرض النص إذا وجد
+    const contentElements: React.ReactNode[] = [];
+
     if (cleanText) {
-      const textLines = cleanText.split('\n').map((line, i) => {
-        const isListItem = line.trim().startsWith('- ') || line.trim().startsWith('* ');
-        const content = isListItem ? line.substring(line.indexOf(' ') + 1) : line;
-        
-        const parts = content.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
-        
-        const formattedLine = parts.map((part, index) => {
-          if (part.startsWith("**") && part.endsWith("**")) {
-            return <strong key={index} className="font-extrabold text-indigo-600 dark:text-indigo-400">{part.slice(2, -2)}</strong>;
-          } else if (part.startsWith("*") && part.endsWith("*")) {
-            return <em key={index} className="italic text-slate-600 dark:text-slate-400">{part.slice(1, -1)}</em>;
-          } else if (part.startsWith("`") && part.endsWith("`")) {
-            return <code key={index} className="bg-slate-100 dark:bg-slate-800 text-pink-600 dark:text-pink-400 px-1.5 py-0.5 rounded-md text-[11px] font-mono border border-slate-200 dark:border-slate-700">{part.slice(1, -1)}</code>;
-          }
-          return <span key={index}>{part}</span>;
-        });
-
-        if (isListItem) {
-          return (
-            <div key={`text-${i}`} className="flex gap-2 my-1 items-start">
-              <span className="text-indigo-500 mt-1 shrink-0 text-lg leading-none">•</span>
-              <span className="flex-1">{formattedLine}</span>
-            </div>
-          );
-        }
-        return <span key={`text-${i}`} className="block min-h-[1.2rem]">{formattedLine}</span>;
-      });
-      contentElements.push(<div key="main-text" className="whitespace-pre-wrap break-words">{textLines}</div>);
+      contentElements.push(
+        <div key="main-text" className="whitespace-pre-wrap break-words">{renderBlocks(cleanText)}</div>
+      );
     } else if (message.role === 'user') {
       contentElements.push(<em key="context" className="text-slate-400 opacity-50">Context provided</em>);
     }
 
-    // عرض التنبيهات المرئية للأدوات (Tools UI)
-    if (message.toolInvocations) {
-      message.toolInvocations.forEach((invocation: any, index: number) => {
-        if (invocation.toolName === 'calculatePrice' && invocation.state === 'result') {
-          contentElements.push(
-            <div key={`tool-${index}`} className="mt-2 p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-              <span className="font-bold text-slate-700 dark:text-slate-300">💰 {isRtl ? "تفاصيل التسعير:" : "Détails du prix:"}</span>
-              <ul className="mt-1 space-y-1 text-slate-600 dark:text-slate-400">
-                <li>{isRtl ? "المنتج:" : "Produit:"} {invocation.result.product}</li>
-                <li>{isRtl ? "الكمية:" : "Quantité:"} {invocation.result.quantity}</li>
-                <li className="font-bold text-indigo-600 dark:text-indigo-400 pt-1 border-t border-slate-200 dark:border-slate-700 mt-1">
-                  {isRtl ? "السعر الإجمالي:" : "Prix total:"} {invocation.result.totalPriceDZD} DZD
-                </li>
-              </ul>
-            </div>
-          );
-        } else if (invocation.toolName === 'navigateToPage') {
-          // يمكن أن تكون الأداة في حالة 'call' (جاري العمل) أو 'result' (تم الانتهاء)
-          const stateText = invocation.state === 'result' ? (isRtl ? "جاري التوجيه..." : "Redirection en cours...") : (isRtl ? "يتم التحضير للانتقال..." : "Préparation...");
-          contentElements.push(
-             <div key={`tool-${index}`} className="mt-2 flex items-center gap-2 p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg border border-indigo-100 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 text-xs font-semibold animate-pulse">
-                <ExternalLink size={14} />
-                <span>{stateText}</span>
-             </div>
-          );
+    if (Array.isArray(message.parts)) {
+      message.parts.forEach((part: any, index: number) => {
+        if (part.type === 'tool' || part.toolName) {
+          const node = renderToolPart(part, index);
+          if (node) contentElements.push(node);
         }
       });
     }
 
     return contentElements;
+  };
+
+  // ---------- Contextual quick replies ----------
+  const getContextualPrompts = (): Array<{ text: string; icon: React.ReactNode; prompt: string }> => {
+    const last = messages[messages.length - 1];
+    const t = (getMessageTextContent(last) || "").toLowerCase();
+    const out: Array<{ text: string; icon: React.ReactNode; prompt: string }> = [];
+    if (!t) return out;
+
+    if (/carte|بطاق|cart|visite/.test(t)) {
+      out.push({ text: isRtl ? "أسعار البطاقات" : "Prix cartes", icon: <HelpCircle size={13} />, prompt: isRtl ? "كم سعر 100 بطاقة زيارة ؟" : "Combien coûtent 100 cartes de visite ?" });
+    }
+    if (/flyer|منشور|affiche|أفيس/.test(t)) {
+      out.push({ text: isRtl ? "سعر 500 منشور" : "Prix 500 flyers", icon: <HelpCircle size={13} />, prompt: isRtl ? "احسب سعر 500 فلاير A5" : "Calcule le prix de 500 flyers A5" });
+    }
+    if (/livr|شحن|توصيل|wilaya|ولاية|colis/.test(t)) {
+      out.push({ text: isRtl ? "توصيل لعاصمتي" : "Livraison Alger", icon: <Truck size={13} />, prompt: isRtl ? "كم تكلفة التوصيل إلى الجزائر العاصمة ؟" : "Combien coûte la livraison vers Alger ?" });
+    }
+    if (/pay|دفع|baridi|بريدي|paiement/.test(t)) {
+      out.push({ text: isRtl ? "طرق الدفع" : "Moyens de paiement", icon: <HelpCircle size={13} />, prompt: isRtl ? "ما هي طرق الدفع المتاحة ؟" : "Quels sont les moyens de paiement disponibles ?" });
+    }
+    if (/promo|خصم|code|كود/.test(t)) {
+      out.push({ text: isRtl ? "تفعيل كود" : "Vérifier un code", icon: <BadgePercent size={13} />, prompt: isRtl ? "تحقق من كود خصم PROMO10" : "Vérifie le code promo PROMO10" });
+    }
+    if (/order|طلب|commande|شراء/.test(t)) {
+      out.push({ text: isRtl ? "أريد طلباً" : "Commander", icon: <ShoppingCart size={13} />, prompt: isRtl ? "أريد طلب 200 بطاقة زيارة" : "Je veux commander 200 cartes de visite" });
+    }
+    return out.slice(0, 3);
   };
 
   if (!mounted) return null;
@@ -433,18 +697,24 @@ export default function AntigravityChat() {
   };
 
   const quickPrompts = isRtl ? [
-    { text: "السلة الخاصة بي", icon: <ArrowLeftRight size={13} />, prompt: "خذني إلى سلة المشتريات الخاصة بي." },
-    { text: "الأسعار", icon: <HelpCircle size={13} />, prompt: "احسب لي سعر طباعة 100 كارت فيزيت بجودة premium." },
-    { text: "تتبع التوصيل", icon: <Truck size={13} />, prompt: "هل تشحنون لـ 58 ولاية وكم يستغرق التوصيل لوهران؟" },
+    { text: "السلة", icon: <ArrowLeftRight size={13} />, prompt: "خذني إلى سلة المشتريات الخاصة بي." },
+    { text: "سعر البطاقات", icon: <HelpCircle size={13} />, prompt: "كم سعر 100 بطاقة زيارة ؟" },
+    { text: "التوصيل", icon: <Truck size={13} />, prompt: "هل تشحنون لـ 58 ولاية وكم يستغرق التوصيل لوهران؟" },
+    { text: "طرق الدفع", icon: <BadgePercent size={13} />, prompt: "ما هي طرق الدفع المتاحة ؟" },
   ] : [
     { text: "Mon Panier", icon: <ArrowLeftRight size={13} />, prompt: "Amène-moi à mon panier." },
-    { text: "Tarifs", icon: <HelpCircle size={13} />, prompt: "Calcule le prix pour 100 cartes de visite premium." },
+    { text: "Prix cartes", icon: <HelpCircle size={13} />, prompt: "Combien coûtent 100 cartes de visite ?" },
     { text: "Livraison", icon: <Truck size={13} />, prompt: "Livrez-vous dans toutes les 58 wilayas d'Algérie ?" },
+    { text: "Paiement", icon: <BadgePercent size={13} />, prompt: "Quels sont les moyens de paiement disponibles ?" },
   ];
+
+  const contextualPrompts = getContextualPrompts();
+  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant" && m.id !== "welcome");
+  const showContextual = !!lastAssistant && contextualPrompts.length > 0 && !isLoading;
 
   return (
     <div className={`fixed bottom-24 md:bottom-8 font-sans ${isRtl ? 'right-4 md:right-6' : 'left-4 md:left-6'} ${isOpen ? 'z-[100000]' : 'z-[999]'}`} dir={isRtl ? "rtl" : "ltr"}>
-      
+
       <motion.button
         onClick={() => setIsOpen(!isOpen)}
         aria-label="Toggle AI Chat"
@@ -453,6 +723,11 @@ export default function AntigravityChat() {
         className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-slate-900 to-indigo-950 dark:from-indigo-600 dark:to-indigo-800 text-white flex items-center justify-center shadow-[0_10px_30px_rgba(79,70,229,0.3)] relative border border-white/20 cursor-pointer group transition-shadow"
       >
         {isOpen ? <X size={24} /> : <MessageSquareCode size={24} className={shouldReduceMotion ? "" : "group-hover:animate-pulse"} />}
+        {!isOpen && unreadCount > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center shadow-lg animate-in zoom-in">
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
       </motion.button>
 
       <AnimatePresence>
@@ -464,10 +739,9 @@ export default function AntigravityChat() {
             onDrop={handleDrop}
             className="fixed inset-0 md:absolute md:inset-auto md:bottom-18 md:left-0 w-full h-[100dvh] md:w-[420px] md:h-[650px] max-h-full md:max-h-[85vh] flex flex-col rounded-none md:rounded-[2rem] overflow-hidden shadow-[0_25px_60px_-15px_rgba(0,0,0,0.3)] border-0 md:border border-slate-200/60 dark:border-slate-800/80 bg-white dark:bg-slate-950 md:bg-white/95 md:dark:bg-slate-950/95 backdrop-blur-3xl"
           >
-            {/* واجهة السحب والإفلات */}
             <AnimatePresence>
               {isDragging && (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   className="absolute inset-0 z-[10000] bg-indigo-500/90 backdrop-blur-sm flex flex-col items-center justify-center text-white border-4 border-dashed border-white/50 m-4 rounded-[1.5rem]"
                 >
@@ -488,7 +762,18 @@ export default function AntigravityChat() {
                     L'Artisan AI
                     <span className={`w-2 h-2 rounded-full shadow-[0_0_8px_currentColor] ${!isOnline ? 'bg-red-500 text-red-500' : isLoading ? 'bg-amber-500 text-amber-500 animate-pulse' : 'bg-emerald-500 text-emerald-500'}`} />
                   </h4>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">L'Artisan Imprimeur</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                    L'Artisan Imprimeur
+                    {meta?.available && (
+                      <span
+                        className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 normal-case tracking-normal"
+                        title={isRtl ? "المزود الحالي" : "Fournisseur actuel"}
+                      >
+                        <Cpu size={9} />
+                        <span className="truncate max-w-[110px]">{meta.provider === 'ollama' ? 'Ollama' : 'OpenRouter'}</span>
+                      </span>
+                    )}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -509,11 +794,16 @@ export default function AntigravityChat() {
                 <span>{isRtl ? "لا يوجد اتصال بالإنترنت حالياً" : "Aucune connexion Internet"}</span>
               </div>
             )}
-            
-            {error && (
-               <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs p-2 text-center border-b border-red-100 dark:border-red-800">
-                 {isRtl ? "حدث خطأ في الاتصال، يرجى المحاولة لاحقاً." : "Erreur de connexion, veuillez réessayer."}
-               </div>
+
+            {hasError && (
+              <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs p-2 px-4 border-b border-red-100 dark:border-red-800 flex items-center justify-between gap-2 flex-wrap">
+                <span className="flex-1 min-w-0">
+                  {error?.message || (isRtl ? "حدث خطأ في الاتصال، يرجى المحاولة لاحقاً." : "Erreur de connexion, veuillez réessayer.")}
+                </span>
+                <button onClick={() => { clearError?.(); regenerate(); }} className="shrink-0 px-3 py-1 bg-red-200 dark:bg-red-800/50 hover:bg-red-300 dark:hover:bg-red-700/50 rounded-lg font-bold transition-colors cursor-pointer">
+                  {isRtl ? "إعادة المحاولة" : "Réessayer"}
+                </button>
+              </div>
             )}
 
             <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 md:p-5 space-y-6 scrollbar-none bg-slate-50/50 dark:bg-slate-950/50 relative">
@@ -521,20 +811,20 @@ export default function AntigravityChat() {
                 const isAssistant = message.role === "assistant";
                 const isLast = index === messages.length - 1;
                 const messageText = getMessageTextContent(message);
-                
-                if (message.role === "user" && cleanMessageContext(messageText) === "" && !message.parts?.some((p:any) => p.type === 'file')) return null;
+
+                if (message.role === "user" && cleanMessageContext(messageText) === "" && !message.parts?.some((p: any) => p.type === 'file')) return null;
 
                 return (
-                  <motion.div 
+                  <motion.div
                     initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 15, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     transition={{ duration: 0.25, ease: "easeOut" }}
-                    key={message.id || index} 
+                    key={message.id || index}
                     className={`flex flex-col ${isAssistant ? "items-start" : "items-end"} group`}
                   >
                     <div className={`max-w-[88%] p-3.5 text-[13px] leading-relaxed relative ${
-                      isAssistant 
-                        ? "bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200/50 dark:border-slate-800/50 rounded-2xl rounded-tl-sm shadow-sm" 
+                      isAssistant
+                        ? "bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200/50 dark:border-slate-800/50 rounded-2xl rounded-tl-sm shadow-sm"
                         : "bg-gradient-to-br from-indigo-600 to-blue-600 text-white shadow-md rounded-2xl rounded-tr-sm"
                     }`}>
                       {formatMessageContent(message)}
@@ -546,7 +836,7 @@ export default function AntigravityChat() {
                               return (
                                 <div key={partIdx} className="rounded-lg overflow-hidden border border-white/10 max-w-full">
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={part.url} alt={part.filename || "Uploaded Image"} className="max-h-60 object-contain w-full rounded-lg" />
+                                  <img src={part.url} alt={part.filename || "Uploaded Image"} loading="lazy" decoding="async" className="max-h-60 object-contain w-full rounded-lg" />
                                 </div>
                               );
                             }
@@ -569,22 +859,22 @@ export default function AntigravityChat() {
 
                     <div className={`flex items-center gap-3 mt-1.5 px-1 ${isAssistant ? "justify-start" : "justify-end"}`}>
                       <span className="text-[9px] text-slate-400 font-medium">
-                        {(message as any).createdAt ? new Date((message as any).createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "الآن"}
+                        {(message as any).createdAt ? new Date((message as any).createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "الآن"}
                       </span>
-                      
+
                       {isAssistant && message.id !== 'welcome' && (
                         <div className="flex items-center gap-1">
-                           <button onClick={() => handleFeedback(message.id, 'up')} className={`p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors ${feedback[message.id] === 'up' ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-600 hover:text-emerald-500'}`}>
-                             <ThumbsUp size={10} />
-                           </button>
-                           <button onClick={() => handleFeedback(message.id, 'down')} className={`p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors ${feedback[message.id] === 'down' ? 'text-red-500' : 'text-slate-300 dark:text-slate-600 hover:text-red-500'}`}>
-                             <ThumbsDown size={10} />
-                           </button>
+                          <button onClick={() => handleFeedback(message.id, 'up')} className={`p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors ${feedback[message.id] === 'up' ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-600 hover:text-emerald-500'}`}>
+                            <ThumbsUp size={10} />
+                          </button>
+                          <button onClick={() => handleFeedback(message.id, 'down')} className={`p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors ${feedback[message.id] === 'down' ? 'text-red-500' : 'text-slate-300 dark:text-slate-600 hover:text-red-500'}`}>
+                            <ThumbsDown size={10} />
+                          </button>
                         </div>
                       )}
 
                       {isAssistant && isLast && !isLoading && isOnline && (
-                        <button onClick={() => reload()} className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-indigo-500 transition-colors cursor-pointer ml-2">
+                        <button onClick={() => { clearError?.(); regenerate(); }} className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-indigo-500 transition-colors cursor-pointer ml-2">
                           <RefreshCw size={10} />
                           {isRtl ? "إعادة توليد" : "Regénérer"}
                         </button>
@@ -594,12 +884,31 @@ export default function AntigravityChat() {
                 );
               })}
 
+              {showContextual && (
+                <div className="flex flex-wrap gap-2 pl-1">
+                  {contextualPrompts.map((item, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleQuickPromptClick(item.prompt)}
+                      disabled={!isOnline || isLoading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/60 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-all shadow-sm cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      {item.icon}
+                      <span>{item.text}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {isLoading && (
-                <div className="flex justify-start items-center gap-2 p-3.5 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50 w-fit rounded-2xl rounded-tl-sm shadow-sm">
-                  <div className="flex gap-1.5 items-center h-4">
-                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                <div className="flex items-start gap-2">
+                  <div className="flex items-center gap-2 p-3.5 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50 w-fit rounded-2xl rounded-tl-sm shadow-sm">
+                    <div className="flex gap-1.5 items-center h-4">
+                      <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                      <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                      <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-bold">{isRtl ? "L'Artisan AI يفكر..." : "L'Artisan AI réfléchit..."}</span>
                   </div>
                 </div>
               )}
@@ -642,7 +951,7 @@ export default function AntigravityChat() {
             )}
 
             <form onSubmit={handleCustomSubmit} className="p-4 pb-safe md:pb-4 bg-white dark:bg-slate-950 relative z-50 shadow-[0_-10px_20px_rgba(0,0,0,0.02)] border-t border-slate-100 dark:border-slate-800">
-              
+
               <AnimatePresence>
                 {selectedFile && (
                   <motion.div
@@ -653,7 +962,7 @@ export default function AntigravityChat() {
                   >
                     <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={selectedFile.preview} alt="Preview" className="w-full h-full object-cover" />
+                      <img src={selectedFile.preview} alt="Preview" loading="lazy" className="w-full h-full object-cover" />
                     </div>
                     <div className="flex flex-col pr-1 text-left ltr:pr-0 rtl:pl-1">
                       <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 max-w-[150px] truncate">{selectedFile.file.name}</span>
@@ -672,13 +981,13 @@ export default function AntigravityChat() {
               </AnimatePresence>
 
               <div className="flex items-end gap-1.5 bg-slate-50 dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 focus-within:border-indigo-500 dark:focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all shadow-inner">
-                
+
                 <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
 
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="p-2 rounded-xl mb-1 shrink-0 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-all" 
+                  className="p-2 rounded-xl mb-1 shrink-0 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-all"
                   title={isRtl ? "إرفاق ملف" : "Joindre un fichier"}
                 >
                   <Paperclip size={16} />
@@ -694,21 +1003,21 @@ export default function AntigravityChat() {
                   {isListening ? <MicOff size={16} /> : <Mic size={16} />}
                 </button>
 
-                <textarea 
+                <textarea
                   ref={textareaRef}
-                  value={textInput} 
-                  onChange={(e) => setTextInput(e.target.value)} 
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  placeholder={!isOnline ? (isRtl ? "أنت غير متصل..." : "Hors ligne...") : isLoading ? (isRtl ? "جاري التفكير..." : "Veuillez patienter...") : (isRtl ? "اسأل عن الأسعار، أو قل 'خذني إلى السلة'..." : "Demandez un prix, ou dites 'Aller au panier'...")} 
-                  className="flex-1 bg-transparent px-2 py-3 text-[13px] font-medium outline-none text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 disabled:opacity-50 resize-none max-h-32 min-h-[44px] scrollbar-none" 
-                  disabled={isLoading || !isOnline} 
+                  placeholder={!isOnline ? (isRtl ? "أنت غير متصل..." : "Hors ligne...") : isLoading ? (isRtl ? "جاري التفكير..." : "Veuillez patienter...") : (isRtl ? "اسأل عن الأسعار، أو قل 'خذني إلى السلة'..." : "Demandez un prix, ou dites 'Aller au panier'...")}
+                  className="flex-1 bg-transparent px-2 py-3 text-[13px] font-medium outline-none text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 disabled:opacity-50 resize-none max-h-32 min-h-[44px] scrollbar-none"
+                  disabled={isLoading || !isOnline}
                 />
-                
+
                 {isLoading ? (
-                   <button type="button" onClick={() => stop()} title={isRtl ? "إيقاف التوليد" : "Arrêter"} className="w-10 h-10 mb-0.5 shrink-0 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center transition-all hover:bg-red-100 hover:text-red-600 cursor-pointer">
-                     <Square size={14} fill="currentColor" />
-                   </button>
+                  <button type="button" onClick={() => stop()} title={isRtl ? "إيقاف التوليد" : "Arrêter"} className="w-10 h-10 mb-0.5 shrink-0 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center transition-all hover:bg-red-100 hover:text-red-600 cursor-pointer">
+                    <Square size={14} fill="currentColor" />
+                  </button>
                 ) : (
                   <button type="submit" disabled={(!textInput.trim() && !selectedFile) || !isOnline} className="w-10 h-10 mb-0.5 shrink-0 rounded-xl bg-gradient-to-tr from-slate-900 to-indigo-900 dark:from-indigo-600 dark:to-indigo-500 text-white flex items-center justify-center transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:from-slate-400 disabled:to-slate-400 cursor-pointer">
                     <Send size={16} className={isRtl ? "rotate-180" : ""} />

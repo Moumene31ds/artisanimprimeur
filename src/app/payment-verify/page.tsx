@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs, doc, updateDoc, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, getDoc, orderBy, limit } from "firebase/firestore";
 import { 
   FileCheck, Upload, AlertCircle, ShieldCheck, CheckCircle2,
   ChevronDown, Scan, ArrowRight, Loader2, Sparkles, PhoneCall,
@@ -37,13 +37,42 @@ export default function PaymentVerifyPage() {
   const [success, setSuccess] = useState(false);
   const [aiReport, setAiReport] = useState<any | null>(null);
   const [dbChecking, setDbChecking] = useState(false);
+  const [approvedDeposit, setApprovedDeposit] = useState<number | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedOrder = orders.find(o => o.id === selectedOrderId);
 
-  // Calculate required amount based on deposit policy
+  // Approved custom deposit from admin (depositRequests collection)
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, "depositRequests"),
+      where("userId", "==", user.uid),
+      where("status", "==", "approved"),
+      orderBy("createdAt", "desc"),
+      limit(1)
+    );
+    getDocs(q)
+      .then((snap) => {
+        if (snap.empty) {
+          setApprovedDeposit(null);
+          return;
+        }
+        const doc = snap.docs[0].data();
+        setApprovedDeposit(Number(doc.approvedAmount || doc.amount || 0));
+      })
+      .catch((err) => {
+        console.error("Error loading approved deposit:", err);
+        setApprovedDeposit(null);
+      });
+  }, [user]);
+
+  // Calculate required amount based on deposit policy or approved custom deposit
   const requiredAmount = selectedOrder ? (() => {
+    if (approvedDeposit && approvedDeposit > 0) {
+      return Math.min(approvedDeposit, selectedOrder.total);
+    }
     if (!uiConfig) return selectedOrder.total;
     const depType = uiConfig.baridimobMinDepositType || 'none';
     const depVal = Number(uiConfig.baridimobMinDepositValue) || 0;
@@ -111,6 +140,10 @@ export default function PaymentVerifyPage() {
         toast.error(isRtl ? "الرجاء اختيار ملف صورة فقط" : "Veuillez choisir une image.");
         return;
       }
+      if (file.size > 15 * 1024 * 1024) {
+        toast.error(isRtl ? "حجم الصورة كبير جداً (الحد 15 ميجا)" : "Image trop volumineuse (max 15 MB).");
+        return;
+      }
       setReceiptFile(file);
       setReceiptPreview(URL.createObjectURL(file));
       // Reset AI report on new file upload
@@ -151,6 +184,55 @@ export default function PaymentVerifyPage() {
     });
   };
 
+  // Downscale a base64 image to at most `maxSize` px on the long edge and
+  // re-encode as JPEG. This massively cuts bandwidth + AI token cost and keeps
+  // the 3.7GB dev server from OOM-ing on huge phone screenshots.
+  const downscaleImage = (base64: string, maxSize = 1280, quality = 0.8): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+          if (scale === 1) { resolve(base64); return; }
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { resolve(base64); return; }
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", quality));
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.onerror = () => reject(new Error("Image decode failed"));
+      img.src = base64;
+    });
+  };
+
+  // Refresh a fresh Firebase ID token for the authenticated user.
+  const getAuthToken = async (): Promise<string> => {
+    const u = user as any;
+    if (!u || typeof u.getIdToken !== "function") throw new Error("Not authenticated");
+    return await u.getIdToken();
+  };
+
+  // Defensive JSON parse: proxies / shared hosting / gateways sometimes answer
+  // with a plain-text error page ("An error occurred...") instead of JSON. Never
+  // let that surface as a raw SyntaxError — always return a usable object.
+  const safeJson = async (res: Response): Promise<any> => {
+    const type = res.headers.get("content-type") || "";
+    if (!type.includes("application/json")) {
+      const text = await res.text();
+      return { error: text?.slice(0, 160) || "Réponse inattendue du serveur." };
+    }
+    try {
+      return await res.json();
+    } catch {
+      return { error: "Réponse serveur invalide. Veuillez réessayer." };
+    }
+  };
+
   const startScanningProcess = async () => {
     if (!selectedOrderId) {
       toast.error(isRtl ? "يرجى اختيار الطلب أولاً" : "Sélectionnez une commande.");
@@ -189,12 +271,12 @@ export default function PaymentVerifyPage() {
 
     setScanSteps(steps);
 
-    // Step-by-step visual animation helper
+    // Step-by-step visual animation helper (fast — 350ms/step)
     const advanceVisualSteps = async () => {
       for (let i = 0; i < steps.length; i++) {
         setActiveStepIdx(i);
         playBeep(400 + i * 70, 0.1);
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise(resolve => setTimeout(resolve, 350));
       }
     };
 
@@ -202,36 +284,55 @@ export default function PaymentVerifyPage() {
       // Start steps animation
       const stepsPromise = advanceVisualSteps();
 
-      // 1. Upload to Cloudinary
+      // 1. Authenticate with a fresh token (the server now verifies identity,
+      //    order ownership, and performs all authoritative writes itself).
+      const token = await getAuthToken();
+
+      // 2. Upload the original full-res image to Cloudinary for admin review.
       const base64Image = await fileToBase64(receiptFile);
       const uploadRes = await fetch("/api/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ file: base64Image }),
       });
-      
-      const uploadData = await uploadRes.json();
+
+      const uploadData = await safeJson(uploadRes);
       if (!uploadRes.ok) {
         throw new Error(uploadData.error || "Cloudinary upload failed");
       }
+      if (!uploadData.url) {
+        throw new Error(uploadData.error || "Upload failed");
+      }
       const paymentProofUrl = uploadData.url;
 
-      // 2. Call AI Verification API
+      // 3. Downscale a copy for the AI — cheap + fast (saves quota + memory).
+      const compactImage = await downscaleImage(base64Image, 1280, 0.8);
+
+      // 4. Call AI Verification API (secure server-side endpoint)
       const verifyRes = await fetch("/api/payments/verify-receipt", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
         body: JSON.stringify({
-          image: base64Image,
+          image: compactImage,
           orderId: selectedOrderId,
           txId: txId.trim(),
-          orderTotal: selectedOrder?.total || 0,
-          ripSender: ripSender.trim()
+          ripSender: ripSender.trim(),
+          paymentProofUrl
         })
       });
 
-      const verifyData = await verifyRes.json();
+      const verifyData = await safeJson(verifyRes);
       if (!verifyRes.ok) {
-        throw new Error(verifyData.error || "AI Verification API failed");
+        const msg = verifyData.error || "AI Verification API failed";
+        if (verifyRes.status === 429) {
+          toast.error(isRtl ? "محاولات كثيرة. انتظر بضع دقائق ثم أعد المحاولة." : "Trop de tentatives. Réessayez dans quelques minutes.");
+          setScanning(false);
+          return;
+        }
+        throw new Error(msg);
       }
 
       // Wait for visual steps to finish if API responds faster
@@ -241,48 +342,24 @@ export default function PaymentVerifyPage() {
       setAiReport(report);
       setScanning(false);
 
+      if (verifyData.alreadyVerified) {
+        setSuccess(true);
+        toast.info(isRtl ? "هذا الطلب قد تم التحقق منه مسبقاً" : "Cette commande est déjà validée.");
+        return;
+      }
+
       if (report.verdict === "approved") {
         setSuccess(true);
         playBeep(587.33, 0.15);
         playBeep(880, 0.25, 100);
         confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
 
-        // Update order in Firestore
-        const orderRef = doc(db, "orders", selectedOrderId);
-        await updateDoc(orderRef, {
-          paymentStatus: "Envoyé", 
-          status: "Conception", // Proceed to conception
-          baridimobTxId: txId.trim(),
-          baridimobRipSender: ripSender.trim(),
-          paymentProofUrl: paymentProofUrl,
-          aiVerification: report,
-          paidAmount: Number(report.extractedAmount) || 0,
-          updatedAt: serverTimestamp()
-        });
-
-        // Award bonus points
-        await addDoc(collection(db, "pointTransactions"), {
-          userId: user?.uid,
-          points: 50,
-          type: "won",
-          title: `Bonus points for AI Verified BaridiMob payment #${selectedOrderId.substring(0, 6)}`,
-          titleAr: `نقاط إضافية للتحقق الذكي للطلب #${selectedOrderId.substring(0, 6)}`,
-          createdAt: serverTimestamp()
-        });
-
-        toast.success(isRtl ? "تم التحقق من الوصل وتحديث الطلب بنجاح!" : "Reçu validé et commande mise à jour !");
+        if (verifyData.pointsAwarded) {
+          toast.success(isRtl ? "تم التحقق من الوصل +50 نقطة مكافأة!" : "Reçu validé +50 points bonus !");
+        } else {
+          toast.success(isRtl ? "تم التحقق من الوصل وتحديث الطلب بنجاح!" : "Reçu validé et commande mise à jour !");
+        }
       } else if (report.verdict === "needs_manual_review") {
-        // Needs review but we still save proof to database so admins can inspect it
-        const orderRef = doc(db, "orders", selectedOrderId);
-        await updateDoc(orderRef, {
-          paymentStatus: "Envoyé", // Submitted
-          baridimobTxId: txId.trim(),
-          baridimobRipSender: ripSender.trim(),
-          paymentProofUrl: paymentProofUrl,
-          aiVerification: report,
-          paidAmount: Number(report.extractedAmount) || 0,
-          updatedAt: serverTimestamp()
-        });
         toast.warning(isRtl ? "الدفع يتطلب مراجعة يدوية من قبل الإدارة" : "Paiement en attente de revue manuelle.");
       } else {
         toast.error(isRtl ? "فشل التحقق التلقائي. يرجى التأكد من صحة الصورة والبيانات." : "Échec de validation automatique.");
@@ -290,7 +367,14 @@ export default function PaymentVerifyPage() {
 
     } catch (err: any) {
       console.error(err);
-      toast.error(isRtl ? `حدث خطأ: ${err.message || "فشل النظام"}` : `Erreur: ${err.message || "Échec"}`);
+      const raw = String(err?.message || "");
+      const isTimeout = /An error occurred|504|timeout|timed out|FUNCTION_INVOCATION|network|fetch failed/i.test(raw);
+      const msg = isTimeout
+        ? (isRtl
+            ? "انتهت مهلة الخادم (التحقق يستغرق أحياناً أكثر من دقيقة على النماذج المجانية). أعد المحاولة بعد لحظات."
+            : "Le serveur a mis trop de temps à répondre (l'IA peut prendre +1 min). Réessayez dans un instant.")
+        : raw;
+      toast.error(isRtl ? `حدث خطأ: ${msg}` : `Erreur: ${msg}`);
       setScanning(false);
     }
   };
@@ -409,10 +493,19 @@ export default function PaymentVerifyPage() {
                       {requiredAmount} DA
                     </p>
                     <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                      {isRtl 
-                        ? `طلبك يتطلب دفع عربون لا يقل عن ${requiredAmount} دج للبدء في التصميم والطباعة. يمكنك دفع المبلغ كاملاً أو قيمة العربون فقط.`
-                        : `Pour démarrer la production, un acompte de ${requiredAmount} DA minimum est requis. Vous pouvez payer le total ou l'acompte.`}
+                      {approvedDeposit && approvedDeposit > 0
+                        ? (isRtl 
+                            ? `تمت الموافقة على عربونك المخصص من طرف الإدارة: ${requiredAmount} دج. يمكنك دفع المبلغ كاملاً أو قيمة العربون المعتمدة فقط.`
+                            : `Votre acompte personnalisé a été validé par l'administration : ${requiredAmount} DA. Vous pouvez payer le total ou l'acompte validé.`)
+                        : (isRtl 
+                            ? `طلبك يتطلب دفع عربون لا يقل عن ${requiredAmount} دج للبدء في التصميم والطباعة. يمكنك دفع المبلغ كاملاً أو قيمة العربون فقط.`
+                            : `Pour démarrer la production, un acompte de ${requiredAmount} DA minimum est requis. Vous pouvez payer le total ou l'acompte.`)}
                     </p>
+                    {approvedDeposit && approvedDeposit > 0 && (
+                      <Link href="/profile" className="inline-flex items-center gap-1 mt-2 text-[10px] font-black text-indigo-500 hover:underline">
+                        {isRtl ? "إدارة طلب العربون المخصص" : "Gérer mon acompte personnalisé"}
+                      </Link>
+                    )}
                   </div>
                 </div>
               )}
@@ -471,7 +564,7 @@ export default function PaymentVerifyPage() {
                 ) : (
                   <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 max-h-64 bg-slate-100 dark:bg-slate-900 flex justify-center">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={receiptPreview} alt="Receipt proof" className="object-contain max-h-64 w-full" />
+                    <img src={receiptPreview} alt="Receipt proof" loading="lazy" decoding="async" className="object-contain max-h-64 w-full" />
                     <button 
                       onClick={() => { setReceiptFile(null); setReceiptPreview(null); setAiReport(null); setSuccess(false); }}
                       className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 shadow-md hover:scale-105 transition-transform"

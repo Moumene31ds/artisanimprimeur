@@ -57,6 +57,11 @@ service cloud.firestore {
       
       // الحذف حصري للمشرف فقط
       allow delete: if isAdmin();
+
+      // سجل تقدم الإنتاج: الكتابة والقراءة حصرية للمشرف
+      match /productionLog/{logId} {
+        allow read, create, update, delete: if isAdmin();
+      }
     }
 
     // 3. المنتجات والخدمات (Products)
@@ -161,6 +166,74 @@ service cloud.firestore {
       allow create: if true;
       // قراءة وإدارة السجلات حصري للمشرف
       allow read, update, delete: if isAdmin();
+    }
+
+    // 10. سجلات التحقق من وصولات الدفع (Payment Verification Audit)
+    match /paymentVerifications/{logId} {
+      // أي مستخدم مسجل يمكنه تسجيل محاولة تحقق (يتم إنشاؤها من الخادم بتوكن المستخدم)
+      allow create: if isLoggedIn();
+      // القراءة والسرد والحذف حصرية للمشرف لمراجعة حالات التلاعب
+      allow read, list, update, delete: if isAdmin();
+    }
+
+    // 11. سجل أرقام معاملات بريدي موب (منع إعادة استخدام الوصل الواحد لأكثر من طلب)
+    match /receiptTxIds/{txId} {
+      // المستخدمون المسجلون يتحققون من وجود رقم عملية (لكشف إعادة الاستخدام)
+      allow get: if isLoggedIn();
+      // الحجز يكون للرقم المسجل باسم المستخدم نفسه فقط (تمنع الحجز التخريبي بأرقام الآخرين)
+      allow create: if isLoggedIn() && request.resource.data.userId == request.auth.uid;
+      // الإدارة فقط تعدّل أو تحذف أو تسرد
+      allow list, update, delete: if isAdmin();
+    }
+
+    // 12. طلبات العربون المخصص للزبائن (Custom Deposit Requests)
+    // يطلب الزبون قيمة عربون مخفضة، وتوافق الإدارة أو ترفض الطلب.
+    match /depositRequests/{reqId} {
+      // الزبون المسجل فقط يمكنه إرسال طلب عربون خاص به
+      allow create: if isLoggedIn() && request.resource.data.userId == request.auth.uid;
+      // الزبون يقرأ طلباته الخاصة فقط، والإدارة تقرأ كل الطلبات
+      allow read, list: if isAdmin() || (isLoggedIn() && resource.data.userId == request.auth.uid);
+      // الموافقة/الرفض حصريان للإدارة
+      allow update, delete: if isAdmin();
+    }
+
+    // 13. نظام التسويق: الحملات (Campaigns)
+    match /marketing_campaigns/{docId} {
+      // أي مستخدم مسجل يمكنه قراءة الحملات النشطة لعرضها في لوحة المكافآت
+      allow read, list: if isLoggedIn();
+      // الإنشاء والتعديل والحذف حصرية للإدارة
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 14. الأتمتة التسويقية (Marketing Automations)
+    match /marketing_automations/{docId} {
+      // أي مستخدم مسجل يقرأ الأتمتة النشطة ليتم تنفيذها من الخادم بتوكنه
+      allow read, list: if isLoggedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 15. ملفات الزبائن التسويقية (Marketing Customers / Segments)
+    match /marketing_customers/{docId} {
+      // الزبون يقرأ ملفه فقط، والإدارة تقرأ كل الملفات
+      allow read, list: if isAdmin() || (isLoggedIn() && resource.data.userId == request.auth.uid);
+      // الإنشاء/التعديل باسم المستخدم نفسه فقط أو من الإدارة
+      allow create, update: if isAdmin() || (isLoggedIn() && request.resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    // 16. التنبؤات التسويقية (Marketing Predictions)
+    match /marketing_predictions/{docId} {
+      allow read, list: if isLoggedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 17. سجل إرسال الحملات (Marketing Send Logs)
+    match /marketing_send_logs/{logId} {
+      // القراءة والسرد حصرية للمشرف لمراجعة عمليات الإرسال ونتائجها
+      allow read, list: if isAdmin();
+      // الكتابة من الخادم بحساب المشرف، أو من الـ cron بحساب الخدمة (قواعد خارجية)
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
     }
   }
 }

@@ -1,211 +1,356 @@
 import { NextResponse } from 'next/server';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { generateText } from 'ai';
-import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
+import { db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import {
+  generateTextWithFallback,
+  AIUnavailableError,
+} from '@/lib/ai';
+import { bearerToken, verifyIdToken } from '@/lib/auth-verify';
+import { verifyReceiptLimiter } from '@/lib/rate-limit';
+import { fsGet, fsPatch, fsCreate } from '@/lib/firestore-rest';
 
-export const maxDuration = 60; // Allow ample time for Gemini processing and database checks
+export const maxDuration = 60; // Allow ample time for AI processing and database checks
 
-// Retry helper with exponential backoff + model fallback
-async function generateWithRetry(google: any, prompt: string, imageBuffer: Buffer, maxAttempts = 3) {
-  const models = ['gemini-3.5-flash', 'gemini-2.5-flash'];
-  for (let modelIdx = 0; modelIdx < models.length; modelIdx++) {
-    const modelName = models[modelIdx];
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const { generateText } = await import('ai');
-        const result = await generateText({
-          model: google(modelName),
-          messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image', image: imageBuffer, mediaType: 'image/jpeg' }] }],
-          temperature: 0.1,
-        });
-        console.log(`✅ Receipt AI succeeded with ${modelName} on attempt ${attempt}`);
-        return result;
-      } catch (err: any) {
-        const isOverloaded = err?.message?.includes('503') || err?.message?.includes('UNAVAILABLE') || err?.message?.includes('overloaded') || err?.message?.includes('high demand');
-        const isLastAttempt = attempt === maxAttempts;
-        const isLastModel = modelIdx === models.length - 1;
-        if (isOverloaded && !isLastAttempt) {
-          const delay = attempt * 2000;
-          console.warn(`⚠️ ${modelName} overloaded (attempt ${attempt}/${maxAttempts}). Retrying in ${delay}ms...`);
-          await new Promise(r => setTimeout(r, delay));
-        } else if (isOverloaded && isLastAttempt && !isLastModel) {
-          console.warn(`⚠️ ${modelName} unavailable after ${maxAttempts} attempts. Switching to fallback model...`);
-          break; // try next model
-        } else {
-          throw err; // non-overload error, throw immediately
-        }
-      }
-    }
-  }
-  throw new Error('All Gemini models are currently unavailable. Please try again in a few minutes.');
+const MAX_IMAGE_BASE64 = 12 * 1024 * 1024; // ~9 MB binary
+const MAX_TX_LENGTH = 40;
+
+const ALLOWED_VERDICTS = new Set(['approved', 'suspicious', 'invalid', 'needs_manual_review']);
+
+function sanitizeTxId(raw: unknown): string {
+  return String(raw ?? '').replace(/[^a-zA-Z0-9]/g, '').slice(0, MAX_TX_LENGTH);
+}
+
+function normalizeReport(raw: any) {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as any;
+  const verdict = ALLOWED_VERDICTS.has(String(r.verdict)) ? String(r.verdict) : 'needs_manual_review';
+  return {
+    isReceipt: r.isReceipt === true || r.isReceipt === 'true',
+    extractedTxId: String(r.extractedTxId ?? r.extractedTxID ?? '').trim(),
+    extractedAmount: Number(r.extractedAmount) || 0,
+    extractedSenderRip: String(r.extractedSenderRip ?? '').trim(),
+    extractedDate: String(r.extractedDate ?? '').trim(),
+    confidenceScore: Math.max(0, Math.min(100, Number(r.confidenceScore) || 0)),
+    isAltered: r.isAltered === true || r.isAltered === 'true',
+    fraudAssessment: String(r.fraudAssessment ?? '').trim(),
+    verdict,
+  };
 }
 
 export async function POST(req: Request) {
-  const apiKey = process.env.GOOGLE_API_KEY;
-
-  if (!apiKey) {
-    console.error("❌ Gemini API Key is missing in .env.local");
-    return NextResponse.json({ 
-      error: "Google Gemini API Key is missing. Please configure GOOGLE_API_KEY in .env.local." 
-    }, { status: 500 });
+  // 0. Parse body (bounded size)
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
   }
 
+  const { image, orderId, txId, ripSender, paymentProofUrl } = body;
+
+  // 1. Authentication — a valid Firebase ID token is required
+  const user = await verifyIdToken(bearerToken(req.headers.get('authorization')));
+  if (!user) {
+    return NextResponse.json({ error: 'Authentication required. Please log in and retry.' }, { status: 401 });
+  }
+  const token = bearerToken(req.headers.get('authorization')) as string;
+
+  // 2. Rate limiting (per user)
+  const rl = verifyReceiptLimiter.allow(`user:${user.uid}`);
+  if (!rl.allowed) {
+    const retryAfter = Math.ceil(rl.retryAfterMs / 1000);
+    return NextResponse.json(
+      { error: 'Trop de tentatives. Réessayez dans quelques minutes.', retryAfterSeconds: retryAfter },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+    );
+  }
+
+  // 3. Input validation
+  if (!image || typeof image !== 'string') {
+    return NextResponse.json({ error: 'Missing receipt image' }, { status: 400 });
+  }
+  if (!orderId || typeof orderId !== 'string') {
+    return NextResponse.json({ error: 'Missing order ID' }, { status: 400 });
+  }
+  if (image.length > MAX_IMAGE_BASE64) {
+    return NextResponse.json({ error: 'Image trop volumineuse (max ~9 MB). Compressez-la et réessayez.' }, { status: 413 });
+  }
+
+  const cleanTx = sanitizeTxId(txId);
+  if (cleanTx.length < 5) {
+    return NextResponse.json({ error: 'Missing valid transaction ID' }, { status: 400 });
+  }
+
+  // 4. Ownership + server-side truth (never trust client-sent totals)
+  let orderData: any;
   try {
-    const { image, orderId, txId, orderTotal, ripSender } = await req.json();
-
-    if (!image) {
-      return NextResponse.json({ error: "Missing receipt image" }, { status: 400 });
+    const orderSnap = await getDoc(doc(db, 'orders', orderId));
+    if (!orderSnap.exists()) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
-    if (!orderId) {
-      return NextResponse.json({ error: "Missing order ID" }, { status: 400 });
-    }
-    if (!txId) {
-      return NextResponse.json({ error: "Missing entered transaction ID" }, { status: 400 });
-    }
+    orderData = { id: orderSnap.id, ...orderSnap.data() };
+  } catch (e: any) {
+    console.error('❌ Failed to fetch order:', e);
+    return NextResponse.json({ error: 'Could not load order.' }, { status: 500 });
+  }
 
-    // 1. Prepare base64 image for Vercel AI SDK / Gemini
-    const base64Data = image.startsWith('data:') 
-      ? image.split(';base64,').pop() 
-      : image;
+  if (String(orderData.customerUserId ?? orderData.userId ?? '') !== user.uid) {
+    return NextResponse.json({ error: 'This order does not belong to your account.' }, { status: 403 });
+  }
 
-    if (!base64Data) {
-      return NextResponse.json({ error: "Invalid image format" }, { status: 400 });
-    }
+  const orderTotal = Number(orderData.total) || 0;
+  if (orderTotal <= 0) {
+    return NextResponse.json({ error: 'Order total is invalid.' }, { status: 400 });
+  }
 
-    const imageBuffer = Buffer.from(base64Data, 'base64');
-    const google = createGoogleGenerativeAI({ apiKey });
-
-    // Fetch UI settings to calculate required deposit (versement)
-    let requiredAmount = orderTotal;
-    try {
-      const settingsDoc = await getDoc(doc(db, "settings", "ui"));
-      if (settingsDoc.exists()) {
-        const uiConfig = settingsDoc.data();
-        const depType = uiConfig.baridimobMinDepositType || 'none';
-        const depVal = Number(uiConfig.baridimobMinDepositValue) || 0;
-        
-        if (depType === 'percentage' && depVal > 0) {
-          requiredAmount = (orderTotal * depVal) / 100;
-        } else if (depType === 'fixed' && depVal > 0) {
-          requiredAmount = Math.min(orderTotal, depVal);
-        }
-      }
-    } catch (e) {
-      console.warn("Could not retrieve uiConfig settings for deposit check:", e);
-    }
-
-    // 2. Perform AI OCR & Fraud Analysis via Gemini 2.5 Flash
-    const prompt = `
-      You are an automated Algerian banking receipt verification assistant. 
-      Analyze the uploaded payment receipt screenshot. This is typically a BaridiMob (Algeria Post mobile app) transfer confirmation or a CCP paper slip.
-      
-      Tasks:
-      1. Verify if this image is actually a valid payment receipt or transfer confirmation (CCP or BaridiMob).
-      2. Extract the transaction ID (Numéro de transaction / Référence). Note: BaridiMob transaction IDs are usually 16 to 22 digits.
-      3. Extract the total amount transferred in Algerian Dinars (DZD). Compare it with the minimum expected amount of ${requiredAmount} DZD.
-      4. Extract the sender RIP (Clé/Compte CCP or RIP beginning with 007) and transaction date/time if visible.
-      5. Perform a visual security scan: check for any signs of tampering (cloned text, mismatched fonts, overlapping text, edits around the amount or reference number).
-      
-      Match details:
-      - Expected Transaction ID: "${txId}"
-      - Expected Minimum Amount (Versement/Total): ${requiredAmount} DZD
-
-      Format your response strictly as a JSON object, without any markdown formatting blocks.
-      Ensure the JSON has the following exact keys:
-      {
-        "isReceipt": boolean,
-        "extractedTxId": string (raw extracted transaction ID, clean digits only, empty if not found),
-        "extractedAmount": number (the transaction amount in DZD, strictly numeric, 0 if not found),
-        "extractedSenderRip": string (sender RIP or CCP account number, empty if not found),
-        "extractedDate": string (transaction date and time, empty if not found),
-        "confidenceScore": number (OCR confidence from 0 to 100),
-        "isAltered": boolean (true if photoshop or text modifications are suspected),
-        "fraudAssessment": string (detailed explanation of any security issues or font edits, written in French/Arabic),
-        "verdict": "approved" | "suspicious" | "invalid" | "needs_manual_review"
-      }
-      
-      Verdict guidelines:
-      - "approved": If isReceipt is true, amount is greater than or equal to ${requiredAmount} DZD, transaction ID matches (or is 90%+ similar due to OCR minor typos), and there are no signs of tampering (isAltered is false).
-      - "needs_manual_review": If it is a valid receipt, but the amount is slightly below expected, the image is blurry, or the transaction ID does not match.
-      - "suspicious": If isAltered is true, or if it clearly does not look like a genuine receipt.
-      - "invalid": If the uploaded image is completely unrelated (e.g. self-portraits, blank screens, documents, etc.).
-    `;
-
-    const aiResponse = await generateWithRetry(google, prompt, imageBuffer);
-
-    // Parse the output safely
-    let responseText = aiResponse.text.trim();
-    
-    // Strip markdown formatting if Gemini included it
-    if (responseText.startsWith('```json')) {
-      responseText = responseText.substring(7);
-    }
-    if (responseText.endsWith('```')) {
-      responseText = responseText.substring(0, responseText.length - 3);
-    }
-    responseText = responseText.trim();
-
-    let report: any;
-    try {
-      report = JSON.parse(responseText);
-    } catch (e) {
-      console.error("Failed to parse Gemini response as JSON. Raw text:", responseText);
-      return NextResponse.json({
-        error: "AI parsing error. The receipt analysis output was invalid.",
-        rawText: responseText
-      }, { status: 500 });
-    }
-
-    // 3. Database Check: Check for Duplicate Receipts (Double-use prevention)
-    // We check if any OTHER order has already registered the same transaction ID
-    let isDuplicate = false;
-    let duplicateOrderId = "";
-
-    const txToCheck = [txId.trim()];
-    if (report.extractedTxId && report.extractedTxId.trim() && report.extractedTxId.trim() !== txId.trim()) {
-      txToCheck.push(report.extractedTxId.trim());
-    }
-
-    for (const singleTxId of txToCheck) {
-      if (!singleTxId || singleTxId.length < 5) continue; // avoid matching short strings or empty fields
-      
-      const q = query(
-        collection(db, "orders"),
-        where("baridimobTxId", "==", singleTxId)
-      );
-      
-      const snap = await getDocs(q);
-      const otherOrders = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter((o: any) => o.id !== orderId && o.paymentStatus !== "Refusé"); // ignore current order and previously rejected ones
-      
-      if (otherOrders.length > 0) {
-        isDuplicate = true;
-        duplicateOrderId = otherOrders[0].id;
-        break;
-      }
-    }
-
-    if (isDuplicate) {
-      report.verdict = "suspicious";
-      report.fraudAssessment = report.fraudAssessment 
-        ? `${report.fraudAssessment} [FRAUD_ALERT: Ce reçu de virement a déjà été utilisé pour la commande #${duplicateOrderId.slice(-6).toUpperCase()}]`
-        : `Ce reçu de virement a déjà été utilisé pour une autre commande (#${duplicateOrderId.slice(-6).toUpperCase()}). Accès bloqué.`;
-    }
-
+  // Idempotency: already-approved orders must not be re-submitted (blocks double bonus).
+  const alreadyVerified =
+    orderData.aiVerification?.verdict === 'approved' ||
+    orderData.paymentStatus === 'Payé' ||
+    orderData.status === 'Prêt' ||
+    orderData.status === 'Terminé';
+  if (alreadyVerified) {
     return NextResponse.json({
       success: true,
-      report,
-      isDuplicate,
-      duplicateOrderId
+      alreadyVerified: true,
+      report: orderData.aiVerification ?? { verdict: 'approved' },
+      message: 'Cette commande est déjà validée.',
+    });
+  }
+
+  // 5. Compute required deposit server-side from UI settings
+  let requiredAmount = orderTotal;
+  try {
+    const settingsDoc = await getDoc(doc(db, 'settings', 'ui'));
+    if (settingsDoc.exists()) {
+      const uiConfig = settingsDoc.data();
+      const depType = uiConfig.baridimobMinDepositType || 'none';
+      const depVal = Number(uiConfig.baridimobMinDepositValue) || 0;
+      if (depType === 'percentage' && depVal > 0) requiredAmount = (orderTotal * depVal) / 100;
+      else if (depType === 'fixed' && depVal > 0) requiredAmount = Math.min(orderTotal, depVal);
+    }
+  } catch (e) {
+    console.warn('Could not retrieve uiConfig settings for deposit check:', e);
+  }
+
+  // 6. Prepare base64 image for the free vision provider
+  const base64Data = typeof image === 'string' && image.startsWith('data:')
+    ? image.split(';base64,').pop() || ''
+    : image;
+
+  let imageBuffer: Buffer;
+  try {
+    imageBuffer = Buffer.from(base64Data, 'base64');
+  } catch {
+    return NextResponse.json({ error: 'Invalid image encoding.' }, { status: 400 });
+  }
+  if (imageBuffer.length === 0 || imageBuffer.length > MAX_IMAGE_BASE64) {
+    return NextResponse.json({ error: 'Image invalide ou trop volumineuse.' }, { status: 400 });
+  }
+
+  // 7. AI OCR & fraud analysis (vision-capable model). Graceful degradation:
+  //    if the AI is unavailable or returns garbage, we still record the receipt
+  //    as "Envoyé" for manual review instead of failing the request.
+  const prompt = `
+    You are an automated Algerian banking receipt verification assistant. 
+    Analyze the uploaded payment receipt screenshot. This is typically a BaridiMob (Algeria Post mobile app) transfer confirmation or a CCP paper slip.
+    
+    Tasks:
+    1. Verify if this image is actually a valid payment receipt or transfer confirmation (CCP or BaridiMob).
+    2. Extract the transaction ID (Numéro de transaction / Référence). Note: BaridiMob transaction IDs are usually 16 to 22 digits.
+    3. Extract the total amount transferred in Algerian Dinars (DZD). Compare it with the minimum expected amount of ${Math.round(requiredAmount)} DZD.
+    4. Extract the sender RIP (Clé/Compte CCP or RIP beginning with 007) and transaction date/time if visible.
+    5. Perform a visual security scan: check for any signs of tampering (cloned text, mismatched fonts, overlapping text, edits around the amount or reference number).
+    
+    Match details:
+    - Expected Transaction ID: "${cleanTx}"
+    - Expected Minimum Amount (Versement/Total): ${Math.round(requiredAmount)} DZD
+
+    Respond with ONLY a single JSON object, no markdown fences, no commentary:
+    {
+      "isReceipt": true or false,
+      "extractedTxId": "digits only, empty string if not found",
+      "extractedAmount": 0 or a number,
+      "extractedSenderRip": "string, empty if not found",
+      "extractedDate": "string, empty if not found",
+      "confidenceScore": 0-100,
+      "isAltered": true or false,
+      "fraudAssessment": "short explanation in French or Arabic",
+      "verdict": "approved" | "suspicious" | "invalid" | "needs_manual_review"
+    }
+
+    Verdict guidelines:
+    - "approved": isReceipt is true, amount >= ${Math.round(requiredAmount)} DZD, transaction ID matches the expected one (or 90%+ similar, allowing OCR typos), and no signs of tampering (isAltered false).
+    - "needs_manual_review": valid receipt but amount slightly below expected, blurry image, or transaction ID mismatch.
+    - "suspicious": isAltered true, or it clearly is not a genuine receipt.
+    - "invalid": image is completely unrelated (selfie, blank screen, random document...).
+  `;
+
+  let report: any;
+  let aiOk = true;
+  try {
+    const aiResponse = await generateTextWithFallback({
+      vision: true,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image', image: imageBuffer, mediaType: 'image/jpeg' },
+          ],
+        },
+      ],
+      temperature: 0.1,
+      maxRetries: 2,
+      onAttempt: ({ provider, model, attempt }) =>
+        console.log(`✅ Receipt AI attempt with ${model} (${provider}) on try ${attempt}`),
     });
 
-  } catch (error: any) {
-    console.error("❌ Receipt Verification Error:", error);
-    return NextResponse.json({
-      error: "Verification failed due to an internal server error.",
-      details: error.message || "Unknown error"
-    }, { status: 500 });
+    let responseText = aiResponse.text.trim();
+    if (responseText.startsWith('```json')) responseText = responseText.slice(7);
+    if (responseText.startsWith('```')) responseText = responseText.slice(3);
+    if (responseText.endsWith('```')) responseText = responseText.slice(0, -3);
+    responseText = responseText.trim();
+
+    const bracket = responseText.indexOf('{');
+    if (bracket > 0) responseText = responseText.slice(bracket);
+    const closeBracket = responseText.lastIndexOf('}');
+    if (closeBracket > 0) responseText = responseText.slice(0, closeBracket + 1);
+
+    report = normalizeReport(JSON.parse(responseText));
+  } catch (e: any) {
+    aiOk = false;
+    console.error('❌ Receipt AI analysis failed — falling back to manual review:', e?.message ?? e);
+    report = {
+      isReceipt: true,
+      extractedTxId: '',
+      extractedAmount: 0,
+      extractedSenderRip: '',
+      extractedDate: '',
+      confidenceScore: 0,
+      isAltered: false,
+      fraudAssessment: "L'analyse IA a échoué (service temporairement indisponible). Le reçu sera vérifié manuellement par un administrateur.",
+      verdict: 'needs_manual_review',
+    };
   }
+
+  // 8. Duplicate / double-use prevention via a global transaction-ID registry.
+  //    A txId can be reserved by at most ONE order (its reservation doc id).
+  let isDuplicate = false;
+  let duplicateOrderId = '';
+  const txsToCheck = new Set<string>([cleanTx]);
+  if (report.extractedTxId) txsToCheck.add(report.extractedTxId);
+
+  for (const singleTx of txsToCheck) {
+    if (!singleTx || singleTx.length < 5) continue;
+    let reservation: any = null;
+    try {
+      reservation = await fsGet(token, `receiptTxIds/${singleTx}`);
+    } catch (e) {
+      console.warn(`⚠️ receiptTxIds read failed for ${singleTx}:`, (e as Error)?.message ?? e);
+    }
+    if (reservation && String(reservation.orderId) !== orderId) {
+      isDuplicate = true;
+      duplicateOrderId = String(reservation.orderId ?? '');
+      break;
+    }
+  }
+
+  if (isDuplicate) {
+    report.verdict = 'suspicious';
+    report.fraudAssessment =
+      `${report.fraudAssessment} [FRAUD_ALERT: Ce reçu a déjà été utilisé pour la commande #${duplicateOrderId.slice(-6).toUpperCase()}]`.trim();
+  }
+
+  // 9. Authoritative server-side writes (authenticated as the requesting user)
+  const shouldAdvance = report.verdict === 'approved';
+  const storeInOrder = report.verdict === 'approved' || report.verdict === 'needs_manual_review';
+
+  if (storeInOrder) {
+    const orderPatch: Record<string, any> = {
+      paymentStatus: 'Envoyé',
+      baridimobTxId: cleanTx,
+      baridimobRipSender: sanitizeTxId(ripSender),
+      paymentProofUrl: paymentProofUrl || orderData.paymentProofUrl || 'Uploaded',
+      aiVerification: report,
+      paidAmount: report.extractedAmount || 0,
+    };
+    if (shouldAdvance) orderPatch.status = 'Conception';
+    try {
+      await fsPatch(token, `orders/${orderId}`, orderPatch);
+    } catch (e) {
+      console.error('❌ Order update failed:', (e as Error)?.message ?? e);
+      return NextResponse.json({ error: 'Could not save the receipt. Please retry.' }, { status: 500 });
+    }
+
+    // Reserve the transaction ID(s) so no other order can reuse this receipt.
+    if (shouldAdvance) {
+      const toReserve = new Set<string>([cleanTx]);
+      if (report.extractedTxId && report.extractedTxId.length >= 5) toReserve.add(report.extractedTxId);
+      for (const t of toReserve) {
+        try {
+          await fsCreate(token, 'receiptTxIds', {
+            orderId,
+            userId: user.uid,
+            verifiedAt: new Date().toISOString(),
+          }, t);
+        } catch (e: any) {
+          // ALREADY_EXISTS means another order claimed it in a race — flag it.
+          const msg = String(e?.message ?? '');
+          if (/already exists|409|ALREADY_EXISTS/i.test(msg)) {
+            isDuplicate = true;
+            duplicateOrderId = orderId;
+            report.verdict = 'suspicious';
+          } else {
+            console.warn(`⚠️ receiptTxIds create failed for ${t}:`, msg);
+          }
+        }
+      }
+    }
+  }
+
+  // 10. Bonus points only on genuine approval (idempotency guard above protects against re-use)
+  let pointsAwarded = false;
+  if (shouldAdvance) {
+    try {
+      await fsCreate(token, 'pointTransactions', {
+        userId: user.uid,
+        points: 50,
+        type: 'won',
+        title: `Bonus points for AI Verified BaridiMob payment #${orderId.slice(0, 6)}`,
+        titleAr: `نقاط إضافية للتحقق الذكي للطلب #${orderId.slice(0, 6)}`,
+        createdAt: new Date().toISOString(),
+      });
+      pointsAwarded = true;
+    } catch (e) {
+      console.error('❌ Failed to award bonus points:', e);
+    }
+  }
+
+  // 11. Audit log — every attempt is recorded for admin review & abuse analysis
+  try {
+    await fsCreate(token, 'paymentVerifications', {
+      orderId,
+      userId: user.uid,
+      txId: cleanTx,
+      verdict: report.verdict,
+      isDuplicate,
+      confidenceScore: report.confidenceScore,
+      extractedAmount: report.extractedAmount,
+      isAltered: report.isAltered,
+      imageUrl: paymentProofUrl || '',
+      aiOk,
+      createdAt: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.error('❌ Failed to write paymentVerifications audit log:', e);
+  }
+
+  return NextResponse.json({
+    success: true,
+    report,
+    isDuplicate,
+    duplicateOrderId,
+    orderUpdated: storeInOrder,
+    pointsAwarded,
+  });
 }

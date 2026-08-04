@@ -11,12 +11,13 @@ import {
 import { 
   ShoppingBag, Settings, LayoutDashboard, Package, 
   ShieldCheck, Download, Tag, ScanLine, X, CheckCircle, Sparkles, Megaphone,
-  Printer, FileImage
+  Printer, FileImage, BarChart3, HandCoins
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { GlobalLoader } from "@/components/GlobalLoader";
+import { buildStatusHistory } from "@/lib/order-status";
 import * as XLSX from 'xlsx';
 import QRScanner from "@/components/QRScanner";
 
@@ -32,6 +33,8 @@ import { CampaignBuilder } from "@/components/CampaignBuilder";
 import { buildMarketingInsight } from "@/lib/marketing-ai";
 import ProductionDashboard from "@/components/admin/ProductionDashboard";
 import BATWorkflowPanel from "@/components/admin/BATWorkflowPanel";
+import AdminAnalyticsDashboard from "@/components/AdminAnalyticsDashboard";
+import AdminDeposits from "@/components/admin/AdminDeposits";
 
 
 export default function AdminPage() {
@@ -155,8 +158,32 @@ export default function AdminPage() {
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
-      await updateDoc(doc(db, "orders", orderId), { status: newStatus });
+      const snap = await getDoc(doc(db, "orders", orderId));
+      const order = snap.data();
+      const statusHistory = buildStatusHistory(order?.statusHistory, newStatus, "Mise à jour manuelle");
+
+      await updateDoc(doc(db, "orders", orderId), { status: newStatus, statusHistory });
       toast.success(`Statut mis à jour : ${newStatus}`);
+
+      // إشعار فوري للزبون بتغيير الحالة (واتساب + بريد)
+      try {
+        fetch("/api/orders/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "status",
+            order: {
+              id: orderId,
+              phone: order?.phone,
+              customerName: order?.customerName,
+              customerEmail: order?.customerEmail || null,
+              status: newStatus,
+            },
+          }),
+        }).catch(() => {});
+      } catch (notifyErr) {
+        console.error("Notify dispatch failed:", notifyErr);
+      }
     } catch (e) {
       toast.error("Erreur de mise à jour");
     }
@@ -259,7 +286,7 @@ export default function AdminPage() {
     e.preventDefault();
     if (!newProduct.image || !newProduct.name || !newProduct.price) return toast.error("Champs requis manquants");
     try {
-      await addDoc(collection(db, "products"), { ...newProduct, price: Number(newProduct.price), createdAt: serverTimestamp() });
+      await addDoc(collection(db, "products"), { ...newProduct, price: Number(newProduct.price), active: true, createdAt: serverTimestamp() });
       setNewProduct({ name: "", price: "", category: "Impression", image: "" });
       toast.success("Produit ajouté !");
     } catch (err) { 
@@ -320,9 +347,11 @@ export default function AdminPage() {
       <div className="flex gap-2 ios-glass p-2 rounded-[2rem] mb-10 overflow-x-auto hide-scrollbar border border-white/60 dark:border-white/5 shadow-sm">
         {[
           { id: 'dashboard', icon: LayoutDashboard, label: 'Stats' },
+          { id: 'analytics', icon: BarChart3, label: isRtl ? 'تحليلات' : 'Analytics' },
           { id: 'scanner', icon: ScanLine, label: 'Scanner QR' },
           { id: 'marketing', icon: Megaphone, label: isRtl ? 'التسويق الذكي' : 'Marketing AI' },
           { id: 'audit', icon: ShieldCheck, label: isRtl ? 'تدقيق الدفع' : 'Audit Pay' },
+          { id: 'deposits', icon: HandCoins, label: isRtl ? 'طلبات العربون' : 'Acomptes' },
           { id: 'orders', icon: ShoppingBag, label: 'Orders' },
           { id: 'products', icon: Package, label: 'Catalog' },
           { id: 'promo', icon: Tag, label: 'Promo' },
@@ -347,6 +376,13 @@ export default function AdminPage() {
         {/* ==================== DASHBOARD TAB ==================== */}
         {tab === 'dashboard' && (
           <AdminDashboard key="dash" orders={orders} products={products} promoCodes={promoCodes} isRtl={isRtl} />
+        )}
+
+        {/* ==================== ANALYTICS TAB ==================== */}
+        {tab === 'analytics' && (
+          <motion.div key="analytics" initial={{opacity:0, scale:0.95}} animate={{opacity:1, scale:1}} exit={{opacity:0, scale:0.95}}>
+            <AdminAnalyticsDashboard />
+          </motion.div>
         )}
 
         {/* ==================== SCANNER TAB ==================== */}
@@ -454,6 +490,13 @@ export default function AdminPage() {
         {tab === 'audit' && (
           <motion.div key="audit" initial={{opacity:0, y:15}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-15}}>
             <PaymentAudit orders={orders} isRtl={isRtl} />
+          </motion.div>
+        )}
+
+        {/* ==================== DEPOSITS TAB ==================== */}
+        {tab === 'deposits' && (
+          <motion.div key="deposits" initial={{opacity:0, y:15}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-15}}>
+            <AdminDeposits isRtl={isRtl} />
           </motion.div>
         )}
 

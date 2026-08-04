@@ -22,7 +22,7 @@ export default function WalletDashboard({ userId }: WalletDashboardProps) {
   const [copied, setCopied] = useState(false);
 
   const isRtl = language === "ar";
-  const referralCode = userId.substring(userId.length - 6).toUpperCase();
+  const referralCode = (wallet?.referralCode || userId.substring(userId.length - 6)).toUpperCase();
   const referralLink = `https://artisan-imprimeur.dz/register?ref=${referralCode}`;
 
   const loadWalletData = async () => {

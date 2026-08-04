@@ -2,8 +2,12 @@
 
 /**
  * Generates a unique 6-character alphanumeric referral code (e.g. ART123)
+ *
+ * @param checkUnique async predicate that returns true when the code is already taken
  */
-export async function generateUniqueReferralCode(prisma: any): Promise<string> {
+export async function generateUniqueReferralCode(
+  checkUnique: (code: string) => Promise<boolean>
+): Promise<string> {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let isUnique = false;
   let code = "";
@@ -15,10 +19,8 @@ export async function generateUniqueReferralCode(prisma: any): Promise<string> {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
 
-    // Verify uniqueness in PostgreSQL
-    const existing = await prisma.user.findUnique({
-      where: { referralCode: code },
-    });
+    // Verify uniqueness
+    const existing = await checkUnique(code);
 
     if (!existing) {
       isUnique = true;

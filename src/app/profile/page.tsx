@@ -3,12 +3,13 @@
 import { useAuth } from "@/context/AuthContext";
 import { auth, db } from "@/lib/firebase";
 import { signOut, updateProfile, deleteUser } from "firebase/auth";
-import { collection, query, where, getDocs, doc, getDoc, setDoc, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, getDoc, setDoc, addDoc, serverTimestamp, orderBy, onSnapshot, limit } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { 
   User, Mail, LogOut, ShieldCheck, Award, Crown, Loader2, Save, Gift, 
-  ChevronRight, ArrowLeft, ShoppingBag, UserMinus, Camera, Copy, Check, Users, CheckCircle 
+  ChevronRight, ArrowLeft, ShoppingBag, UserMinus, Camera, Copy, Check, Users, CheckCircle,
+  HandCoins, Send, Clock, XCircle
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -36,6 +37,12 @@ export default function ProfilePage() {
   const [copied, setCopied] = useState(false);
   const [applying, setApplying] = useState(false);
   const [referredByCode, setReferredByCode] = useState<string | null>(null);
+
+  // Deposit (عربون) states
+  const [depositRequests, setDepositRequests] = useState<any[]>([]);
+  const [depositAmount, setDepositAmount] = useState("");
+  const [depositReason, setDepositReason] = useState("");
+  const [depositSubmitting, setDepositSubmitting] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +67,23 @@ export default function ProfilePage() {
       }, { merge: true }).catch(err => console.error("Error registering referral code", err));
     }
   }, [user, loading, router]);
+
+  // الاشتراك الحي لطلبات العربون المخصص الخاصة بالمستخدم
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, "depositRequests"),
+      where("userId", "==", user.uid),
+      orderBy("createdAt", "desc"),
+      limit(20)
+    );
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setDepositRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => {
+      console.error("Error loading deposit requests:", err);
+    });
+    return () => unsubscribe();
+  }, [user]);
 
   const myReferralCode = user ? user.uid.substring(user.uid.length - 6).toUpperCase() : "";
 
@@ -182,6 +206,52 @@ export default function ProfilePage() {
     }
   };
 
+  const handleSubmitDepositRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || depositSubmitting) return;
+
+    const value = Number(depositAmount);
+    if (!value || isNaN(value) || value <= 0) {
+      toast.error(isRtl ? "أدخل مبلغ العربون المطلوب" : "Saisissez le montant de l'acompte demandé");
+      return;
+    }
+    if (value > 1000000) {
+      toast.error(isRtl ? "المبلغ كبير جداً، أقصى قيمة هي 1,000,000 دج" : "Montant trop élevé, maximum 1 000 000 DA");
+      return;
+    }
+    if (depositRequests[0]?.status === "pending") {
+      toast.error(isRtl ? "لديك طلب عربون قيد المراجعة بالفعل" : "Vous avez déjà une demande d'acompte en cours de révision");
+      return;
+    }
+
+    setDepositSubmitting(true);
+    try {
+      await addDoc(collection(db, "depositRequests"), {
+        userId: user.uid,
+        userName: user.displayName || user.email?.split("@")[0] || "Client",
+        userEmail: user.email || "",
+        amount: Math.round(value),
+        reason: depositReason.trim(),
+        status: "pending",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setDepositAmount("");
+      setDepositReason("");
+      toast.success(isRtl ? "تم إرسال طلب العربون المخصص، بانتظار موافقة الإدارة" : "Demande d'acompte envoyée, en attente de validation de l'administration");
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.7 }
+      });
+    } catch (err) {
+      console.error("Error submitting deposit request", err);
+      toast.error(isRtl ? "حدث خطأ أثناء إرسال الطلب" : "Erreur lors de l'envoi de la demande");
+    } finally {
+      setDepositSubmitting(false);
+    }
+  };
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !newName.trim()) return;
@@ -291,7 +361,7 @@ export default function ProfilePage() {
                   {uploadingImage ? (
                     <Loader2 size={32} className="animate-spin text-accent" />
                   ) : user.photoURL ? (
-                    <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                    <Image src={user.photoURL} alt="Profile" width={112} height={112} className="w-full h-full object-cover" />
                   ) : (
                     user.displayName ? user.displayName.charAt(0).toUpperCase() : <User size={48} />
                   )}
@@ -473,6 +543,168 @@ export default function ProfilePage() {
                     </button>
                   </div>
                 </form>
+              )}
+
+            </div>
+          </motion.div>
+
+          {/* --- Custom Deposit (عربون) Card --- */}
+          <motion.div 
+            initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} transition={{delay: 0.2}}
+            className="premium-glass p-8 md:p-10 rounded-[3rem] border border-white/60 dark:border-white/5 shadow-xl relative overflow-hidden"
+          >
+            <div className="absolute top-0 left-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl -ml-10 -mt-10"></div>
+            <div className="relative z-10 space-y-6">
+              
+              <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800/60 pb-4">
+                <div className="p-2.5 bg-amber-50 dark:bg-amber-900/30 rounded-xl">
+                  <HandCoins size={24} className="text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-slate-900 dark:text-white">
+                    {isRtl ? "العربون المخصص" : "Acompte personnalisé"}
+                  </h3>
+                  <p className="text-xs text-slate-400 font-bold mt-0.5">
+                    {isRtl ? "اطلب قيمة عربون تناسبك بموافقة الإدارة" : "Demandez un acompte adapté, validé par l'administration"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Latest request status */}
+              {depositRequests[0] && (
+                <div className={`p-5 rounded-2xl border flex items-start gap-3 ${
+                  depositRequests[0].status === "approved"
+                    ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40"
+                    : depositRequests[0].status === "rejected"
+                      ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/40"
+                      : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40"
+                }`}>
+                  <div className="shrink-0 mt-0.5">
+                    {depositRequests[0].status === "approved" && <CheckCircle size={20} className="text-emerald-500" />}
+                    {depositRequests[0].status === "rejected" && <XCircle size={20} className="text-red-500" />}
+                    {depositRequests[0].status === "pending" && <Clock size={20} className="text-amber-500" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-black text-slate-800 dark:text-white">
+                      {depositRequests[0].status === "approved"
+                        ? (isRtl ? "تمت الموافقة على عربونك" : "Acompte approuvé")
+                        : depositRequests[0].status === "rejected"
+                          ? (isRtl ? "تم رفض طلب العربون" : "Acompte refusé")
+                          : (isRtl ? "طلب قيد المراجعة" : "Demande en cours de révision")}
+                      {" · "}
+                      <span className="text-amber-600 dark:text-amber-400 font-black">
+                        {Number(depositRequests[0].amount || 0).toLocaleString("fr-FR")} DA
+                      </span>
+                    </p>
+                    {depositRequests[0].status === "approved" && (
+                      <div className="space-y-2 mt-2">
+                        {depositRequests[0].approvedAmount && (
+                          <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                            {isRtl ? `المبلغ المعتمد: ${Number(depositRequests[0].approvedAmount).toLocaleString("fr-FR")} DA` : `Montant validé : ${Number(depositRequests[0].approvedAmount).toLocaleString("fr-FR")} DA`}
+                          </p>
+                        )}
+                        {depositRequests[0].adminNote && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{depositRequests[0].adminNote}</p>
+                        )}
+                        <button
+                          onClick={() => router.push("/payment-verify")}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black transition-colors cursor-pointer"
+                        >
+                          <Send size={14} />
+                          {isRtl ? "الذهاب لتأكيد الدفع" : "Confirmer le paiement"}
+                        </button>
+                      </div>
+                    )}
+                    {depositRequests[0].status === "rejected" && (
+                      <p className="text-xs mt-1 text-red-600 dark:text-red-400 font-semibold">
+                        {depositRequests[0].rejectionReason || (isRtl ? "يرجى تقديم طلب جديد" : "Veuillez soumettre une nouvelle demande")}
+                      </p>
+                    )}
+                    {depositRequests[0].status === "pending" && (
+                      <p className="text-xs mt-1 text-amber-600 dark:text-amber-400 font-semibold">
+                        {isRtl ? "سنقوم بإعلامك فور صدور قرار الإدارة" : "Vous serez notifié dès la décision de l'administration"}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Request form — hidden while a request is pending */}
+              {depositRequests[0]?.status !== "pending" && (
+                <form onSubmit={handleSubmitDepositRequest} className="space-y-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 block mb-2">
+                      {isRtl ? "المبلغ المطلوب (دج)" : "Montant demandé (DA)"}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        max={1000000}
+                        placeholder="5000"
+                        value={depositAmount}
+                        onChange={(e) => setDepositAmount(e.target.value)}
+                        className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold outline-none focus:border-amber-500 text-slate-800 dark:text-white"
+                      />
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">DA</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 block mb-2">
+                      {isRtl ? "سبب الطلب (اختياري)" : "Motif (optionnel)"}
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder={isRtl ? "مثال: أنا عميل جديد وأرغب في تخفيض العربون" : "Ex : Nouveau client, je souhaite réduire l'acompte"}
+                      value={depositReason}
+                      onChange={(e) => setDepositReason(e.target.value)}
+                      className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold outline-none focus:border-amber-500 text-slate-800 dark:text-white resize-none"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={depositSubmitting}
+                    className="w-full flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-sm rounded-2xl shadow-lg disabled:opacity-50 transition-all cursor-pointer"
+                  >
+                    {depositSubmitting ? <Loader2 size={18} className="animate-spin" /> : <HandCoins size={18} />}
+                    {isRtl ? "إرسال طلب العربون" : "Envoyer la demande"}
+                  </button>
+                  <p className="text-[10px] text-slate-400 font-bold text-center">
+                    {isRtl ? "يراجع فريق الإدارة طلبك ويصادق عليه خلال وقت قصير" : "L'administration examinera et validera votre demande prochainement"}
+                  </p>
+                </form>
+              )}
+
+              {/* History */}
+              {depositRequests.length > 1 && (
+                <div className="border-t border-slate-100 dark:border-slate-800/60 pt-4">
+                  <p className="text-[10px] font-black uppercase text-slate-400 mb-3">
+                    {isRtl ? "الطلبات السابقة" : "Historique"}
+                  </p>
+                  <div className="space-y-2">
+                    {depositRequests.slice(1).map((req) => (
+                      <div key={req.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl">
+                        <div className="flex items-center gap-2">
+                          {req.status === "approved" && <CheckCircle size={14} className="text-emerald-500" />}
+                          {req.status === "rejected" && <XCircle size={14} className="text-red-500" />}
+                          {req.status === "pending" && <Clock size={14} className="text-amber-500" />}
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                            {Number(req.amount || 0).toLocaleString("fr-FR")} DA
+                          </span>
+                        </div>
+                        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-full ${
+                          req.status === "approved"
+                            ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600"
+                            : req.status === "rejected"
+                              ? "bg-red-100 dark:bg-red-900/40 text-red-500"
+                              : "bg-amber-100 dark:bg-amber-900/40 text-amber-600"
+                        }`}>
+                          {req.status === "approved" ? (isRtl ? "موافق" : "OK") : req.status === "rejected" ? (isRtl ? "مرفوض" : "Refusé") : (isRtl ? "قيد المراجعة" : "En cours")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
 
             </div>

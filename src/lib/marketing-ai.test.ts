@@ -2,8 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildMarketingInsight } from './marketing-ai';
 
-test('buildMarketingInsight returns a concrete campaign draft', () => {
-  const insight = buildMarketingInsight({
+// Force the deterministic offline fallback path (no network / no AI call).
+process.env.AI_PROVIDER = 'openrouter';
+delete process.env.OPENROUTER_API_KEY;
+
+test('buildMarketingInsight returns a concrete campaign draft', async () => {
+  const insight = await buildMarketingInsight({
     orders: [
       { total: 25000, status: 'Prêt', wilaya: 'Oran' },
       { total: 15000, status: 'En attente', wilaya: 'Oran' },
