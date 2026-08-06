@@ -96,14 +96,18 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!authLoading && isAdmin) {
-      const insight = buildMarketingInsight({ orders, products, promoCodes });
-      setMarketingInsight(insight);
       const unsubOrders = onSnapshot(query(collection(db, 'orders'), orderBy('createdAt', 'desc')), (snap) => {
         setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setLoadingData(false);
+      }, (err) => {
+        console.error('Orders snapshot error:', err);
         setLoadingData(false);
       });
       const unsubProducts = onSnapshot(query(collection(db, 'products'), orderBy('createdAt', 'desc')), (snap) => {
         setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, (err) => {
+        console.error('Products snapshot error:', err);
+        setLoadingData(false);
       });
       const unsubPromos = onSnapshot(collection(db, 'promoCodes'), (snap) => {
         setPromoCodes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -116,7 +120,13 @@ export default function AdminPage() {
       
       return () => { unsubOrders(); unsubProducts(); unsubPromos(); unsubUi(); };
     }
-  }, [authLoading, isAdmin, orders, products, promoCodes]);
+  }, [authLoading, isAdmin]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      setMarketingInsight(buildMarketingInsight({ orders, products, promoCodes }));
+    }
+  }, [isAdmin, orders, products, promoCodes]);
 
   if (authLoading || !isAdmin || loadingData) return <GlobalLoader />;
 

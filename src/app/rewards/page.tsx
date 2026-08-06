@@ -67,7 +67,7 @@ export default function RewardsPage() {
   const rewardsCatalog = settings?.rewards || [];
 
   const fetchProfile = async () => {
-    if (!user) return;
+    if (!user) { setLoadingProfile(false); return; }
     try {
       const token = await user.getIdToken();
       const res = await fetch("/api/loyalty/me", {
@@ -78,6 +78,8 @@ export default function RewardsPage() {
     } catch (err) {
       console.error("Failed to load loyalty profile:", err);
       toast.error(isRtl ? "فشل تحميل بيانات الولاء" : "Erreur de chargement");
+    } finally {
+      setLoadingProfile(false);
     }
   };
 
@@ -108,9 +110,13 @@ export default function RewardsPage() {
 
   useEffect(() => {
     setMounted(true);
-    if (!authLoading && isLoggedIn && user) {
-      fetchProfile();
-      fetchSettings();
+    if (!authLoading) {
+      if (isLoggedIn && user) {
+        fetchProfile();
+        fetchSettings();
+      } else {
+        setLoadingProfile(false);
+      }
     }
   }, [authLoading, isLoggedIn, user]);
 
