@@ -129,7 +129,11 @@ export function pollForUpdates(intervalMs = 5 * 60 * 1000): () => void {
 }
 
 /** الحصول على نسخة البناء من الخادم (بلا تخزين مؤقت). */
-export async function getBuildInfo(): Promise<{ version: string } | null> {
+export async function getBuildInfo(): Promise<{
+  version: string;
+  release?: string;
+  features?: { ar: string[]; fr: string[] };
+} | null> {
   try {
     const res = await fetch('/api/build-info', { cache: 'no-store' });
     if (!res.ok) return null;

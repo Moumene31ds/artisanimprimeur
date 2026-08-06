@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { APP_VERSION, getChangelog } from '@/lib/changelog';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,8 @@ export async function GET() {
   return NextResponse.json(
     {
       version: buildId,
-      buildId,
+      release: APP_VERSION,
+      features: getChangelog(APP_VERSION),
       time: Date.now(),
     },
     { headers: { 'Cache-Control': 'no-store' } }

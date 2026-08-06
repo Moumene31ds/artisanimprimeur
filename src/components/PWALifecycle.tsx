@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CloudOff, RefreshCw, Wifi, Sparkles, Rocket, X, Check, Zap } from "lucide-react";
+import { CloudOff, Wifi, Sparkles, Rocket, X, Check, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { useAppStore } from "@/lib/store";
 import {
@@ -22,30 +22,72 @@ import {
 // -----------------------------------------------
 // PWALifecycle — دورة حياة التطبيق الفائقة (PWA)
 // -----------------------------------------------
-// 1) تسجيل السيرفس ووركر + المزامنة الدورية.
-// 2) كشف التحديثات بموثوقية عالية وعرض تجربة "تحديث" مبهرة:
-//    - لوحة تحديث زجاجية متحركة مع رقم الإصدار.
-//    - تطبيق فوري مع شاشة إعادة تحميل متدرّجة.
-//    - تحديث تلقائي صامت عند العودة للتطبيق (إن تأخر المستخدم).
-// 3) شريط "غير متصل" + إعادة المزامنة عند عودة الشبكة.
-// 4) إشعار "تم التحديث ✓" بعد إعادة التحميل.
+// - شاشة التحديث تظهر **فقط** عند وجود تحديث حقيقي:
+//   1) اكتشف السيرفس ووركر نسخة جديدة (updatefound/installed).
+//   2) قارن نسخة الخادم (build-info) مع آخر نسخة شاهدها المستخدم
+//      (localStorage) — إن كانت نفسها نمرّر ولا نزعج المستخدم.
+//   3) اعرض اللوحة مع الميزات الجديدة لهذا الإصدار (عربية/فرنسية).
+//   4) "تحديث الآن" → تطبيق فوري + شاشة إعادة تحميل متدرجة.
+//   5) "لاحقاً" → نُخزّن الإصدار ولا نعاود العرض لنفس الإصدار،
+//      مع تحديث تلقائي صامت عند العودة للتطبيق (إن لم يُرفض صراحة).
 // -----------------------------------------------
 
 const AUTO_UPDATE_AFTER_MS = 45 * 1000;
 const RELOADED_FLAG = "pwa-updated-reloaded";
+const LAST_SEEN_BUILD = "pwa-last-seen-build";
+
+interface UpdateInfo {
+  buildId: string;
+  release: string;
+  features: { ar: string[]; fr: string[] };
+}
 
 export default function PWALifecycle() {
   const { language } = useAppStore();
   const isRtl = language === "ar";
 
   const [offline, setOffline] = useState(false);
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [reloading, setReloading] = useState(false);
   const [reloadStage, setReloadStage] = useState(0);
 
-  const pendingSinceRef = useRef<number>(0);
+  const updateInfoRef = useRef<UpdateInfo | null>(null);
+  const pendingSinceRef = useRef(0);
+  const dismissedRef = useRef(false);
   const requestedReloadRef = useRef(false);
+  const reloadingRef = useRef(false);
+
+  const markBuildSeen = (buildId: string) => {
+    try {
+      localStorage.setItem(LAST_SEEN_BUILD, buildId);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const applyUpdate = useCallback(() => {
+    if (reloadingRef.current) return;
+    reloadingRef.current = true;
+    setReloading(true);
+    setReloadStage(0);
+    requestedReloadRef.current = true;
+    if (updateInfoRef.current) markBuildSeen(updateInfoRef.current.buildId);
+    applyServiceWorkerUpdate().catch(() => {});
+    // خطة احتياطية: إن لم يعمل controllerchange، أعد التحميل بعد مهلة.
+    setTimeout(() => {
+      if (requestedReloadRef.current) {
+        try {
+          sessionStorage.setItem(RELOADED_FLAG, "1");
+        } catch {
+          /* ignore */
+        }
+        window.location.reload();
+      }
+    }, 4000);
+  }, []);
+
+  const applyUpdateRef = useRef(applyUpdate);
+  applyUpdateRef.current = applyUpdate;
 
   // إشعار "تم التحديث" عند الوصول بعد إعادة تحميل من التحديث.
   useEffect(() => {
@@ -72,32 +114,57 @@ export default function PWALifecycle() {
       if (reg) registerPeriodicSync();
     });
 
-    // 2) مراقبة التحديثات الجديدة
-    const unsubUpdate = onServiceWorkerUpdate(async (hasUpdate) => {
-      if (!hasUpdate) return;
+    // 2) كشف تحديث حقيقي: قارن نسخة الخادم مع آخر نسخة شوهدت.
+    const handleUpdateDetected = async () => {
       const info = await getBuildInfo();
-      setUpdateVersion(info?.version || null);
+      if (!info?.version) return;
+      let lastSeen: string | null = null;
+      try {
+        lastSeen = localStorage.getItem(LAST_SEEN_BUILD);
+      } catch {
+        /* ignore */
+      }
+      // نفس النسخة شوهدت/طبّقت/رُفضت سابقاً → لا إزعاج.
+      if (lastSeen === info.version) return;
+
+      const next: UpdateInfo = {
+        buildId: info.version,
+        release: info.release || info.version,
+        features: info.features || { ar: [], fr: [] },
+      };
       pendingSinceRef.current = Date.now();
-      setUpdateAvailable(true);
+      dismissedRef.current = false;
+      updateInfoRef.current = next;
+      setUpdateInfo(next);
+    };
+
+    const unsubUpdate = onServiceWorkerUpdate(() => {
+      handleUpdateDetected();
     });
 
     // 3) عند سيطرة نسخة جديدة (بعد SKIP_WAITING أو تحديث خارجي)
     const unsubController = watchControllerChange(() => {
       if (requestedReloadRef.current) {
         requestedReloadRef.current = false;
+        reloadingRef.current = false;
         window.location.reload();
         return;
       }
-      // تحديث تطبّق خارجياً (نافذة أخرى): أخبر المستخدم وأعد التحميل تلقائياً.
-      try { sessionStorage.setItem(RELOADED_FLAG, "1"); } catch { /* ignore */ }
+      // تحديث خارجي (نافذة أخرى) → إعادة تحميل تلقائية.
+      try {
+        sessionStorage.setItem(RELOADED_FLAG, "1");
+      } catch {
+        /* ignore */
+      }
       window.location.reload();
     });
 
     // 4) استقبال رسائل السيرفس ووركر
     const unsubMessage = onServiceWorkerMessage((data) => {
       if (data?.type === "NEW_VERSION_ACTIVATED") {
-        setUpdateAvailable(false);
+        setUpdateInfo(null);
         setReloading(false);
+        reloadingRef.current = false;
       }
     });
 
@@ -107,13 +174,15 @@ export default function PWALifecycle() {
     const onVisibility = () => {
       if (document.visibilityState !== "visible") return;
       checkForUpdates().catch(() => {});
-      // تحديث تلقائي صامت إذا كان المستخدم قد تأخر.
+      // تحديث تلقائي صامت بعد مهلة — فقط إن لم يرفضه المستخدم صراحةً.
+      const pending = updateInfoRef.current;
       if (
-        updateAvailable &&
+        pending &&
+        !dismissedRef.current &&
         pendingSinceRef.current > 0 &&
         Date.now() - pendingSinceRef.current > AUTO_UPDATE_AFTER_MS
       ) {
-        applyUpdate();
+        applyUpdateRef.current();
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
@@ -142,29 +211,16 @@ export default function PWALifecycle() {
       window.removeEventListener("offline", applyStatus);
       window.removeEventListener("online", onReconnect);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // إعادة التحميل الحالية تُعتمد صراحةً (ليست تحديثاً خارجياً).
-  const applyUpdate = () => {
-    if (reloading) return;
-    setReloading(true);
-    setReloadStage(0);
-    requestedReloadRef.current = true;
-    applyServiceWorkerUpdate().catch(() => {});
-    // خطة احتياطية: إن لم يعمل controllerchange، أعد التحميل بعد مهلة.
-    setTimeout(() => {
-      if (requestedReloadRef.current) {
-        try { sessionStorage.setItem(RELOADED_FLAG, "1"); } catch { /* ignore */ }
-        window.location.reload();
-      }
-    }, 4000);
+  const dismissUpdate = () => {
+    dismissedRef.current = true;
+    if (updateInfoRef.current) markBuildSeen(updateInfoRef.current.buildId);
+    updateInfoRef.current = null;
+    setUpdateInfo(null);
   };
 
-  const dismissUpdate = () => {
-    setUpdateAvailable(false);
-    // يتذكَّر النظام بقيّة الجلسة؛ سيُعاد عرضه عند عودة التطبيق أو الفحص الدوري.
-  };
+  const features = updateInfo ? (isRtl ? updateInfo.features.ar : updateInfo.features.fr) : [];
 
   // تقدم شريط إعادة التحميل (محاكاة مراحل سلسة).
   useEffect(() => {
@@ -197,9 +253,9 @@ export default function PWALifecycle() {
         )}
       </AnimatePresence>
 
-      {/* لوحة "نسخة جديدة متاحة" */}
+      {/* لوحة "نسخة جديدة متاحة" — تظهر فقط عند وجود تحديث حقيقي */}
       <AnimatePresence>
-        {updateAvailable && !reloading && (
+        {updateInfo && !reloading && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -237,7 +293,7 @@ export default function PWALifecycle() {
                 <div className="absolute top-4 left-4 flex items-center gap-1.5 bg-black/25 backdrop-blur px-2.5 py-1 rounded-full">
                   <Rocket size={11} className="text-cyan-300" />
                   <span className="text-[10px] font-black text-white">
-                    v{updateVersion || "…"}
+                    v{updateInfo.release}
                   </span>
                 </div>
               </div>
@@ -251,23 +307,33 @@ export default function PWALifecycle() {
               </button>
 
               <div className="p-5">
-                <div className="space-y-2 mb-5">
-                  {[
-                    { icon: Zap, txt: isRtl ? "أداء أسرع وتحسينات جديدة" : "Performances améliorées et nouveautés" },
-                    { icon: RefreshCw, txt: isRtl ? "إصلاح الأخطاء وثبات أكبر" : "Corrections de bugs et stabilité" },
-                    { icon: Check, txt: isRtl ? "أفضل تجربة طباعة وطلب" : "Meilleure expérience d'impression" },
-                  ].map((f, i) => (
+                {/* الميزات الجديدة لهذا الإصدار */}
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-500 dark:text-blue-400 mb-2">
+                  {isRtl ? "✨ الميزات الجديدة" : "✨ Nouveautés"}
+                </p>
+                <div className="space-y-2 mb-5 max-h-40 overflow-y-auto">
+                  {(features.length
+                    ? features
+                    : [
+                        isRtl
+                          ? "أداء محسّن وميزات جديدة"
+                          : "Performances améliorées et nouveautés",
+                        isRtl
+                          ? "إصلاح الأخطاء وثبات أكبر"
+                          : "Corrections de bugs et stabilité",
+                      ]
+                  ).map((f, i) => (
                     <motion.div
                       key={i}
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.2 + i * 0.08 }}
+                      transition={{ delay: 0.15 + i * 0.06 }}
                       className="flex items-center gap-3 text-[12px] font-bold text-slate-700 dark:text-slate-300"
                     >
                       <span className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                        <f.icon size={15} />
+                        {i === 0 ? <Zap size={15} /> : <Check size={15} />}
                       </span>
-                      {f.txt}
+                      {f}
                     </motion.div>
                   ))}
                 </div>
