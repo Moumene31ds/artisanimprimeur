@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
 
   const admin = await requireAdmin(request);
   if (!admin) return error('Unauthorized', 401);
+  const token = bearerToken(request.headers.get('authorization')) as string;
 
   let body: any;
   try {
@@ -69,9 +70,9 @@ export async function POST(request: NextRequest) {
     return error('Invalid channel', 400);
   }
 
-  const recipients = await resolveRecipients(admin.uid, segment, body?.filters || []);
+  const recipients = await resolveRecipients(token, segment, body?.filters || []);
   if (recipients.length === 0) {
-    const stats = await previewRecipients(admin.uid, segment, body?.filters || []);
+    const stats = await previewRecipients(token, segment, body?.filters || []);
     return NextResponse.json(
       {
         error: 'No recipients matched this segment',
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
   // تسجيل النتائج في Firestore (بتوكن المشرف) — لا يوقف الرد عند فشل التسجيل
   const logId = `${Date.now()}-${campaignId || 'quick'}`;
   try {
-    await fsCreate(admin.uid, 'marketing_send_logs', {
+    await fsCreate(token, 'marketing_send_logs', {
       campaignId: campaignId || 'quick',
       title: title || subject || 'Quick send',
       channel,
@@ -118,9 +119,9 @@ export async function POST(request: NextRequest) {
   // تحديث مقاييس الحملة إن كانت حملة مسجلة
   if (campaignId) {
     try {
-      const campaign = await fsGet(admin.uid, `marketing_campaigns/${campaignId}`);
+      const campaign = await fsGet(token, `marketing_campaigns/${campaignId}`);
       const perf = campaign?.performance || {};
-      await fsPatch(admin.uid, `marketing_campaigns/${campaignId}`, {
+      await fsPatch(token, `marketing_campaigns/${campaignId}`, {
         status: 'active',
         updatedAt: new Date().toISOString(),
         performance: {

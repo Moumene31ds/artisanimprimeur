@@ -7,18 +7,19 @@ import { getTierForSpending } from "@/lib/loyalty";
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await verifyIdToken(bearerToken(request.headers.get("authorization")));
+    const token = bearerToken(request.headers.get("authorization")) as string;
+    const user = await verifyIdToken(token);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const uid = user.uid;
     const body = await request.json();
     const action = body?.action || "save";
 
-    const settings = await getLoyaltySettings(uid);
+    const settings = await getLoyaltySettings(token);
     const { config } = settings;
 
     // قراءة بيانات المستخدم الحالية
-    const userDoc = await fsGet(uid, `users/${uid}`).catch(() => null);
+    const userDoc = await fsGet(token, `users/${uid}`).catch(() => null);
     const userRef = `users/${uid}`;
 
     if (action === "save") {
@@ -32,8 +33,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: "Date de naissance invalide" }, { status: 400 });
       }
 
-      await fsPatch(uid, userRef, { birthday }).catch(() => {});
-      const profile = await computeLoyaltyProfile(uid, uid);
+      await fsPatch(token, userRef, { birthday }).catch(() => {});
+      const profile = await computeLoyaltyProfile(token, uid);
       return NextResponse.json({ success: true, saved: true, birthday, profile });
     }
 
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
       const isPremium = tier.id === "platinum" || tier.id === "diamond";
       const points = (Number(config.birthdayBonus) || 0) * (isPremium ? 2 : 1);
 
-      await fsCreate(uid, "pointTransactions", {
+      await fsCreate(token, "pointTransactions", {
         userId: uid,
         type: "birthday",
         points,
@@ -65,17 +66,18 @@ export async function POST(request: NextRequest) {
         createdAt: new Date().toISOString(),
       }).catch(() => {});
 
-      await fsPatch(uid, userRef, {
+      await fsPatch(token, userRef, {
         birthdayClaimYear: currentYear,
         points: (Number(userDoc?.points) || 0) + points,
       }).catch(() => {});
 
-      const profile = await computeLoyaltyProfile(uid, uid);
+      const profile = await computeLoyaltyProfile(token, uid);
       return NextResponse.json({ success: true, pointsAwarded: points, profile });
     }
 
     return NextResponse.json({ success: false, error: "Action inconnue" }, { status: 400 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    console.error("[birthday] failed:", err?.message ?? err);
+    return NextResponse.json({ error: "Une erreur est survenue, réessayez plus tard" }, { status: 500 });
   }
 }

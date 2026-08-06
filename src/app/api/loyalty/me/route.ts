@@ -4,12 +4,14 @@ import { computeLoyaltyProfile } from "@/lib/loyalty-profile";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await verifyIdToken(bearerToken(request.headers.get("authorization")));
+    const token = bearerToken(request.headers.get("authorization")) as string;
+    const user = await verifyIdToken(token);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const profile = await computeLoyaltyProfile(user.uid, user.uid);
+    const profile = await computeLoyaltyProfile(token, user.uid);
     return NextResponse.json({ success: true, profile });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    console.error("[loyalty/me] failed:", err?.message ?? err);
+    return NextResponse.json({ error: "Une erreur est survenue, réessayez plus tard" }, { status: 500 });
   }
 }

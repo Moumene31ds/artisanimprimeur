@@ -24,6 +24,7 @@ function error(message: string, status: number) {
 export async function POST(request: NextRequest) {
   const admin = await requireAdmin(request);
   if (!admin) return error('Unauthorized', 401);
+  const token = bearerToken(request.headers.get('authorization')) as string;
 
   try {
     const body = await request.json();
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
       return error('Missing required fields: name, type, template', 400);
     }
 
-    const campaignId = await fsCreate(admin.uid, 'marketing_campaigns', {
+    const campaignId = await fsCreate(token, 'marketing_campaigns', {
       name,
       description: description || '',
       type,
@@ -63,17 +64,18 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const admin = await requireAdmin(request);
   if (!admin) return error('Unauthorized', 401);
+  const token = bearerToken(request.headers.get('authorization')) as string;
 
   try {
     const campaignId = request.nextUrl.searchParams.get('id');
 
     if (campaignId) {
-      const campaign = await fsGet(admin.uid, `marketing_campaigns/${campaignId}`);
+      const campaign = await fsGet(token, `marketing_campaigns/${campaignId}`);
       if (!campaign) return error('Campaign not found', 404);
       return NextResponse.json(campaign);
     }
 
-    const campaigns = await fsQuery(admin.uid, {
+    const campaigns = await fsQuery(token, {
       from: [{ collectionId: 'marketing_campaigns' }],
       orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
       limit: 100,
@@ -89,6 +91,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const admin = await requireAdmin(request);
   if (!admin) return error('Unauthorized', 401);
+  const token = bearerToken(request.headers.get('authorization')) as string;
 
   try {
     const body = await request.json();
@@ -96,7 +99,7 @@ export async function PUT(request: NextRequest) {
     if (!campaignId) return error('Missing campaignId', 400);
 
     const patch: Record<string, any> = { ...fields, updatedAt: new Date().toISOString() };
-    await fsPatch(admin.uid, `marketing_campaigns/${campaignId}`, patch);
+    await fsPatch(token, `marketing_campaigns/${campaignId}`, patch);
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error('[campaigns] update failed:', err);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
+import { bearerToken } from "@/lib/auth-verify";
 import { fsQuery } from "@/lib/firestore-rest";
 import { getTierForSpending } from "@/lib/loyalty";
 
@@ -7,22 +8,23 @@ export async function GET(request: NextRequest) {
   try {
     const admin = await requireAdmin(request);
     if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const token = bearerToken(request.headers.get("authorization")) as string;
 
     // 1) كل أعضاء النظام
-    const users = await fsQuery(admin.uid, {
+    const users = await fsQuery(token, {
       from: [{ collectionId: "users" }],
       orderBy: [{ field: { fieldPath: "lifetimeSpending" }, direction: "DESCENDING" }],
     }).catch(() => []);
 
     // 2) آخر معاملات النقاط
-    const transactions = await fsQuery(admin.uid, {
+    const transactions = await fsQuery(token, {
       from: [{ collectionId: "pointTransactions" }],
       orderBy: [{ field: { fieldPath: "createdAt" }, direction: "DESCENDING" }],
       limit: 300,
     }).catch(() => []);
 
     // 3) عدد الجوائز الممنوحة (الطلبات المكتملة)
-    const awards = await fsQuery(admin.uid, {
+    const awards = await fsQuery(token, {
       from: [{ collectionId: "loyaltyAwards" }],
       orderBy: [{ field: { fieldPath: "awardedAt" }, direction: "DESCENDING" }],
       limit: 500,

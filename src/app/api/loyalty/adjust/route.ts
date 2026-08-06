@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
+import { bearerToken } from "@/lib/auth-verify";
 import { fsGet, fsCreate, fsPatch } from "@/lib/firestore-rest";
 
 export async function POST(request: NextRequest) {
   try {
     const admin = await requireAdmin(request);
     if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const token = bearerToken(request.headers.get("authorization")) as string;
 
     const body = await request.json();
     const userId = String(body?.userId || "");
@@ -19,11 +21,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "points doit être différent de 0" }, { status: 400 });
     }
 
-    const user = await fsGet(admin.uid, `users/${userId}`);
+    const user = await fsGet(token, `users/${userId}`);
     if (!user) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
 
     // تسجيل المعاملة (تعديل يدوي من الأدمن)
-    await fsCreate(admin.uid, "pointTransactions", {
+    await fsCreate(token, "pointTransactions", {
       userId,
       type: "adjust",
       points: signedPoints,
@@ -36,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     // تحديث كاش المستخدم
     const newPoints = Math.max(0, (Number(user.points) || 0) + signedPoints);
-    await fsPatch(admin.uid, `users/${userId}`, {
+    await fsPatch(token, `users/${userId}`, {
       points: newPoints,
       lastPointsAdjustment: new Date().toISOString(),
     });

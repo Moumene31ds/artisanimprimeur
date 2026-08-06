@@ -6,7 +6,8 @@ import { computeLoyaltyProfile } from "@/lib/loyalty-profile";
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await verifyIdToken(bearerToken(request.headers.get("authorization")));
+    const token = bearerToken(request.headers.get("authorization")) as string;
+    const user = await verifyIdToken(token);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const uid = user.uid;
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
     }
 
     // التحقق: الطلب يجب أن يكون مكتملاً وليس ملغى وأن يكون الطلب للمستخدم نفسه
-    const order = await fsGet(uid, `orders/${orderId}`).catch(() => null);
+    const order = await fsGet(token, `orders/${orderId}`).catch(() => null);
     if (!order) {
       return NextResponse.json({ success: false, error: "Commande introuvable" }, { status: 404 });
     }
@@ -30,25 +31,25 @@ export async function POST(request: NextRequest) {
     }
 
     // منع التكرار: معاملة مراجعة واحدة لكل طلب
-    const existing = await fsGet(uid, `users/${uid}/reviewBonuses/${orderId}`).catch(() => null);
+    const existing = await fsGet(token, `users/${uid}/reviewBonuses/${orderId}`).catch(() => null);
     if (existing) {
       return NextResponse.json({ success: false, alreadyClaimed: true });
     }
 
-    const settings = await getLoyaltySettings(uid);
+    const settings = await getLoyaltySettings(token);
     const { config } = settings;
     const points = Number(config.reviewBonus) || 0;
 
     // تسجيل إثبات المكافأة لمنع الازدواج
     await fsCreate(
-      uid,
+      token,
       `users/${uid}/reviewBonuses`,
       { orderId, points, createdAt: new Date().toISOString() },
       orderId
     ).catch(() => {});
 
     if (points > 0) {
-      await fsCreate(uid, "pointTransactions", {
+      await fsCreate(token, "pointTransactions", {
         userId: uid,
         orderId,
         type: "review",
@@ -58,16 +59,17 @@ export async function POST(request: NextRequest) {
         createdAt: new Date().toISOString(),
       }).catch(() => {});
 
-      const userDoc = await fsGet(uid, `users/${uid}`).catch(() => null);
-      await fsPatch(uid, `users/${uid}`, {
+      const userDoc = await fsGet(token, `users/${uid}`).catch(() => null);
+      await fsPatch(token, `users/${uid}`, {
         points: (Number(userDoc?.points) || 0) + points,
       }).catch(() => {});
     }
 
-    const profile = await computeLoyaltyProfile(uid, uid);
+    const profile = await computeLoyaltyProfile(token, uid);
 
     return NextResponse.json({ success: true, pointsAwarded: points, profile });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    console.error("[review-bonus] failed:", err?.message ?? err);
+    return NextResponse.json({ error: "Une erreur est survenue, réessayez plus tard" }, { status: 500 });
   }
 }

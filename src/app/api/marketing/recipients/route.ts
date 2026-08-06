@@ -26,6 +26,7 @@ const VALID_SEGMENTS: SegmentCriteria[] = ['all', 'premium', 'new', 'inactive', 
 export async function GET(request: NextRequest) {
   const admin = await requireAdmin(request);
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const token = bearerToken(request.headers.get('authorization')) as string;
 
   try {
     const segment = (request.nextUrl.searchParams.get('segment') || 'all') as SegmentCriteria;
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
       filters = [];
     }
 
-    const stats = await previewRecipients(admin.uid, segment, filters);
+    const stats = await previewRecipients(token, segment, filters);
 
     return NextResponse.json({
       success: true,

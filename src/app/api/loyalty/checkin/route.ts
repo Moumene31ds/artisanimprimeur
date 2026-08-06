@@ -7,16 +7,17 @@ import { diffInDays, todayKey } from "@/lib/loyalty";
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await verifyIdToken(bearerToken(request.headers.get("authorization")));
+    const token = bearerToken(request.headers.get("authorization")) as string;
+    const user = await verifyIdToken(token);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const uid = user.uid;
-    const settings = await getLoyaltySettings(uid);
+    const settings = await getLoyaltySettings(token);
     const { config } = settings;
 
     // 1) قراءة حالة التسجيل السابقة
     const checkinRef = `loyalty_checkins/${uid}`;
-    const prev = await fsGet(uid, checkinRef).catch(() => null);
+    const prev = await fsGet(token, checkinRef).catch(() => null);
 
     const prevDate = prev?.lastCheckIn ? new Date(prev.lastCheckIn) : null;
     if (prevDate && todayKey(prevDate) === todayKey()) {
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     // 4) حفظ حالة التسجيل
     await fsPatch(
-      uid,
+      token,
       checkinRef,
       {
         lastCheckIn: new Date().toISOString(),
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
       }
     ).catch(() =>
       fsCreate(
-        uid,
+        token,
         "loyalty_checkins",
         {
           lastCheckIn: new Date().toISOString(),
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
     );
 
     // 5) تسجيل معاملة النقاط
-    await fsCreate(uid, "pointTransactions", {
+    await fsCreate(token, "pointTransactions", {
       userId: uid,
       type: "daily_checkin",
       points,
@@ -71,13 +72,13 @@ export async function POST(request: NextRequest) {
     }).catch(() => {});
 
     // 6) تحديث كاش نقاط المستخدم
-    const userDoc = await fsGet(uid, `users/${uid}`).catch(() => null);
-    await fsPatch(uid, `users/${uid}`, {
+    const userDoc = await fsGet(token, `users/${uid}`).catch(() => null);
+    await fsPatch(token, `users/${uid}`, {
       points: (Number(userDoc?.points) || 0) + points,
       lastCheckIn: new Date().toISOString(),
     }).catch(() => {});
 
-    const profile = await computeLoyaltyProfile(uid, uid);
+    const profile = await computeLoyaltyProfile(token, uid);
 
     return NextResponse.json({
       success: true,
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
       profile,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    console.error("[checkin] failed:", err?.message ?? err);
+    return NextResponse.json({ error: "Une erreur est survenue, réessayez plus tard" }, { status: 500 });
   }
 }

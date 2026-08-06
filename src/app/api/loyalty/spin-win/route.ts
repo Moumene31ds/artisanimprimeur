@@ -21,7 +21,8 @@ const ALLOWED_FIXED_VALUES = [500, 700];
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await verifyIdToken(bearerToken(request.headers.get("authorization")));
+    const token = bearerToken(request.headers.get("authorization")) as string;
+    const user = await verifyIdToken(token);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const uid = user.uid;
@@ -46,10 +47,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Prix non autorisé" }, { status: 400 });
     }
 
-    const settings = await getLoyaltySettings(uid);
+    const settings = await getLoyaltySettings(token);
     const spinCost = Number(settings.config.spinCost) || 0;
 
-    const profile = await computeLoyaltyProfile(uid, uid);
+    const profile = await computeLoyaltyProfile(token, uid);
     if (profile.points < spinCost) {
       return NextResponse.json({ success: false, error: "Points insuffisants" }, { status: 400 });
     }
@@ -57,9 +58,9 @@ export async function POST(request: NextRequest) {
     // منع الازدواج: إذا عولج نفس الدوران مسبقاً لا نخصم النقاط مجدداً
     const dedupKey = `pointTransactions/spin_${spinId}`;
     if (spinId) {
-      const already = await fsGet(uid, dedupKey).catch(() => null);
+      const already = await fsGet(token, dedupKey).catch(() => null);
       if (already) {
-        const fresh = await computeLoyaltyProfile(uid, uid);
+        const fresh = await computeLoyaltyProfile(token, uid);
         return NextResponse.json({ success: true, alreadyProcessed: true, profile: fresh });
       }
     }
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
     // 1) خصم تكلفة الدوران (وثيقة بمفتاح spinId لضمان التفرد)
     if (spinCost > 0) {
       await fsCreate(
-        uid,
+        token,
         "pointTransactions",
         {
           userId: uid,
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
 
     if (type === "points") {
       prizePoints = value;
-      await fsCreate(uid, "pointTransactions", {
+      await fsCreate(token, "pointTransactions", {
         userId: uid,
         type: "won",
         points: prizePoints,
@@ -108,21 +109,21 @@ export async function POST(request: NextRequest) {
         ownerId: uid,
         createdAt: new Date().toISOString(),
       };
-      await fsCreate(uid, "promoCodes", codeData, wonCode).catch(async () => {
+      await fsCreate(token, "promoCodes", codeData, wonCode).catch(async () => {
         const retryCode = generateCode(`SPIN-${type.toUpperCase()}`);
-        await fsCreate(uid, "promoCodes", { ...codeData, code: retryCode }, retryCode);
+        await fsCreate(token, "promoCodes", { ...codeData, code: retryCode }, retryCode);
         wonCode = retryCode;
       });
     }
 
     // 3) تحديث كاش نقاط المستخدم
-    const userDoc = await fsGet(uid, `users/${uid}`).catch(() => null);
-    await fsPatch(uid, `users/${uid}`, {
+    const userDoc = await fsGet(token, `users/${uid}`).catch(() => null);
+    await fsPatch(token, `users/${uid}`, {
       points: Math.max(0, (Number(userDoc?.points) || 0) - spinCost + prizePoints),
       lastSpin: new Date().toISOString(),
     }).catch(() => {});
 
-    const updatedProfile = await computeLoyaltyProfile(uid, uid);
+    const updatedProfile = await computeLoyaltyProfile(token, uid);
 
     return NextResponse.json({
       success: true,
@@ -133,6 +134,7 @@ export async function POST(request: NextRequest) {
       profile: updatedProfile,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    console.error("[spin-win] failed:", err?.message ?? err);
+    return NextResponse.json({ error: "Une erreur est survenue, réessayez plus tard" }, { status: 500 });
   }
 }

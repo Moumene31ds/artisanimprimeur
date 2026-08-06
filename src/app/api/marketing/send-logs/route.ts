@@ -23,6 +23,7 @@ async function requireAdmin(request: NextRequest): Promise<{ uid: string } | nul
 export async function GET(request: NextRequest) {
   const admin = await requireAdmin(request);
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const token = bearerToken(request.headers.get('authorization')) as string;
 
   try {
     const campaignId = request.nextUrl.searchParams.get('campaignId');
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    const logs = await fsQuery(admin.uid, structuredQuery);
+    const logs = await fsQuery(token, structuredQuery);
     return NextResponse.json({ logs, count: logs.length });
   } catch (err: any) {
     console.error('[send-logs] failed:', err);

@@ -31,13 +31,14 @@ export async function POST(request: NextRequest) {
   try {
     const admin = await requireAdmin(request);
     if (!admin) return error("Unauthorized", 401);
+    const token = bearerToken(request.headers.get("authorization")) as string;
 
     const body = await request.json();
     const { orderId, action, stage } = body;
 
     if (!orderId) return error("Order ID is required", 400);
 
-    const order = await fsGet(admin.uid, `orders/${orderId}`);
+    const order = await fsGet(token, `orders/${orderId}`);
     if (!order) return error("Order not found", 404);
 
     const currentStatus = order.status || "En attente";
@@ -75,14 +76,14 @@ export async function POST(request: NextRequest) {
       action === "set_stage" && stage ? `Manuel: ${stage}` : undefined
     );
 
-    await fsPatch(admin.uid, `orders/${orderId}`, {
+    await fsPatch(token, `orders/${orderId}`, {
       status: nextStage,
       statusHistory,
       lastProductionUpdate: new Date().toISOString(),
     });
 
     try {
-      await fsCreate(admin.uid, `orders/${orderId}/productionLog`, {
+      await fsCreate(token, `orders/${orderId}/productionLog`, {
         orderId,
         from: currentStatus,
         to: nextStage,
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
     // منح نقاط الولاء تلقائياً عند إتمام الطلب (Terminé) — idempotent وآمن
     if (nextStage === "Terminé" && order.customerUserId && order.customerUserId !== "guest") {
       try {
-        await awardPointsForOrder(admin.uid, orderId);
+        await awardPointsForOrder(token, orderId);
       } catch (loyaltyErr) {
         console.error("[production] Loyalty award failed:", (loyaltyErr as Error)?.message);
       }
@@ -136,11 +137,12 @@ export async function GET(request: NextRequest) {
   try {
     const admin = await requireAdmin(request);
     if (!admin) return error("Unauthorized", 401);
+    const token = bearerToken(request.headers.get("authorization")) as string;
 
     const orderId = request.nextUrl.searchParams.get("orderId");
 
     if (orderId) {
-      const logs = await fsQuery(admin.uid, {
+      const logs = await fsQuery(token, {
         from: [{ collectionId: "productionLog", allDescendants: true }],
         where: {
           fieldFilter: {
@@ -154,7 +156,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ logs });
     }
 
-    const orders = await fsQuery(admin.uid, {
+    const orders = await fsQuery(token, {
       from: [{ collectionId: "orders" }],
       orderBy: [{ field: { fieldPath: "createdAt" }, direction: "DESCENDING" }],
     });
