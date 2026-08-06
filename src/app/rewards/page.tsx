@@ -2,14 +2,12 @@
 
 import { useAuth } from "@/context/AuthContext";
 import { useEffect, useState, useMemo } from "react";
-import { db } from "@/lib/firebase";
-import { 
-  collection, query, where, getDocs, doc, setDoc, 
-  serverTimestamp, addDoc 
-} from "firebase/firestore";
-import { 
-  Crown, Gift, Loader2, Star, CheckCircle, 
-  ArrowLeft, Zap, Trophy, Ticket, RefreshCw, HelpCircle, History 
+import { db, auth } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import {
+  Crown, Gift, Loader2, Star, CheckCircle,
+  ArrowLeft, Zap, Trophy, Ticket, RefreshCw, HelpCircle, History,
+  Flame, CalendarDays, MessageSquare, Share2, Copy, Check, Coins, Medal, Gem
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
@@ -17,39 +15,7 @@ import { useAppStore } from "@/lib/store";
 import { toast } from "sonner";
 import { GlobalLoader } from "@/components/GlobalLoader";
 import confetti from "canvas-confetti";
-
-const REWARDS = [
-  { 
-    id: "r1", 
-    title: "Remise 10%", 
-    titleAr: "خصم 10%",
-    points: 200, 
-    icon: <Ticket className="text-blue-500" size={32} />, 
-    type: "percent", 
-    value: 10,
-    color: "from-blue-500/20 to-cyan-500/20"
-  },
-  { 
-    id: "r2", 
-    title: "Bon de 600 DA", 
-    titleAr: "قسيمة 600 دج",
-    points: 500, 
-    icon: <Zap className="text-emerald-500" size={32} />, 
-    type: "fixed", 
-    value: 600,
-    color: "from-emerald-500/20 to-green-500/20"
-  },
-  { 
-    id: "r3", 
-    title: "Bon de 1000 DA", 
-    titleAr: "قسيمة 1000 دج",
-    points: 1000, 
-    icon: <Trophy className="text-yellow-500" size={32} />, 
-    type: "fixed", 
-    value: 1000,
-    color: "from-yellow-500/20 to-orange-500/20"
-  },
-];
+import { LOYALTY_TIERS, LoyaltyTier, getPointsForAmount } from "@/lib/loyalty";
 
 // --- Spin the Wheel Prizes ---
 const SPIN_PRIZES = [
@@ -63,25 +29,22 @@ const SPIN_PRIZES = [
   { label: "100 Points", labelAr: "100 نقطة", type: "points", value: 100, color: "#eab308" }
 ];
 
-interface PointTransaction {
-  id: string;
-  type: 'earned' | 'redeemed' | 'won' | 'spin_cost';
-  title: string;
-  titleAr: string;
-  points: number;
-  date: Date;
-}
+const TIER_ICONS: Record<string, any> = {
+  bronze: Medal, silver: Medal, gold: Crown, platinum: Gem, diamond: Gem,
+};
 
 export default function RewardsPage() {
   const { user, loading: authLoading, isLoggedIn } = useAuth();
   const { language } = useAppStore();
-  const [points, setPoints] = useState(0);
-  const [totalSpent, setTotalSpent] = useState(0);
-  const [calculating, setCalculating] = useState(true);
-  const [redeeming, setRedeeming] = useState<string | null>(null);
-  const [redeemedCode, setRedeemedCode] = useState<string | null>(null);
-  const [transactions, setTransactions] = useState<PointTransaction[]>([]);
+  const isRtl = language === 'ar';
+
+  // --- البيانات من الخادم ---
   const [mounted, setMounted] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [profile, setProfile] = useState<any>(null);
+  const [settings, setSettings] = useState<any>(null);
+  const [redeemedCode, setRedeemedCode] = useState<string | null>(null);
+  const [redeeming, setRedeeming] = useState<string | null>(null);
 
   // --- Wheel states ---
   const [wheelRotation, setWheelRotation] = useState(0);
@@ -89,285 +52,267 @@ export default function RewardsPage() {
   const [prizeResult, setPrizeResult] = useState<any | null>(null);
   const [showPrizeModal, setShowPrizeModal] = useState(false);
 
-  const isRtl = language === 'ar';
+  // --- Birthday state ---
+  const [birthdayInput, setBirthdayInput] = useState("");
+  const [claimingBirthday, setClaimingBirthday] = useState(false);
 
-  const fetchAndCalculateData = async () => {
-    if (!user) {
-      setCalculating(false);
-      return;
-    }
+  // --- Referral ---
+  const [copied, setCopied] = useState(false);
 
+  // --- Check-in ---
+  const [checkingIn, setCheckingIn] = useState(false);
+
+  const tier: LoyaltyTier | null = profile?.tier || null;
+  const spinCost = settings?.config?.spinCost ?? 50;
+  const rewardsCatalog = settings?.rewards || [];
+
+  const fetchProfile = async () => {
+    if (!user) return;
     try {
-      // 1. Fetch Orders to calculate spent amount & standard points
-      const qOrders = query(
-        collection(db, "orders"), 
-        where("customerUserId", "==", user.uid)
-      );
-      const snapOrders = await getDocs(qOrders);
-      
-      let spent = 0;
-      const orderTxs: PointTransaction[] = [];
-
-      snapOrders.forEach(docSnap => {
-        const data = docSnap.data();
-        if (data.status !== 'Annulé') {
-          const totalVal = Number(data.total) || 0;
-          spent += totalVal;
-          
-          const ptsEarned = Math.floor(totalVal / 100);
-          if (ptsEarned > 0) {
-            orderTxs.push({
-              id: docSnap.id,
-              type: 'earned',
-              title: `Points earned from order #${docSnap.id.substring(0, 6)}`,
-              titleAr: `نقاط مكتسبة من الطلب #${docSnap.id.substring(0, 6)}`,
-              points: ptsEarned,
-              date: data.createdAt?.toDate() || new Date(),
-            });
-          }
-        }
+      const token = await user.getIdToken();
+      const res = await fetch("/api/loyalty/me", {
+        headers: { Authorization: `Bearer ${token}` },
       });
-      setTotalSpent(spent);
+      const data = await res.json();
+      if (data.success) setProfile(data.profile);
+    } catch (err) {
+      console.error("Failed to load loyalty profile:", err);
+      toast.error(isRtl ? "فشل تحميل بيانات الولاء" : "Erreur de chargement");
+    }
+  };
 
-      // 2. Fetch custom transactions (redeemed coupons, wheel spins) from Firestore
-      const qTxs = query(
-        collection(db, "pointTransactions"), 
-        where("userId", "==", user.uid)
-      );
-      const snapTxs = await getDocs(qTxs);
-      
-      const customTxs: PointTransaction[] = [];
-      let pointAdjustments = 0;
-
-      snapTxs.forEach(docSnap => {
-        const data = docSnap.data();
-        const ptsVal = Number(data.points) || 0;
-        
-        pointAdjustments += ptsVal; // Negative for redemptions/spins, positive for wheel wins
-        customTxs.push({
-          id: docSnap.id,
-          type: data.type,
-          title: data.title || '',
-          titleAr: data.titleAr || '',
-          points: Math.abs(ptsVal),
-          date: data.createdAt?.toDate() || new Date(),
+  const fetchSettings = async () => {
+    try {
+      const snap = await getDoc(doc(db, "settings", "loyalty"));
+      if (snap.exists()) setSettings(snap.data());
+      else {
+        setSettings({
+          config: {
+            basePointsPer100: 1, signupBonus: 200, dailyCheckInBase: 10,
+            dailyCheckInStreakBonus: 50, birthdayBonus: 100, reviewBonus: 50,
+            referralBonus: 100, spinCost: 50,
+          },
+          rewards: [
+            { id: "r1", points: 200, type: "percent", value: 10, title: { ar: "خصم 10%", fr: "Remise 10%" }, icon: "Ticket" },
+            { id: "r2", points: 500, type: "fixed", value: 600, title: { ar: "قسيمة 600 دج", fr: "Bon de 600 DA" }, icon: "Zap" },
+            { id: "r3", points: 1000, type: "fixed", value: 1000, title: { ar: "قسيمة 1000 دج", fr: "Bon de 1000 DA" }, icon: "Trophy" },
+            { id: "r4", points: 2000, type: "fixed", value: 2500, title: { ar: "قسيمة 2500 دج", fr: "Bon de 2500 DA" }, icon: "Gem" },
+            { id: "r5", points: 5000, type: "percent", value: 20, title: { ar: "خصم 20%", fr: "Remise 20%" }, icon: "Crown" },
+          ],
         });
-      });
-
-      // Calculate final points: (Base points from orders) + adjustments
-      const basePoints = Math.floor(spent / 100);
-      const computedPoints = Math.max(0, basePoints + pointAdjustments);
-      setPoints(computedPoints);
-
-      // Save calculated points count to user document for global caching and AI queries
-      await setDoc(doc(db, "users", user.uid), { points: computedPoints }, { merge: true });
-
-      // Combine and sort transactions by date
-      const allTxs = [...orderTxs, ...customTxs].sort((a, b) => b.date.getTime() - a.date.getTime());
-      setTransactions(allTxs);
-
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      toast.error(isRtl ? "فشل في جلب البيانات" : "Erreur de chargement des données");
-    } finally {
-      setCalculating(false);
+      }
+    } catch (err) {
+      console.error("Failed to load loyalty settings:", err);
     }
   };
 
   useEffect(() => {
     setMounted(true);
-    if (!authLoading) {
-      fetchAndCalculateData();
+    if (!authLoading && isLoggedIn && user) {
+      fetchProfile();
+      fetchSettings();
     }
-  }, [user, authLoading]);
+  }, [authLoading, isLoggedIn, user]);
 
-  // --- Redeem Promo Code Logic ---
+  // ============ DAILY CHECK-IN ============
+  const handleCheckIn = async () => {
+    if (checkingIn || !user) return;
+    setCheckingIn(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/loyalty/checkin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProfile(data.profile);
+        toast.success(isRtl ? `+${data.pointsAwarded} نقطة!` : `+${data.pointsAwarded} points !`);
+        confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
+      } else if (data.alreadyCheckedIn) {
+        toast.info(isRtl ? "سجلت حضورك اليوم بالفعل" : "Déjà enregistré aujourd'hui");
+      } else {
+        toast.error(data.error || "Erreur");
+      }
+    } catch (err) {
+      toast.error("Erreur");
+    } finally {
+      setCheckingIn(false);
+    }
+  };
+
+  // ============ BIRTHDAY ============
+  const saveBirthday = async () => {
+    if (!user || !birthdayInput) return;
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/loyalty/birthday", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "save", birthday: birthdayInput }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProfile(data.profile);
+        toast.success(isRtl ? "تم حفظ تاريخ ميلادك 🎂" : "Date d'anniversaire enregistrée 🎂");
+      } else {
+        toast.error(data.error || "Erreur");
+      }
+    } catch (err) {
+      toast.error("Erreur");
+    }
+  };
+
+  const claimBirthday = async () => {
+    if (claimingBirthday || !user) return;
+    setClaimingBirthday(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/loyalty/birthday", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "claim" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProfile(data.profile);
+        toast.success(isRtl ? `هدية عيد ميلاد: +${data.pointsAwarded} نقطة 🎉` : `Bonus anniversaire : +${data.pointsAwarded} points 🎉`);
+        confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+      } else if (data.alreadyClaimed) {
+        toast.info(isRtl ? "حصلت على هدية عيد الميلاد هذه السنة" : "Bonus déjà réclamé cette année");
+      } else {
+        toast.error(data.error || "Erreur");
+      }
+    } catch (err) {
+      toast.error("Erreur");
+    } finally {
+      setClaimingBirthday(false);
+    }
+  };
+
+  // ============ REDEEM (via API) ============
   const handleRedeem = async (reward: any) => {
-    if (points < reward.points) {
+    if (redeeming || !user) return;
+    if (profile.points < reward.points) {
       toast.error(isRtl ? "نقاطك لا تكفي لاستبدال هذه المكافأة" : "Points insuffisants !");
       return;
     }
-
     setRedeeming(reward.id);
-    const generatedCode = `VIP-${reward.id.toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-    
     try {
-      // 1. Add Promo code to Firestore
-      const promoData = {
-        code: generatedCode,
-        discountType: reward.type,
-        discountValue: reward.value,
-        minAmount: 0,
-        active: true,
-        isReward: true,
-        ownerId: user?.uid,
-        createdAt: serverTimestamp(),
-      };
-      await setDoc(doc(db, "promoCodes", generatedCode), promoData);
-
-      // 2. Add transaction record to Firestore
-      const txData = {
-        userId: user?.uid,
-        type: 'redeemed',
-        points: -reward.points,
-        title: `Redeemed standard reward: ${reward.title}`,
-        titleAr: `استبدال مكافأة: ${reward.titleAr}`,
-        createdAt: serverTimestamp(),
-      };
-      await addDoc(collection(db, "pointTransactions"), txData);
-
-      // Re-trigger reload
-      await fetchAndCalculateData();
-      setRedeemedCode(generatedCode);
-      
-      toast.success(isRtl ? "مبروك! تم توليد كود الخصم" : "Félicitations ! Code généré");
-      confetti({
-        particleCount: 150,
-        spread: 80,
-        origin: { y: 0.6 }
+      const token = await user.getIdToken();
+      const res = await fetch("/api/loyalty/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ rewardId: reward.id }),
       });
-    } catch (error) {
-      console.error("Redemption error:", error);
-      toast.error("Error during redemption. Please try again.");
+      const data = await res.json();
+      if (data.success) {
+        setProfile(data.profile);
+        setRedeemedCode(data.code);
+        toast.success(isRtl ? "مبروك! تم توليد كود الخصم" : "Félicitations ! Code généré");
+        confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+      } else {
+        toast.error(data.error || "Erreur");
+      }
+    } catch (err) {
+      toast.error("Erreur lors de l'échange");
     } finally {
       setRedeeming(null);
     }
   };
 
-  // --- Spin the Wheel Logic ---
+  // ============ SPIN WHEEL (via /api/loyalty/spin-win) ============
   const handleSpinWheel = async () => {
-    if (isSpinning) return;
-    if (points < 50) {
-      toast.error(isRtl ? "تحتاج إلى 50 نقطة على الأقل للعب" : "Vous avez besoin d'au moins 50 points !");
+    if (isSpinning || !user) return;
+    if (profile.points < spinCost) {
+      toast.error(isRtl ? `تحتاج إلى ${spinCost} نقطة على الأقل للعب` : `Vous avez besoin d'au moins ${spinCost} points !`);
       return;
     }
 
     setIsSpinning(true);
     setPrizeResult(null);
 
-    // 1. Deduct spin cost in Firestore
-    try {
-      const spinCostTx = {
-        userId: user?.uid,
-        type: 'spin_cost',
-        points: -50,
-        title: "Spun the Wheel",
-        titleAr: "لعب عجلة الحظ",
-        createdAt: serverTimestamp(),
-      };
-      await addDoc(collection(db, "pointTransactions"), spinCostTx);
+    const token = await user.getIdToken();
+    const spinId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-      // Choose random index
-      const prizeIndex = Math.floor(Math.random() * SPIN_PRIZES.length);
-      const prize = SPIN_PRIZES[prizeIndex];
+    // اختيار الجائزة وتحريك العجلة على العميل
+    const prizeIndex = Math.floor(Math.random() * SPIN_PRIZES.length);
+    const prize = SPIN_PRIZES[prizeIndex];
+    const sliceAngle = 360 / SPIN_PRIZES.length;
+    const targetRotation = wheelRotation + 1800 + (360 - (prizeIndex * sliceAngle)) - (sliceAngle / 2);
+    setWheelRotation(targetRotation);
 
-      // Spin rotation math
-      const sliceAngle = 360 / SPIN_PRIZES.length;
-      const targetRotation = wheelRotation + 1800 + (360 - (prizeIndex * sliceAngle)) - (sliceAngle / 2);
-      setWheelRotation(targetRotation);
-
-      setTimeout(async () => {
-        setIsSpinning(false);
-        setPrizeResult(prize);
-        setShowPrizeModal(true);
-
-        // Process reward
-        try {
-          if (prize.type === 'points') {
-            const winTx = {
-              userId: user?.uid,
-              type: 'won',
-              points: prize.value,
-              title: `Won points on Spin Wheel: +${prize.value} Pts`,
-              titleAr: `فوز بنقاط في عجلة الحظ: +${prize.value} نقطة`,
-              createdAt: serverTimestamp(),
-            };
-            await addDoc(collection(db, "pointTransactions"), winTx);
-          } else if (prize.type !== 'none') {
-            const wonCode = `SPIN-${prize.type.toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-            const promoData = {
-              code: wonCode,
-              discountType: prize.type,
-              discountValue: prize.value,
-              minAmount: 0,
-              active: true,
-              isReward: true,
-              isFreeShipping: (prize as any).isFreeShipping || false,
-              ownerId: user?.uid,
-              createdAt: serverTimestamp(),
-            };
-            await setDoc(doc(db, "promoCodes", wonCode), promoData);
-
-            const winTx = {
-              userId: user?.uid,
-              type: 'won',
-              points: 0, // No points gained directly, but code issued
-              title: `Won coupon code: ${wonCode}`,
-              titleAr: `فوز بكود خصم: ${wonCode}`,
-              createdAt: serverTimestamp(),
-            };
-            await addDoc(collection(db, "pointTransactions"), winTx);
-            setRedeemedCode(wonCode);
-          } else {
-            // Pas de chance
-            const loseTx = {
-              userId: user?.uid,
-              type: 'spin_cost',
-              points: 0,
-              title: "Pas de chance on Spin Wheel",
-              titleAr: "لم يحالفك الحظ في عجلة الحظ",
-              createdAt: serverTimestamp(),
-            };
-            await addDoc(collection(db, "pointTransactions"), loseTx);
-          }
-
-          // Reload data
-          await fetchAndCalculateData();
-          
-          if (prize.type !== 'none') {
-            confetti({
-              particleCount: 100,
-              spread: 60,
-              origin: { y: 0.6 }
-            });
-          }
-        } catch (err) {
-          console.error("Error processing spin reward:", err);
-        }
-
-      }, 5000);
-
-    } catch (err) {
-      console.error("Spin wheel deduction failed:", err);
-      toast.error("Transaction failed");
+    setTimeout(async () => {
       setIsSpinning(false);
+      setPrizeResult(prize);
+      setShowPrizeModal(true);
+
+      if (prize.type === 'none') return;
+
+      // تسجيل الدوران والجائزة على الخادم (خصم النقاط + منح الجائزة)
+      try {
+        const res = await fetch("/api/loyalty/spin-win", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ spinId, prize: { type: prize.type, value: prize.value } }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (data.profile) setProfile(data.profile);
+          if (data.code) {
+            setRedeemedCode(data.code);
+            toast.success(isRtl ? "مبروك! تم توليد كود الخصم" : "Félicitations ! Code généré");
+          } else if (data.prizePoints) {
+            toast.success(isRtl ? `+${data.prizePoints} نقطة!` : `+${data.prizePoints} points !`);
+          }
+        } else {
+          toast.error(data.error || "Erreur");
+          await fetchProfile();
+        }
+      } catch (err) {
+        console.error("Error processing spin reward:", err);
+        toast.error(isRtl ? "تعذر تسجيل الجائزة، حاول مجدداً" : "Erreur lors de l'enregistrement");
+        await fetchProfile();
+      }
+    }, 5000);
+  };
+
+  const referralLink = profile?.referralCode
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/login?ref=${profile.referralCode}`
+    : "";
+
+  const copyText = async (text: string, msg: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      toast.success(msg);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      toast.error("Erreur de copie");
     }
   };
 
-  // Determine Tiers Info
+  // Progress toward next tier
   const tierProgress = useMemo(() => {
-    let currentTier = isRtl ? "عادي" : "Standard";
-    let nextTier = "Silver";
-    let required = 20000;
-    let progress = Math.min((totalSpent / 20000) * 100, 100);
-
-    if (totalSpent > 50000) {
-      currentTier = "VIP Gold";
-      nextTier = isRtl ? "الحد الأقصى" : "Max Tier";
-      required = 50000;
-      progress = 100;
-    } else if (totalSpent > 20000) {
-      currentTier = "Silver";
-      nextTier = "VIP Gold";
-      required = 50000;
-      progress = Math.min((totalSpent / 50000) * 100, 100);
+    if (!profile || !tier) return { current: "Bronze", next: "Silver", required: 20000, progress: 0, remaining: 20000 };
+    const next = profile.nextTier;
+    if (!next) {
+      return { current: tier.label.fr, next: null, required: 0, progress: 100, remaining: 0 };
     }
+    const spending = profile.lifetimeSpending || 0;
+    const range = next.minSpending - tier.minSpending;
+    const passed = spending - tier.minSpending;
+    return {
+      current: tier.label.fr,
+      next: next.label.fr,
+      required: next.minSpending,
+      progress: Math.min(100, Math.max(0, (passed / range) * 100)),
+      remaining: Math.max(0, next.minSpending - spending),
+    };
+  }, [profile, tier]);
 
-    return { currentTier, nextTier, required, progress };
-  }, [totalSpent, isRtl]);
+  if (!mounted || authLoading || loadingProfile) return <GlobalLoader />;
 
-  if (!mounted || authLoading || calculating) return <GlobalLoader />;
-  
   if (!isLoggedIn) return (
     <div className="min-h-[70vh] flex flex-col items-center justify-center text-center px-4 animate-fadeIn">
       <div className="p-6 bg-slate-100 dark:bg-slate-800 rounded-full mb-6">
@@ -382,13 +327,15 @@ export default function RewardsPage() {
     </div>
   );
 
+  const baseRate = settings?.config?.basePointsPer100 ?? 1;
+  const multiplier = tier?.multiplier ?? 1;
+
   return (
     <div className={`max-w-6xl mx-auto pb-24 px-4 ${isRtl ? 'text-right' : 'text-left'}`} dir={isRtl ? 'rtl' : 'ltr'}>
-      
       {/* Header */}
       <header className="flex items-center gap-4 mb-10">
         <Link href="/profile" className="p-3 bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors border border-slate-200 dark:border-slate-700">
-           <ArrowLeft size={24} className={isRtl ? 'rotate-180' : ''} />
+          <ArrowLeft size={24} className={isRtl ? 'rotate-180' : ''} />
         </Link>
         <h1 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">VIP Rewards & Games</h1>
       </header>
@@ -397,7 +344,7 @@ export default function RewardsPage() {
       <section className="relative bg-gradient-to-br from-slate-900 to-black dark:from-slate-900 dark:to-slate-950 rounded-[3rem] p-8 md:p-12 mb-12 overflow-hidden shadow-2xl border border-white/10">
         <div className="absolute top-0 right-0 w-80 h-80 bg-yellow-500/10 rounded-full blur-[100px] -mr-20 -mt-20"></div>
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[100px] -ml-20 -mb-20"></div>
-        
+
         <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
           <div className="text-center md:text-start flex-1">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-yellow-500/20 text-yellow-500 text-xs font-black mb-6 border border-yellow-500/30">
@@ -407,29 +354,178 @@ export default function RewardsPage() {
               {isRtl ? "رصيد نقاطك الحالي" : "Votre Solde Actuel"}
             </h2>
             <p className="text-slate-400 font-medium max-w-md text-sm leading-relaxed">
-              {isRtl 
-                ? "اربح 1 نقطة مقابل كل 100 دينار تنفقها. استخدم نقاطك في العجلة أو استبدلها بكوبونات خصم فورية." 
-                : "Gagnez 1 point pour chaque 100 DA dépensés. Utilisez-les dans la roue ou échangez-les contre des réductions."}
+              {isRtl
+                ? `اربح ${baseRate} نقطة مقابل كل 100 دينار (×${multiplier} حسب مستواك). استخدم نقاطك في العجلة أو استبدلها بكوبونات خصم فورية.`
+                : `Gagnez ${baseRate} point / 100 DA (×${multiplier} selon votre statut). Jouez ou échangez vos points !`}
             </p>
+
+            {/* Tier badge */}
+            {tier && (
+              <div className={`inline-flex items-center gap-2 mt-5 px-4 py-2 rounded-2xl bg-gradient-to-r ${tier.gradient} text-white font-black text-sm shadow-lg`}>
+                <Crown size={16} />
+                {isRtl ? tier.label.ar : tier.label.fr} ×{tier.multiplier}
+              </div>
+            )}
           </div>
 
-          <motion.div 
+          <motion.div
             initial={{ scale: 0.95 }} animate={{ scale: 1 }}
             className="bg-white/5 backdrop-blur-2xl border border-white/10 p-8 rounded-[2.5rem] text-center min-w-[240px] shadow-inner"
           >
             <Crown size={44} className="text-yellow-500 mx-auto mb-3 drop-shadow-[0_0_8px_rgba(234,179,8,0.4)]" />
             <span className="block text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-200 to-yellow-500 mb-1">
-              {points}
+              {profile?.points ?? 0}
             </span>
             <p className="text-white/40 font-black uppercase tracking-[0.2em] text-[10px]">Points de Fidélité</p>
           </motion.div>
         </div>
       </section>
 
+      {/* ====== EARN POINTS SECTION ====== */}
+      <section className="mb-12">
+        <div className="flex items-center gap-3 mb-8">
+          <Coins className="text-accent" size={28} />
+          <h3 className="text-2xl font-black text-slate-900 dark:text-white">
+            {isRtl ? "اكسب النقاط" : "Gagnez des points"}
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Daily Check-in */}
+          <div className="premium-glass p-6 rounded-[2.5rem] border border-white/60 dark:border-white/10 shadow-lg flex flex-col items-center text-center">
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 ${profile?.canCheckIn ? "bg-orange-100 dark:bg-orange-950/40 text-orange-500" : "bg-slate-100 dark:bg-slate-800 text-slate-400"}`}>
+              <Flame size={26} />
+            </div>
+            <h4 className="font-black text-slate-800 dark:text-white">{isRtl ? "التسجيل اليومي" : "Check-in quotidien"}</h4>
+            <p className="text-[10px] text-slate-400 font-bold mt-1 mb-3">
+              {isRtl
+                ? `+${settings?.config?.dailyCheckInBase ?? 10} نقطة كل يوم، +${settings?.config?.dailyCheckInStreakBonus ?? 50} عند إكمال 7 أيام متتالية 🔥`
+                : `+${settings?.config?.dailyCheckInBase ?? 10} pts/jour, +${settings?.config?.dailyCheckInStreakBonus ?? 50} pour 7 jours 🔥`}
+            </p>
+            {profile?.streak > 0 && (
+              <span className="text-[10px] font-black text-orange-500 bg-orange-100 dark:bg-orange-950/40 px-3 py-1 rounded-full mb-3">
+                {isRtl ? `سلسلة ${profile.streak} أيام` : `Streak : ${profile.streak} jours`}
+              </span>
+            )}
+            <button
+              onClick={handleCheckIn}
+              disabled={checkingIn || !profile?.canCheckIn}
+              className={`w-full py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                profile?.canCheckIn
+                  ? "bg-gradient-to-r from-orange-500 to-red-500 text-white hover:shadow-xl cursor-pointer"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
+              }`}
+            >
+              {checkingIn ? <Loader2 size={14} className="animate-spin" /> : <Flame size={14} />}
+              {profile?.canCheckIn
+                ? (isRtl ? "سجّل حضورك الآن" : "Pointer maintenant")
+                : (isRtl ? "تم اليوم ✓" : "Fait aujourd'hui ✓")}
+            </button>
+          </div>
+
+          {/* Birthday */}
+          <div className="premium-glass p-6 rounded-[2.5rem] border border-white/60 dark:border-white/10 shadow-lg flex flex-col items-center text-center">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 bg-pink-100 dark:bg-pink-950/40 text-pink-500">
+              <CalendarDays size={26} />
+            </div>
+            <h4 className="font-black text-slate-800 dark:text-white">{isRtl ? "هدية عيد الميلاد" : "Bonus anniversaire"}</h4>
+            <p className="text-[10px] text-slate-400 font-bold mt-1 mb-3">
+              {isRtl
+                ? `+${settings?.config?.birthdayBonus ?? 100} نقطة في عيد ميلادك كل سنة 🎂`
+                : `+${settings?.config?.birthdayBonus ?? 100} points chaque année 🎂`}
+            </p>
+
+            {!profile?.birthday ? (
+              <div className="flex gap-2 w-full">
+                <input
+                  type="date"
+                  value={birthdayInput}
+                  onChange={(e) => setBirthdayInput(e.target.value)}
+                  className="flex-1 min-w-0 p-2.5 rounded-xl bg-white/60 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[10px] font-bold outline-none focus:ring-1 focus:ring-accent"
+                />
+                <button
+                  onClick={saveBirthday}
+                  disabled={!birthdayInput}
+                  className="px-3 py-2 rounded-xl bg-pink-500 text-white font-black text-[10px] hover:bg-pink-600 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {isRtl ? "حفظ" : "OK"}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={claimBirthday}
+                disabled={claimingBirthday || profile.birthdayClaimYear === new Date().getFullYear()}
+                className={`w-full py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                  profile.birthdayClaimYear === new Date().getFullYear()
+                    ? "bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
+                    : "bg-gradient-to-r from-pink-500 to-rose-500 text-white hover:shadow-xl cursor-pointer"
+                }`}
+              >
+                {claimingBirthday ? <Loader2 size={14} className="animate-spin" /> : <Gift size={14} />}
+                {profile.birthdayClaimYear === new Date().getFullYear()
+                  ? (isRtl ? "حصلت عليها ✓" : "Réclamé ✓")
+                  : (isRtl ? "استلم هديتك" : "Réclamer")}
+              </button>
+            )}
+          </div>
+
+          {/* Referral */}
+          <div className="premium-glass p-6 rounded-[2.5rem] border border-white/60 dark:border-white/10 shadow-lg flex flex-col items-center text-center">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 bg-emerald-100 dark:bg-emerald-950/40 text-emerald-500">
+              <Share2 size={26} />
+            </div>
+            <h4 className="font-black text-slate-800 dark:text-white">{isRtl ? "دعوة الأصدقاء" : "Parrainage"}</h4>
+            <p className="text-[10px] text-slate-400 font-bold mt-1 mb-3">
+              {isRtl
+                ? `+${settings?.config?.referralBonus ?? 100} نقطة عندما ينجز صديقك أول طلب له 💌`
+                : `+${settings?.config?.referralBonus ?? 100} points quand un ami passe sa 1ère commande 💌`}
+            </p>
+            {profile?.referralCode ? (
+              <div className="flex gap-2 w-full">
+                <button
+                  onClick={() => copyText(profile.referralCode, isRtl ? "تم نسخ الكود!" : "Code copié !")}
+                  className="flex-1 p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-mono font-black text-sm tracking-widest hover:bg-emerald-200 cursor-pointer border border-emerald-200 dark:border-emerald-900"
+                >
+                  {profile.referralCode}
+                </button>
+                <button
+                  onClick={() => copyText(referralLink, isRtl ? "تم نسخ رابط الدعوة!" : "Lien copié !")}
+                  className="px-3 py-2 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 transition-colors cursor-pointer"
+                  title={isRtl ? "نسخ رابط الدعوة" : "Copier le lien"}
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
+            ) : (
+              <span className="text-[10px] font-bold text-slate-400">{isRtl ? "افتح حساباً لتحصل على كودك" : "Créez un compte pour votre code"}</span>
+            )}
+          </div>
+
+          {/* Review */}
+          <div className="premium-glass p-6 rounded-[2.5rem] border border-white/60 dark:border-white/10 shadow-lg flex flex-col items-center text-center">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 bg-purple-100 dark:bg-purple-950/40 text-purple-500">
+              <MessageSquare size={26} />
+            </div>
+            <h4 className="font-black text-slate-800 dark:text-white">{isRtl ? "كتابة مراجعة" : "Laisser un avis"}</h4>
+            <p className="text-[10px] text-slate-400 font-bold mt-1 mb-3">
+              {isRtl
+                ? `+${settings?.config?.reviewBonus ?? 50} نقطة عند تقييم طلبك بمراجعة موثقة ✍️`
+                : `+${settings?.config?.reviewBonus ?? 50} points pour un avis vérifié ✍️`}
+            </p>
+            <a
+              href="/orders"
+              className="w-full py-3 rounded-xl bg-purple-500 text-white font-black text-xs flex items-center justify-center gap-2 hover:bg-purple-600 hover:shadow-xl transition-all cursor-pointer"
+            >
+              <MessageSquare size={14} /> {isRtl ? "قيّم طلبك" : "Évaluer"}
+            </a>
+          </div>
+        </div>
+      </section>
+
       {/* Promocode successfully generated */}
       <AnimatePresence>
         {redeemedCode && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
             className="mb-12 p-8 bg-emerald-600 text-white rounded-[3rem] shadow-2xl flex flex-col items-center text-center relative overflow-hidden"
           >
@@ -437,10 +533,14 @@ export default function RewardsPage() {
             <CheckCircle size={48} className="mb-3" />
             <h3 className="text-2xl font-black mb-1">{isRtl ? "تم توليد الكود بنجاح!" : "Code généré avec succès !"}</h3>
             <p className="mb-5 text-sm opacity-90">{isRtl ? "انسخ الكود التالي واستخدمه في سلة المشتريات للحصول على الخصم:" : "Copiez ce code et utilisez-le dans votre panier :"}</p>
-            <div className="bg-white text-emerald-700 text-3xl font-black font-mono px-8 py-5 rounded-2xl tracking-[0.2em] shadow-xl border border-emerald-500/20 select-all cursor-pointer" title={isRtl ? "اضغط للنسخ" : "Cliquez pour copier"}>
+            <div
+              onClick={() => copyText(redeemedCode, isRtl ? "تم النسخ!" : "Copié !")}
+              className="bg-white text-emerald-700 text-3xl font-black font-mono px-8 py-5 rounded-2xl tracking-[0.2em] shadow-xl border border-emerald-500/20 select-all cursor-pointer"
+              title={isRtl ? "اضغط للنسخ" : "Cliquez pour copier"}
+            >
               {redeemedCode}
             </div>
-            <button onClick={() => setRedeemedCode(null)} className="mt-6 text-xs font-bold bg-white/20 hover:bg-white/30 px-5 py-2 rounded-full transition-all">
+            <button onClick={() => setRedeemedCode(null)} className="mt-6 text-xs font-bold bg-white/20 hover:bg-white/30 px-5 py-2 rounded-full transition-all cursor-pointer">
               {isRtl ? "حسناً" : "Fermer"}
             </button>
           </motion.div>
@@ -449,25 +549,21 @@ export default function RewardsPage() {
 
       {/* Grid: Spin Wheel + Tiers Progress */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12 items-start">
-        
         {/* Spin the Wheel Card */}
         <section className="lg:col-span-2 premium-glass p-8 rounded-[3rem] border border-white/60 dark:border-slate-800 shadow-xl flex flex-col items-center text-center">
           <div className="flex items-center gap-2 mb-6 w-full justify-center md:justify-start border-b border-slate-100 dark:border-slate-800 pb-4">
-             <Trophy className="text-yellow-500" size={24} />
-             <h3 className="font-black text-xl text-slate-800 dark:text-white">{isRtl ? "عجلة الحظ التفاعلية" : "La Roue de la Fortune"}</h3>
-             <span className="text-[10px] bg-purple-100 dark:bg-purple-950/40 text-purple-600 px-2.5 py-1 rounded-full font-bold ml-auto">
-               50 Pts / Spin
-             </span>
+            <Trophy className="text-yellow-500" size={24} />
+            <h3 className="font-black text-xl text-slate-800 dark:text-white">{isRtl ? "عجلة الحظ التفاعلية" : "La Roue de la Fortune"}</h3>
+            <span className="text-[10px] bg-purple-100 dark:bg-purple-950/40 text-purple-600 px-2.5 py-1 rounded-full font-bold ml-auto">
+              {spinCost} Pts / Spin
+            </span>
           </div>
 
           <div className="relative w-72 h-72 md:w-80 md:h-80 my-4 flex items-center justify-center">
-            {/* Pointer indicator */}
             <div className="absolute top-[-10px] z-20 w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[20px] border-t-red-500 drop-shadow-md"></div>
-            
-            {/* SVG Wheel */}
-            <div 
-              style={{ 
-                transform: `rotate(${wheelRotation}deg)`, 
+            <div
+              style={{
+                transform: `rotate(${wheelRotation}deg)`,
                 transition: isSpinning ? 'transform 5s cubic-bezier(0.15, 0.95, 0.3, 1)' : 'none'
               }}
               className="w-full h-full select-none"
@@ -478,34 +574,17 @@ export default function RewardsPage() {
                   const angle = 360 / SPIN_PRIZES.length;
                   const startAngle = idx * angle;
                   const endAngle = startAngle + angle;
-                  // SVG arc path math
                   const radStart = (startAngle - 90) * Math.PI / 180;
                   const radEnd = (endAngle - 90) * Math.PI / 180;
                   const x1 = 100 + 90 * Math.cos(radStart);
                   const y1 = 100 + 90 * Math.sin(radStart);
                   const x2 = 100 + 90 * Math.cos(radEnd);
                   const y2 = 100 + 90 * Math.sin(radEnd);
-                  
                   return (
                     <g key={idx}>
-                      <path 
-                        d={`M100,100 L${x1},${y1} A90,90 0 0,1 ${x2},${y2} Z`} 
-                        fill={prize.color} 
-                        stroke="#0f172a" 
-                        strokeWidth="0.7" 
-                      />
-                      {/* Text placement along the slice */}
+                      <path d={`M100,100 L${x1},${y1} A90,90 0 0,1 ${x2},${y2} Z`} fill={prize.color} stroke="#0f172a" strokeWidth="0.7" />
                       <g transform={`rotate(${startAngle + angle / 2} 100 100)`}>
-                        <text 
-                          x="100" 
-                          y="32" 
-                          fill="#ffffff" 
-                          fontSize="7" 
-                          fontWeight="900" 
-                          textAnchor="middle"
-                          transform="rotate(90 100 32)"
-                          className="font-sans tracking-tighter"
-                        >
+                        <text x="100" y="32" fill="#ffffff" fontSize="7" fontWeight="900" textAnchor="middle" transform="rotate(90 100 32)">
                           {isRtl ? prize.labelAr : prize.label}
                         </text>
                       </g>
@@ -516,15 +595,14 @@ export default function RewardsPage() {
               </svg>
             </div>
 
-            {/* Central Play button */}
-            <button 
+            <button
               onClick={handleSpinWheel}
-              disabled={isSpinning || points < 50}
+              disabled={isSpinning || profile.points < spinCost}
               className={`absolute z-10 w-14 h-14 rounded-full font-black text-xs shadow-xl active:scale-95 transition-all flex items-center justify-center border-2 border-white text-white ${
-                isSpinning 
-                  ? 'bg-slate-700 cursor-not-allowed' 
-                  : points >= 50 
-                    ? 'bg-purple-600 hover:bg-purple-500 hover:scale-105 cursor-pointer' 
+                isSpinning
+                  ? 'bg-slate-700 cursor-not-allowed'
+                  : profile.points >= spinCost
+                    ? 'bg-purple-600 hover:bg-purple-500 hover:scale-105 cursor-pointer'
                     : 'bg-slate-400 cursor-not-allowed'
               }`}
             >
@@ -533,8 +611,8 @@ export default function RewardsPage() {
           </div>
 
           <p className="text-xs text-slate-500 font-bold mt-4 max-w-sm">
-            {isRtl 
-              ? "جرّب حظك الآن بالفوز بجوائز مذهلة. كل محاولة تكلف 50 نقطة فقط." 
+            {isRtl
+              ? "جرّب حظك الآن بالفوز بجوائز مذهلة. كل محاولة تكلف 50 نقطة فقط."
               : "Tentez votre chance ! Chaque lancer consomme 50 points de fidélité."}
           </p>
         </section>
@@ -542,59 +620,74 @@ export default function RewardsPage() {
         {/* Tier progress card */}
         <section className="premium-glass p-8 rounded-[3rem] border border-white/60 dark:border-slate-800 shadow-xl flex flex-col h-full">
           <div className="flex items-center gap-2 mb-6 border-b border-slate-100 dark:border-slate-800 pb-4">
-             <Crown className="text-yellow-500" size={24} />
-             <h3 className="font-black text-xl text-slate-800 dark:text-white">{isRtl ? "مستويات العضوية ومزاياها" : "Statut et Avantages"}</h3>
+            <Crown className="text-yellow-500" size={24} />
+            <h3 className="font-black text-xl text-slate-800 dark:text-white">{isRtl ? "مستويات العضوية ومزاياها" : "Statut et Avantages"}</h3>
           </div>
 
           <div className="space-y-6 flex-1">
             <div className="bg-slate-50 dark:bg-slate-900/60 p-5 rounded-2xl border border-slate-100 dark:border-slate-800">
               <span className="text-[9px] font-black uppercase text-slate-400 block mb-1">{isRtl ? "المستوى الحالي" : "Tier Actuel"}</span>
-              <span className="text-2xl font-black text-slate-800 dark:text-white">{tierProgress.currentTier}</span>
+              <span className={`inline-flex items-center gap-2 text-2xl font-black px-4 py-1.5 rounded-2xl bg-gradient-to-r ${tier?.gradient} text-white`}>
+                <Crown size={18} /> {tierProgress.current} ×{tier?.multiplier ?? 1}
+              </span>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs font-bold text-slate-500">
-                <span>{isRtl ? `التقدم للمستوى القادم: ${tierProgress.nextTier}` : `Vers le niveau : ${tierProgress.nextTier}`}</span>
-                <span>{totalSpent.toLocaleString()} / {tierProgress.required.toLocaleString()} DA</span>
+            {tierProgress.next ? (
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs font-bold text-slate-500">
+                  <span>{isRtl ? `التقدم نحو: ${tierProgress.next}` : `Vers le niveau : ${tierProgress.next}`}</span>
+                  <span>{isRtl ? `${tierProgress.remaining.toLocaleString()} دج متبقية` : `${tierProgress.remaining.toLocaleString()} DA restants`}</span>
+                </div>
+                <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${tierProgress.progress}%` }}
+                    className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full"
+                    transition={{ duration: 1 }}
+                  />
+                </div>
               </div>
-              
-              <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700">
-                <motion.div 
-                  initial={{ width: 0 }} 
-                  animate={{ width: `${tierProgress.progress}%` }} 
-                  className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full"
-                  transition={{ duration: 1 }}
-                />
+            ) : (
+              <div className="p-4 rounded-2xl bg-yellow-100 dark:bg-yellow-950/30 text-yellow-700 dark:text-yellow-400 text-xs font-black text-center">
+                {isRtl ? "🏆 وصلت إلى أعلى مستوى! أنت نجمنا" : "🏆 Vous êtes au niveau maximum !"}
               </div>
+            )}
+
+            {/* Tier ladder */}
+            <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">{isRtl ? "سلم المستويات:" : "Échelle des statuts :"}</span>
+              {LOYALTY_TIERS.map((t) => {
+                const Icon = TIER_ICONS[t.id] || Crown;
+                const isCurrent = t.id === tier?.id;
+                const reached = (profile?.lifetimeSpending || 0) >= t.minSpending;
+                return (
+                  <div key={t.id} className={`flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-bold transition-colors ${isCurrent ? "border-accent/40 bg-accent/5" : "border-slate-100 dark:border-slate-800"}`}>
+                    <span className={`flex items-center gap-2 ${reached ? "text-slate-800 dark:text-white" : "text-slate-400"}`}>
+                      <Icon size={14} className={isCurrent ? "text-accent" : reached ? "text-yellow-500" : "text-slate-400"} />
+                      {isRtl ? t.label.ar : t.label.fr}
+                      <span className="text-[9px] text-slate-400">×{t.multiplier}</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">{t.minSpending.toLocaleString()} DA</span>
+                  </div>
+                );
+              })}
             </div>
 
-            {/* List of perks */}
-            <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">{isRtl ? "مزايا حسابك الفعّالة:" : "Vos avantages activés :"}</span>
-              <ul className="space-y-2 text-xs font-bold text-slate-600 dark:text-slate-350">
-                <li className="flex items-center gap-2">
+            {/* Perks */}
+            <div className="space-y-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">{isRtl ? "مزايا مستواك:" : "Vos avantages :"}</span>
+              {tier?.perks && (isRtl ? tier.perks.ar : tier.perks.fr).map((perk: string, i: number) => (
+                <li key={i} className="flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300 list-none">
                   <CheckCircle size={14} className="text-emerald-500 shrink-0" />
-                  <span>{isRtl ? "ربح 1 نقطة لكل 100 دج إنفاق" : "1 point pour chaque 100 DA"}</span>
+                  {perk}
                 </li>
-                {totalSpent >= 20000 && (
-                  <li className="flex items-center gap-2">
-                    <CheckCircle size={14} className="text-emerald-500 shrink-0" />
-                    <span>{isRtl ? "عضوية الفئة الفضية Silver" : "Avantage Tier Silver débloqué"}</span>
-                  </li>
-                )}
-                {totalSpent >= 50000 && (
-                  <li className="flex items-center gap-2">
-                    <CheckCircle size={14} className="text-emerald-500 shrink-0" />
-                    <span>{isRtl ? "خصومات خاصة بأعضاء VIP وأولوية في معالجة الطلبات" : "VIP discounts exclusifs & priorité de traitement"}</span>
-                  </li>
-                )}
-              </ul>
+              ))}
             </div>
           </div>
         </section>
       </div>
 
-      {/* Point Exchange (Standard coupons list) */}
+      {/* Point Exchange (coupons) */}
       <section className="mb-12">
         <div className="flex items-center gap-3 mb-8">
           <Gift className="text-accent" size={28} />
@@ -604,44 +697,45 @@ export default function RewardsPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {REWARDS.map((reward) => {
-            const canRedeem = points >= reward.points;
+          {rewardsCatalog.map((reward: any) => {
+            const canRedeem = profile?.points >= reward.points;
             const isProcessing = redeeming === reward.id;
+            const Icon = reward.icon === "Ticket" ? Ticket : reward.icon === "Zap" ? Zap : reward.icon === "Trophy" ? Trophy : reward.icon === "Gem" ? Gem : Gift;
 
             return (
-              <motion.div 
+              <motion.div
                 key={reward.id}
                 whileHover={canRedeem ? { y: -6 } : {}}
                 className={`premium-glass p-8 rounded-[2.5rem] border relative overflow-hidden flex flex-col h-full transition-all duration-300 ${
-                  canRedeem 
-                    ? 'border-white/60 dark:border-white/10 shadow-lg' 
+                  canRedeem
+                    ? 'border-white/60 dark:border-white/10 shadow-lg'
                     : 'opacity-60 grayscale-[0.3] border-slate-200 dark:border-slate-800'
                 }`}
               >
-                <div className={`absolute top-0 left-0 w-full h-2 bg-gradient-to-r ${reward.color.replace('/20', '')}`}></div>
-                
-                <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${reward.color} flex items-center justify-center mb-6`}>
-                  {reward.icon}
+                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-yellow-400 to-purple-500"></div>
+
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-yellow-500/20 to-purple-500/20 flex items-center justify-center mb-6">
+                  <Icon className="text-accent" size={32} />
                 </div>
 
                 <h4 className="font-black text-xl text-slate-800 dark:text-white mb-2 leading-tight">
-                  {isRtl ? reward.titleAr : reward.title}
+                  {isRtl ? reward.title?.ar : reward.title?.fr}
                 </h4>
-                
+
                 <div className="mt-auto pt-6">
                   <div className="flex items-center justify-between mb-6">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Coût d'échange</span>
-                    <span className={`font-black text-xl ${canRedeem ? 'text-yellow-500' : 'text-slate-450'}`}>
+                    <span className={`font-black text-xl ${canRedeem ? 'text-yellow-500' : 'text-slate-400'}`}>
                       {reward.points} <span className="text-xs">Pts</span>
                     </span>
                   </div>
 
-                  <button 
+                  <button
                     onClick={() => handleRedeem(reward)}
                     disabled={!canRedeem || redeeming !== null}
                     className={`w-full py-4 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all active:scale-95 ${
-                      canRedeem 
-                        ? 'bg-slate-900 dark:bg-accent text-white hover:shadow-xl cursor-pointer' 
+                      canRedeem
+                        ? 'bg-slate-900 dark:bg-accent text-white hover:shadow-xl cursor-pointer'
                         : 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-200 dark:border-slate-700'
                     }`}
                   >
@@ -663,35 +757,29 @@ export default function RewardsPage() {
       {/* Points History timeline */}
       <section className="premium-glass p-8 rounded-[3rem] border border-white/60 dark:border-slate-800 shadow-xl max-w-4xl mx-auto">
         <div className="flex items-center gap-2 mb-8 border-b border-slate-100 dark:border-slate-800 pb-4">
-           <History className="text-purple-500" size={24} />
-           <h3 className="font-black text-xl text-slate-800 dark:text-white">{isRtl ? "سجل معاملات النقاط" : "Historique des points"}</h3>
+          <History className="text-purple-500" size={24} />
+          <h3 className="font-black text-xl text-slate-800 dark:text-white">{isRtl ? "سجل معاملات النقاط" : "Historique des points"}</h3>
         </div>
 
-        {transactions.length > 0 ? (
+        {profile?.transactions?.length > 0 ? (
           <div className="relative border-l border-slate-200 dark:border-slate-800 ml-4 pl-6 space-y-8">
-            {transactions.map((tx) => {
-              const isEarn = tx.type === 'earned' || tx.type === 'won';
+            {profile.transactions.map((tx: any) => {
+              const isEarn = (tx.signed ?? 0) >= 0;
               return (
                 <div key={tx.id} className="relative">
-                  {/* Circle dot on timeline */}
-                  <span className={`absolute left-[-31px] top-1.5 w-4.5 h-4.5 rounded-full border-4 border-white dark:border-slate-900 shadow-md ${
-                    isEarn ? 'bg-emerald-500' : 'bg-red-500'
-                  }`}></span>
-                  
+                  <span className={`absolute left-[-31px] top-1.5 w-4.5 h-4.5 rounded-full border-4 border-white dark:border-slate-900 shadow-md ${isEarn ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm">
                         {isRtl ? tx.titleAr : tx.title}
                       </h4>
                       <span className="text-[10px] text-slate-400 font-bold block mt-1">
-                        {tx.date.toLocaleDateString(language === 'ar' ? 'ar-DZ' : 'fr-FR', {
+                        {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString(language === 'ar' ? 'ar-DZ' : 'fr-FR', {
                           year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                        })}
+                        }) : ""}
                       </span>
                     </div>
-                    <span className={`text-base font-black px-3 py-1 rounded-xl self-start sm:self-center ${
-                      isEarn ? 'bg-emerald-100/60 dark:bg-emerald-950/20 text-emerald-600' : 'bg-red-100/60 dark:bg-red-950/20 text-red-500'
-                    }`}>
+                    <span className={`text-base font-black px-3 py-1 rounded-xl self-start sm:self-center ${isEarn ? 'bg-emerald-100/60 dark:bg-emerald-950/20 text-emerald-600' : 'bg-red-100/60 dark:bg-red-950/20 text-red-500'}`}>
                       {isEarn ? `+${tx.points}` : `-${tx.points}`} Pts
                     </span>
                   </div>
@@ -707,14 +795,14 @@ export default function RewardsPage() {
         )}
       </section>
 
-      {/* Spin Wheel Prize announcement modal overlay */}
+      {/* Spin Wheel Prize announcement modal */}
       <AnimatePresence>
         {showPrizeModal && prizeResult && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
               className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 rounded-[3.5rem] text-center max-w-sm w-full shadow-2xl relative overflow-hidden"
             >
@@ -727,16 +815,16 @@ export default function RewardsPage() {
                 {isRtl ? prizeResult.labelAr : prizeResult.label}
               </p>
               <p className="text-xs text-slate-500 mb-6 font-bold leading-relaxed">
-                {prizeResult.type === 'points' 
+                {prizeResult.type === 'points'
                   ? (isRtl ? "تمت إضافة النقاط مباشرة إلى رصيدك." : "Les points ont été ajoutés à votre compte.")
-                  : (prizeResult.type !== 'none' 
+                  : (prizeResult.type !== 'none'
                     ? (isRtl ? "تم توليد كود خصم خاص بك، انظر أعلى الصفحة لنسخه." : "Code coupon généré avec succès en haut.")
                     : (isRtl ? "حظ أفضل في المرة القادمة." : "Plus de chance au prochain tour !"))
                 }
               </p>
-              <button 
+              <button
                 onClick={() => setShowPrizeModal(false)}
-                className="w-full bg-slate-900 dark:bg-accent text-white py-3.5 rounded-2xl font-black text-sm active:scale-95 transition-all shadow-md"
+                className="w-full bg-slate-900 dark:bg-accent text-white py-3.5 rounded-2xl font-black text-sm active:scale-95 transition-all shadow-md cursor-pointer"
               >
                 {isRtl ? "متابعة" : "Continuer"}
               </button>
@@ -745,6 +833,11 @@ export default function RewardsPage() {
         )}
       </AnimatePresence>
 
+      {/* Help hint */}
+      <div className="mt-10 flex items-center justify-center gap-2 text-xs text-slate-400 font-bold">
+        <HelpCircle size={14} />
+        {isRtl ? "النقاط تُمنح تلقائياً عند إتمام طلبك (الحالة: تم التسليم)" : "Les points sont crédités automatiquement à la fin de votre commande (Terminé)"}
+      </div>
     </div>
   );
 }

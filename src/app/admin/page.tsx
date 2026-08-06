@@ -11,7 +11,7 @@ import {
 import { 
   ShoppingBag, Settings, LayoutDashboard, Package, 
   ShieldCheck, Download, Tag, ScanLine, X, CheckCircle, Sparkles, Megaphone,
-  Printer, FileImage, BarChart3, HandCoins
+  Printer, FileImage, BarChart3, HandCoins, Crown
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -35,6 +35,7 @@ import ProductionDashboard from "@/components/admin/ProductionDashboard";
 import BATWorkflowPanel from "@/components/admin/BATWorkflowPanel";
 import AdminAnalyticsDashboard from "@/components/AdminAnalyticsDashboard";
 import AdminDeposits from "@/components/admin/AdminDeposits";
+import LoyaltyDashboard from "@/components/admin/LoyaltyDashboard";
 
 
 export default function AdminPage() {
@@ -164,6 +165,20 @@ export default function AdminPage() {
 
       await updateDoc(doc(db, "orders", orderId), { status: newStatus, statusHistory });
       toast.success(`Statut mis à jour : ${newStatus}`);
+
+      // منح نقاط الولاء تلقائياً عند إتمام الطلب (Terminé) — idempotent وآمن
+      if (newStatus === "Terminé" && order?.customerUserId && order.customerUserId !== "guest") {
+        try {
+          const idToken = await user!.getIdToken();
+          fetch("/api/loyalty/award", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+            body: JSON.stringify({ orderId }),
+          }).catch(() => {});
+        } catch (awardErr) {
+          console.error("Loyalty award dispatch failed:", awardErr);
+        }
+      }
 
       // إشعار فوري للزبون بتغيير الحالة (واتساب + بريد)
       try {
@@ -390,6 +405,7 @@ export default function AdminPage() {
           { id: 'promo', icon: Tag, label: 'Promo' },
           { id: 'production', icon: Printer, label: isRtl ? 'الإنتاج' : 'Production' },
           { id: 'bat', icon: FileImage, label: isRtl ? 'BAT' : 'BAT' },
+          { id: 'loyalty', icon: Crown, label: isRtl ? 'الولاء' : 'Fidélité' },
           { id: 'settings', icon: Settings, label: 'Site' }
         ].map(t => (
           <button 
@@ -611,6 +627,13 @@ export default function AdminPage() {
               updateOrderProof={updateOrderProof}
               updateOrderStatus={updateOrderStatus}
             />
+          </motion.div>
+        )}
+
+        {/* ==================== LOYALTY TAB ==================== */}
+        {tab === 'loyalty' && (
+          <motion.div key="loyalty" initial={{opacity:0, y:15}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-15}}>
+            <LoyaltyDashboard isRtl={isRtl} />
           </motion.div>
         )}
 

@@ -4,7 +4,7 @@
 // CHANGELOG يعرض الميزات للعملاء بالعربية والفرنسية.
 // ---------------------------------------------------------------------------
 
-export const APP_VERSION = 'v5.1';
+export const APP_VERSION = 'v6.0';
 
 export interface ChangelogEntry {
   version: string;
@@ -12,6 +12,33 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'v6.0',
+    features: {
+      ar: [
+        '🎖️ برنامج الولاء والنقاط: اربح نقاطاً مع كل طلب مكتمل',
+        '🏅 مستويات العضوية: برونز، فضي، ذهبي، بلاتيني، ألماس مع مضاعفات نقاط ×1 إلى ×3',
+        '🎰 عجلة الحظ: العب بجائزة يومياً (خصم، نقاط، قسائم)',
+        '📅 تسجيل يومي + هدية عيد ميلاد سنوية',
+        '🎁 استبدال النقاط بكوبونات خصم فورية (VIP...)',
+        '✍️ مكافأة نقاط على المراجعات الموثقة',
+        '💌 برنامج دعوة الأصدقاء (كود إحالة خاص بك)',
+        '🛡️ لوحة أدمن متكاملة لإدارة النقاط والمستويات',
+        '🪙 شارة النقاط في الشريط العلوي وتقدير في السلة',
+      ],
+      fr: [
+        '🎖️ Programme de fidélité : gagnez des points à chaque commande terminée',
+        '🏅 Statuts membres : Bronze, Argent, Or, Platine, Diamant (multiplicateurs ×1 à ×3)',
+        '🎰 Roue de la fortune : jouez chaque jour (remise, points, bons)',
+        '📅 Check-in quotidien + bonus d\u2019anniversaire annuel',
+        '🎁 Échangez vos points contre des codes promo immédiats (VIP...)',
+        '✍️ Points bonus pour les avis vérifiés',
+        '💌 Parrainage : invitez vos amis avec votre code de référence',
+        '🛡️ Tableau de bord admin complet pour la gestion des points',
+        '🪙 Badge de points dans la barre + estimation dans le panier',
+      ],
+    },
+  },
   {
     version: 'v5.1',
     features: {

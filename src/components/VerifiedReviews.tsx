@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { getRecentReviewsAction, submitReviewAction } from "@/app/actions/review-actions";
+import { useAuth } from "@/context/AuthContext";
 import { useAppStore } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
 import { Star, ShieldCheck, User, MessageSquare, Loader2, Send } from "lucide-react";
@@ -13,6 +14,7 @@ interface VerifiedReviewsProps {
 }
 
 export default function VerifiedReviews({ userId }: VerifiedReviewsProps) {
+  const { user, isLoggedIn } = useAuth();
   const { language } = useAppStore();
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,6 +75,28 @@ export default function VerifiedReviews({ userId }: VerifiedReviewsProps) {
       setRating(5);
       // Reload reviews
       loadReviews();
+
+      // منح مكافأة الولاء للمراجعة الموثقة (مرة واحدة لكل طلب)
+      if (res.isVerified && orderId.trim() && isLoggedIn && user) {
+        try {
+          const token = await user.getIdToken();
+          const bonusRes = await fetch("/api/loyalty/review-bonus", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ orderId: orderId.trim() }),
+          });
+          const bonus = await bonusRes.json();
+          if (bonus.success && bonus.pointsAwarded > 0) {
+            toast.success(
+              isRtl ? `+${bonus.pointsAwarded} نقطة ولاء مكافأة لمراجعتك! ✨` : `+${bonus.pointsAwarded} points de fidélité pour votre avis ! ✨`
+            );
+          } else if (bonus.alreadyClaimed) {
+            toast.info(isRtl ? "استلمت مكافأة المراجعة لهذا الطلب مسبقاً" : "Bonus déjà reçu pour cette commande");
+          }
+        } catch {
+          // إخفاء أخطاء مكافأة الولاء — لا تعطّل نشر المراجعة
+        }
+      }
     } else {
       toast.error(res.error || "Une erreur est survenue.");
     }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyIdToken, bearerToken } from "@/lib/auth-verify";
 import { fsGet, fsPatch, fsCreate, fsQuery } from "@/lib/firestore-rest";
 import { ORDER_STATUSES, buildStatusHistory, getStepIndex } from "@/lib/order-status";
+import { awardPointsForOrder } from "@/lib/loyalty-award";
 
 // Same admin list the Firestore rules use (see firestore.rules isAdmin()).
 const RULES_ADMIN_EMAIL = "attouabdelkarim2@gmail.com";
@@ -110,6 +111,15 @@ export async function POST(request: NextRequest) {
       }).catch(() => {});
     } catch (notifyErr) {
       console.error("[production] Notify dispatch failed:", (notifyErr as Error)?.message);
+    }
+
+    // منح نقاط الولاء تلقائياً عند إتمام الطلب (Terminé) — idempotent وآمن
+    if (nextStage === "Terminé" && order.customerUserId && order.customerUserId !== "guest") {
+      try {
+        await awardPointsForOrder(admin.uid, orderId);
+      } catch (loyaltyErr) {
+        console.error("[production] Loyalty award failed:", (loyaltyErr as Error)?.message);
+      }
     }
 
     return NextResponse.json({

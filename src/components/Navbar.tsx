@@ -4,7 +4,7 @@ import Link from "next/link";
 import { 
   ShoppingCart, Menu, User, Globe, 
   LogOut, ShieldCheck, X, ChevronDown, Bell, Sparkles,
-  Heart, Shield, FileCheck // الأيقونات الجديدة
+  Heart, Shield, FileCheck, Coins // الأيقونات الجديدة
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useEffect, useState } from "react";
@@ -27,6 +27,7 @@ export default function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [points, setPoints] = useState<number | null>(null);
   
   const router = useRouter();
   const { notifications, unreadCount, loading: loadingNotifications } = useNotifications({
@@ -74,6 +75,29 @@ export default function Navbar() {
     };
     syncUserProfile();
   }, [isLoggedIn, user]);
+
+  // جلب رصيد نقاط الولاء لعرضه في الشريط العلوي
+  useEffect(() => {
+    if (!isLoggedIn || !user) {
+      setPoints(null);
+      return;
+    }
+    let cancelled = false;
+    const loadPoints = async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch("/api/loyalty/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!cancelled && data.success) setPoints(data.profile?.points ?? 0);
+      } catch {
+        // تجاهل أخطاء جلب النقاط
+      }
+    };
+    loadPoints();
+    return () => { cancelled = true; };
+  }, [isLoggedIn, user, pathname]);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLAnchorElement | HTMLButtonElement>) => {
     const el = e.currentTarget;
@@ -206,6 +230,18 @@ export default function Navbar() {
                 </span>
               )}
             </Link>
+
+            {/* شارة نقاط الولاء */}
+            {isLoggedIn && points !== null && (
+              <Link
+                href="/rewards"
+                className="hidden sm:flex items-center gap-1.5 pl-2 pr-3 min-h-[44px] rounded-xl bg-yellow-500/15 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/25 hover:bg-yellow-500/25 transition-colors font-black text-xs"
+                title={isRtl ? "رصيد نقاط الولاء" : "Points de fidélité"}
+              >
+                <Coins size={15} />
+                {points.toLocaleString("fr-FR")}
+              </Link>
+            )}
 
             {/* سلة التسوق الذكية */}
             <Link href="/cart" className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 transition-colors relative">

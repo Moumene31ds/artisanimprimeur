@@ -3,10 +3,12 @@
 import { useAppStore } from "@/lib/store";
 import { calculateTierPrice } from "@/lib/pricing";
 import { TRANSLATIONS } from "@/lib/translations";
+import { getPointsForAmount } from "@/lib/loyalty";
+import { useAuth } from "@/context/AuthContext";
 import { 
   Trash2, Plus, Minus, ShoppingBag, CheckCircle, 
   UploadCloud, FileCheck, Loader2, ArrowRight, Tag, MapPin, Heart, AlertTriangle, Sparkles, Wand2, ShieldCheck, HelpCircle,
-  Banknote
+  Banknote, Coins
 } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -36,6 +38,32 @@ export default function CartPage() {
 
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
+  const { user: authUser } = useAuth();
+
+  // --- مضاعف نقاط الولاء (حسب مستوى العضوية) ---
+  const [loyaltyMultiplier, setLoyaltyMultiplier] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!authUser) {
+      setLoyaltyMultiplier(null);
+      return;
+    }
+    let cancelled = false;
+    const loadTier = async () => {
+      try {
+        const token = await authUser.getIdToken();
+        const res = await fetch("/api/loyalty/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!cancelled && data.success) setLoyaltyMultiplier(data.profile?.tier?.multiplier ?? 1);
+      } catch {
+        // تجاهل — تبقى القيمة الافتراضية 1x
+      }
+    };
+    loadTier();
+    return () => { cancelled = true; };
+  }, [authUser]);
   
   // --- حالات الرفع السحابي (Cloudinary) ---
   const [fileStatus, setFileStatus] = useState<'idle' | 'uploading' | 'good' | 'error'>('idle');
@@ -1022,6 +1050,25 @@ export default function CartPage() {
                   <span className="text-4xl font-black text-accent">{finalTotal} <span className="text-lg text-slate-500">{t.currency}</span></span>
                 </div>
               </div>
+
+              {/* تقدير نقاط الولاء المكتسبة */}
+              {authUser && loyaltyMultiplier !== null && finalTotal > 0 && (
+                <div className="mb-6 -mt-2 p-4 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800/50 rounded-2xl flex items-center gap-3">
+                  <span className="w-10 h-10 rounded-xl bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 flex items-center justify-center shrink-0">
+                    <Coins size={20} />
+                  </span>
+                  <div className="flex-1 text-xs font-bold text-slate-700 dark:text-slate-300">
+                    <p className="font-black text-yellow-600 dark:text-yellow-400">
+                      +{getPointsForAmount(finalTotal, loyaltyMultiplier)} {isRtl ? "نقطة ولاء" : "points fidélité"}
+                    </p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      {isRtl
+                        ? `ستُضاف إلى رصيدك تلقائياً عند إتمام الطلب (×${loyaltyMultiplier} حسب مستواك)`
+                        : `Crédités automatiquement à la fin de la commande (×${loyaltyMultiplier} selon votre statut)`}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* نظام التحقق الأمني التفاعلي */}
               {uiConfig.storeOpen !== false && uiConfig.captchaMode !== "disabled" && (

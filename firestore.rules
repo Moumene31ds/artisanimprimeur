@@ -92,12 +92,15 @@ service cloud.firestore {
                         (request.resource.data.discountType == 'percent' && (
                           request.resource.data.discountValue == 10 || 
                           request.resource.data.discountValue == 15 || 
+                          request.resource.data.discountValue == 20 || 
                           (request.resource.data.discountValue == 0 && request.resource.data.isFreeShipping == true)
                         )) ||
                         (request.resource.data.discountType == 'fixed' && (
                           request.resource.data.discountValue == 500 || 
                           request.resource.data.discountValue == 600 || 
-                          request.resource.data.discountValue == 1000
+                          request.resource.data.discountValue == 700 || 
+                          request.resource.data.discountValue == 1000 || 
+                          request.resource.data.discountValue == 2500
                         ))
                       )
                     );
@@ -120,13 +123,45 @@ service cloud.firestore {
                         (request.resource.data.userId == request.auth.uid && (
                           (request.resource.data.points < 0 && (request.resource.data.type == 'redeemed' || request.resource.data.type == 'spin_cost')) ||
                           (request.resource.data.points == 0 && (request.resource.data.type == 'won' || request.resource.data.type == 'spin_cost')) ||
-                          (request.resource.data.type == 'won' && (request.resource.data.points == 20 || request.resource.data.points == 50 || request.resource.data.points == 100))
+                          (request.resource.data.type == 'won' && (request.resource.data.points == 20 || request.resource.data.points == 50 || request.resource.data.points == 100)) ||
+                          (request.resource.data.type == 'daily_checkin' && request.resource.data.points > 0) ||
+                          (request.resource.data.type == 'birthday' && request.resource.data.points > 0) ||
+                          (request.resource.data.type == 'review' && request.resource.data.points > 0)
                         )) ||
                         (request.resource.data.points == 50 && request.resource.data.type == 'won')
                       )
                     );
       
       // لا يُسمح بتعديل أو حذف معاملات النقاط المسجلة إطلاقاً لضمان سلامة ونزاهة نظام الولاء ومنع التزوير
+      allow update, delete: if isAdmin();
+    }
+
+    // 5ب. جائزة الطلب المكتمل (Loyalty Awards) — تُكتب من الخادم بحساب المشرف فقط
+    match /loyaltyAwards/{awardId} {
+      // الزبون يرى جوائزه الخاصة (تدخل في حساب رصيد نقاطه)، والمشرف يرى الكل
+      allow read, list: if isAdmin() || (isLoggedIn() && resource.data.userId == request.auth.uid);
+      // الإنشاء والتعديل والحذف حصرية للمشرف
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 5ج. سجل التسجيل اليومي (Loyalty Check-ins)
+    match /loyalty_checkins/{uid} {
+      // الزبون يقرأ ويسجّل حضور يومه بنفسه فقط، والمشرف يدير الكل
+      allow read, list: if isAdmin() || isOwner(uid);
+      allow create, update: if isAdmin() || isOwner(uid);
+      allow delete: if isAdmin();
+    }
+
+    // 5د. مكافآت المراجعات الموثقة (Review Bonuses) — تحت حساب المستخدم
+    match /users/{userId}/reviewBonuses/{orderId} {
+      // الزبون يقرأ مكافآته، والمشرف يقرأ الكل
+      allow read, list: if isAdmin() || isOwner(userId);
+      // إنشاء واحد لكل طلب، بشرط أن تكون المكافأة مسجلة باسم نفس الزبون وبمعرف الطلب نفسه
+      allow create: if isAdmin() || (
+                      isLoggedIn() &&
+                      isOwner(userId) &&
+                      request.resource.data.orderId == orderId
+                    );
       allow update, delete: if isAdmin();
     }
 
@@ -146,8 +181,9 @@ service cloud.firestore {
 
     // 7. إعدادات المنصة (Settings)
     match /settings/{docId} {
-      // السماح للجميع بقراءة وثيقة إعدادات الواجهة (settings/ui) لمعرفة حالة الصيانة وتكاليف الشحن والقيود
-      allow get: if docId == 'ui';
+      // السماح للجميع بقراءة وثيقة إعدادات الواجهة (settings/ui) وإعدادات الولاء (settings/loyalty)
+      // ليتسنى عرض تكلفة العجلة والجوائز والنقاط في واجهات الزبائن ولوحة المكافآت
+      allow get: if docId == 'ui' || docId == 'loyalty';
       // الإضافة والتعديل والسرد محصور بالمشرف
       allow list, write: if isAdmin();
     }
