@@ -5,7 +5,7 @@ import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { customerName, phone, wilaya, product, quantity, notes, deliveryType = 'delivery' } = body;
+    const { customerName, phone, wilaya, product, quantity, notes } = body;
 
     if (!customerName || !phone || !product || !quantity) {
       return NextResponse.json({ error: 'Missing required order fields' }, { status: 400 });
@@ -16,8 +16,8 @@ export async function POST(req: Request) {
       customerName,
       phone,
       wilaya: wilaya || 'Non spécifiée',
-      deliveryType,
-      shippingMethod: 'Livraison standard',
+      deliveryType: 'desk',
+      shippingMethod: 'collect',
       designReadyStatus: 'needs_review',
       notes: notes || 'Commande créée via le chat bot',
       items: [{ name: product, quantity, price: 0 }],
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
       deliveryFee: 0,
       total: 0,
       status: 'En attente',
-      paymentMethod: 'Paiement à la livraison',
+      paymentMethod: 'Paiement à la réception',
       paymentStatus: 'unpaid',
       createdAt: serverTimestamp(),
     });

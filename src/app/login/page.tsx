@@ -573,8 +573,8 @@ export default function LoginPage() {
             className="text-slate-400 text-base font-medium leading-relaxed"
           >
             {isRtl 
-              ? "انضم إلى أكثر من 15,000 عميل وشركة في الجزائر يثقون في منصة الحرفي لتحويل تصاميمهم إلى مطبوعات فاخرة وتوصيلها حتى الباب." 
-              : "Rejoignez plus de 15 000 clients et entreprises en Algérie qui font confiance à L'Artisan pour imprimer et livrer leurs projets."}
+              ? "انضم إلى أكثر من 15,000 عميل وشركة في الجزائر يثقون في منصة الحرفي لتحويل تصاميمهم إلى مطبوعات فاخرة بأعلى جودة." 
+              : "Rejoignez plus de 15 000 clients et entreprises en Algérie qui font confiance à L'Artisan pour imprimer leurs projets en haute qualité."}
           </motion.p>
 
           {/* Interactive Feature Cards */}

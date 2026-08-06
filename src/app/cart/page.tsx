@@ -6,7 +6,7 @@ import { TRANSLATIONS } from "@/lib/translations";
 import { 
   Trash2, Plus, Minus, ShoppingBag, CheckCircle, 
   UploadCloud, FileCheck, Loader2, ArrowRight, Tag, MapPin, Heart, AlertTriangle, Sparkles, Wand2, ShieldCheck, HelpCircle,
-  Truck, Banknote
+  Banknote
 } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -16,7 +16,7 @@ import { collection, addDoc, serverTimestamp, doc, getDoc, updateDoc } from "fir
 import { toast } from "sonner";
 import Link from "next/link";
 import { GlobalLoader } from "@/components/GlobalLoader";
-import { WILAYAS, SHIPPING_RATES } from "@/lib/constants";
+import { WILAYAS } from "@/lib/constants";
 import SecurityVerification from "@/components/SecurityVerification";
 import SmartCartUpsell from "@/components/SmartCartUpsell";
 import PullToRefresh from "@/components/PullToRefresh";
@@ -54,9 +54,7 @@ export default function CartPage() {
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
   const [appliedPromo, setAppliedPromo] = useState<any | null>(null);
 
-  // --- نوع التوصيل وحالة جاهزية التصميم ---
-  const [deliveryType, setDeliveryType] = useState<'domicile' | 'desk'>('domicile');
-  const [shippingMethod, setShippingMethod] = useState<'national' | 'local_express' | 'collect'>('national');
+  // --- حالة جاهزية التصميم ---
   const [designReady, setDesignReady] = useState<boolean>(true);
 
   // --- بيانات العميل ---
@@ -120,38 +118,6 @@ export default function CartPage() {
   }, 0);
   
   let deliveryFee = 0;
-  if (subtotal > 0) {
-    const isFreeShipping = uiConfig.freeShippingThreshold > 0 && subtotal >= uiConfig.freeShippingThreshold;
-    if (isFreeShipping && shippingMethod !== 'collect') {
-      deliveryFee = 0;
-    } else if (shippingMethod === 'collect') {
-      deliveryFee = 0;
-    } else if (shippingMethod === 'local_express') {
-      if (formData.wilaya) {
-        const code = formData.wilaya.slice(0, 2);
-        if (code === "31") {
-          deliveryFee = uiConfig.shippingLocalOran || 150;
-        } else if (["22", "27", "29", "46"].includes(code)) {
-          deliveryFee = uiConfig.shippingLocalBordering || 350;
-        } else {
-          deliveryFee = SHIPPING_RATES[code] || uiConfig.shippingNational || 500;
-        }
-      } else {
-        deliveryFee = uiConfig.shippingLocalOran || 150;
-      }
-    } else {
-      if (formData.wilaya) {
-        const code = formData.wilaya.slice(0, 2);
-        if (code === "31") {
-          deliveryFee = typeof uiConfig.shippingOran === 'number' ? uiConfig.shippingOran : 250;
-        } else {
-          deliveryFee = SHIPPING_RATES[code] || uiConfig.shippingNational || 500;
-        }
-      } else {
-        deliveryFee = uiConfig.shippingNational || 500;
-      }
-    }
-  }
   
   let discountAmount = 0;
   if (appliedPromo && subtotal >= (appliedPromo.minAmount || 0)) {
@@ -161,7 +127,7 @@ export default function CartPage() {
   }
 
   const totalBeforeDelivery = Math.max(0, subtotal - discountAmount);
-  const finalTotal = totalBeforeDelivery + deliveryFee;
+  const finalTotal = totalBeforeDelivery;
 
   const runPreflightCheck = async (url: string, width?: number, height?: number) => {    setIsCheckingPreflight(true);
     try {
@@ -422,8 +388,8 @@ export default function CartPage() {
         customerName: formData.name,
         phone: formData.phone,
         wilaya: formData.wilaya,
-        deliveryType: deliveryType,
-        shippingMethod: shippingMethod,
+        deliveryType: 'desk',
+        shippingMethod: 'collect',
         designReadyStatus: designReady ? "ready" : "needs_review",
         notes: formData.notes,
         designUrl: uploadedFileUrl || null,
@@ -435,7 +401,7 @@ export default function CartPage() {
         total: finalTotal,
         status: "En attente", 
         statusHistory: buildStatusHistory(null, "En attente", "Commande créée"),
-        paymentMethod: "Paiement à la livraison",
+        paymentMethod: "Paiement à la réception",
         paymentStatus: "unpaid",
         createdAt: serverTimestamp(),
       };
@@ -925,7 +891,7 @@ export default function CartPage() {
                 <input required type="tel" dir="ltr" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder={t.phonePh} className="w-full p-4 rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-accent transition-all font-black tracking-wider text-slate-700 dark:text-slate-200 text-left" />
                 
                 <div className="relative">
-                  <select required value={formData.wilaya} onChange={e => setFormData({...formData, wilaya: e.target.value})} className="w-full p-4 rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-accent transition-all appearance-none font-medium text-slate-655 dark:text-slate-300">
+                  <select value={formData.wilaya} onChange={e => setFormData({...formData, wilaya: e.target.value})} className="w-full p-4 rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-accent transition-all appearance-none font-medium text-slate-655 dark:text-slate-300">
                     <option value="" disabled>{t.selectWilaya}</option>
                     {WILAYAS.map(w => <option key={w} value={w}>{w}</option>)}
                   </select>
@@ -933,122 +899,49 @@ export default function CartPage() {
                     <MapPin size={18} />
                   </button>
                 </div>
+                <p className="text-[10px] font-semibold text-slate-400 -mt-1">
+                  {isRtl ? "الولاية اختيارية — حالياً الاستلام يتم من مقر المطبعة بوهران." : "Wilaya facultative — retrait actuellement à l'atelier d'Oran."}
+                </p>
 
-                {/* --- Interactive Shipping Method Selector --- */}
+                {/* --- Delivery Status & Pickup (Livraison bientôt disponible) --- */}
                 <div className="space-y-3 pt-1">
                   <label className="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-                    {isRtl ? "طريقة التوصيل والشحن" : "Méthode de Livraison"}
+                    {isRtl ? "طريقة الاستلام" : "Mode de Retrait"}
                   </label>
-                  <div className="grid grid-cols-1 gap-2.5">
-                    
-                    {/* Method 1: National Shipping */}
-                    <button
-                      type="button"
-                      onClick={() => setShippingMethod('national')}
-                      className={`p-4 rounded-2xl border text-start flex items-center justify-between transition-all ${
-                        shippingMethod === 'national'
-                          ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg scale-[1.01]'
-                          : 'bg-white/40 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-white/60'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2.5 rounded-xl ${shippingMethod === 'national' ? 'bg-white/20 dark:bg-slate-100/20' : 'bg-slate-100 dark:bg-slate-850'}`}>
-                          <Truck size={18} />
-                        </div>
-                        <div>
-                          <p className="text-xs font-black">{isRtl ? "شحن وطني سريع (Yalidine Express)" : "National Express (Yalidine)"}</p>
-                          <p className="text-[10px] opacity-60 font-semibold mt-0.5">
-                            {formData.wilaya ? (isRtl ? `شحن مخصص لـ: ${formData.wilaya}` : `Envoi vers : ${formData.wilaya}`) : (isRtl ? "شحن لكافة الولايات 🇩🇿" : "Livraison 58 Wilayas 🇩🇿")}
-                          </p>
-                        </div>
+
+                  {/* Click & Collect card (the only current option) */}
+                  <div className="w-full p-4 rounded-2xl border text-start flex items-center justify-between gap-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-white/20 dark:bg-slate-100/20">
+                        <MapPin size={18} />
                       </div>
-                      <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-accent/15 text-accent">
-                        {uiConfig.freeShippingThreshold > 0 && subtotal >= uiConfig.freeShippingThreshold ? (isRtl ? "مجاني" : "Gratuit") : `${formData.wilaya ? (SHIPPING_RATES[formData.wilaya.slice(0, 2)] || uiConfig.shippingNational || 500) : (uiConfig.shippingNational || 500)} DA`}
-                      </span>
-                    </button>
-
-                    {/* Method 2: Local Express Delivery (Shown if allowed) */}
-                    {uiConfig.localExpressEnabled !== false && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShippingMethod('local_express');
-                          if (formData.wilaya && !["31", "22", "27", "29", "46"].includes(formData.wilaya.slice(0, 2))) {
-                            toast.warning(isRtl 
-                              ? "التوصيل الجواري فائق السرعة مخصص لولاية وهران والمناطق القريبة منها فقط. سيتم تطبيق سعر الشحن العادي لولايتك."
-                              : "La livraison locale express 24h est dédiée à Oran et ses wilayas voisines. Le tarif standard s'appliquera pour les autres régions."
-                            );
-                          }
-                        }}
-                        className={`p-4 rounded-2xl border text-start flex items-center justify-between transition-all ${
-                          shippingMethod === 'local_express'
-                            ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg scale-[1.01]'
-                            : 'bg-white/40 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-white/60'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2.5 rounded-xl ${shippingMethod === 'local_express' ? 'bg-white/20 dark:bg-slate-100/20' : 'bg-slate-100 dark:bg-slate-850'}`}>
-                            <Sparkles size={18} className="text-amber-500" />
-                          </div>
-                          <div>
-                            <p className="text-xs font-black flex items-center gap-1.5">
-                              <span>{isRtl ? "توصيل جواري فائق السرعة (في 24 ساعة 🚀)" : "Local Express (Garanti 24h 🚀)"}</span>
-                            </p>
-                            <p className="text-[10px] opacity-60 font-semibold mt-0.5">
-                              {isRtl ? "حيّ العقيد لطفي والمناطق المجاورة عبر دراجات نارية" : "Livraison ultra-rapide par coursier moto"}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-500">
-                          {formData.wilaya && formData.wilaya.slice(0,2) !== "31" && ["22", "27", "29", "46"].includes(formData.wilaya.slice(0,2))
-                            ? `${uiConfig.shippingLocalBordering || 350} DA`
-                            : `${uiConfig.shippingLocalOran || 150} DA`
-                          }
-                        </span>
-                      </button>
-                    )}
-
-                    {/* Method 3: Click & Collect (Shown if allowed) */}
-                    {uiConfig.clickAndCollectEnabled !== false && (
-                      <button
-                        type="button"
-                        onClick={() => setShippingMethod('collect')}
-                        className={`p-4 rounded-2xl border text-start flex items-center justify-between transition-all ${
-                          shippingMethod === 'collect'
-                            ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg scale-[1.01]'
-                            : 'bg-white/40 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-white/60'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2.5 rounded-xl ${shippingMethod === 'collect' ? 'bg-white/20 dark:bg-slate-100/20' : 'bg-slate-100 dark:bg-slate-850'}`}>
-                            <MapPin size={18} />
-                          </div>
-                          <div>
-                            <p className="text-xs font-black">{isRtl ? "استلام من مقر المطبعة مباشرة (Click & Collect)" : "Retrait au Hub (Click & Collect)"}</p>
-                            <p className="text-[10px] opacity-60 font-semibold mt-0.5">
-                              {isRtl ? "وفر مصاريف الشحن واستلم مطبوعاتك من ورشتنا بوهران" : "Récupérez directement à l'atelier d'Oran"}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-500">
-                          {isRtl ? "مجاني" : "Gratuit"}
-                        </span>
-                      </button>
-                    )}
-
+                      <div>
+                        <p className="text-xs font-black">{isRtl ? "استلام من مقر المطبعة (Click & Collect)" : "Retrait à l'atelier (Click & Collect)"}</p>
+                        <p className="text-[10px] opacity-60 font-semibold mt-0.5">
+                          {isRtl ? "استلم مطبوعاتك جاهزة من ورشتنا بوهران" : "Récupérez vos impressions prêtes à Oran"}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 dark:text-emerald-600">
+                      {isRtl ? "مجاني" : "Gratuit"}
+                    </span>
                   </div>
 
-                  {/* Click & Collect details banner when selected */}
-                  {shippingMethod === 'collect' && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-150 dark:border-blue-900/30 rounded-2xl text-[11px] leading-relaxed text-blue-700 dark:text-blue-400 font-bold space-y-1"
-                    >
-                      <p className="uppercase tracking-widest text-[9px] font-black">{isRtl ? "📍 عنوان وتفاصيل استلام الطلب:" : "📍 Adresse et instructions de retrait :"}</p>
-                      <p>{uiConfig.collectInstructions || (isRtl ? "حيّ العقيد لطفي، وهران - بجانب مسجد القدس (مفتوح من 9:00 صباحاً إلى 6:00 مساءً)" : "Cité Akid Lotfi, Oran - Près de la Mosquée El Qods (Ouvert de 09:00 à 18:00)")}</p>
-                    </motion.div>
-                  )}
+                  {/* Delivery coming soon banner */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-150 dark:border-blue-900/30 rounded-2xl text-[11px] leading-relaxed text-blue-700 dark:text-blue-400 font-bold space-y-1"
+                  >
+                    <p className="uppercase tracking-widest text-[9px] font-black">
+                      {isRtl ? "📍 عنوان وتفاصيل استلام الطلب:" : "📍 Adresse et instructions de retrait :"}
+                    </p>
+                    <p>{uiConfig.collectInstructions || (isRtl ? "حيّ العقيد لطفي، وهران - بجانب مسجد القدس (مفتوح من 9:00 صباحاً إلى 6:00 مساءً)" : "Cité Akid Lotfi, Oran - Près de la Mosquée El Qods (Ouvert de 09:00 à 18:00)")}</p>
+                    <div className="flex items-center gap-2 pt-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                      <span>{isRtl ? "التوصيل إلى المنزل قريباً جداً! 🚀" : "La livraison à domicile arrive très bientôt ! 🚀"}</span>
+                    </div>
+                  </motion.div>
                 </div>
 
                 <div className="space-y-2.5 pt-1">
@@ -1064,7 +957,7 @@ export default function CartPage() {
                       </div>
                       <div>
                         <p className="text-xs font-black">
-                          {isRtl ? "الدفع عند الاستلام (COD)" : "Paiement à la livraison (COD)"}
+                          {isRtl ? "الدفع عند الاستلام (COD)" : "Paiement à la réception (COD)"}
                         </p>
                         <p className="text-[10px] opacity-80 font-semibold mt-0.5">
                           {isRtl ? "ادفع نقداً بعد استلام طلبيتك وفحص جودة المطبوعات بنفسك." : "Payez en espèces après réception et vérification de vos impressions."}
@@ -1120,21 +1013,9 @@ export default function CartPage() {
                     </motion.div>
                   )}
                 </AnimatePresence>
-                <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                  <span>{isRtl ? "سعر التوصيل" : "Livraison"}</span>
-                  <span className={uiConfig.freeShippingThreshold > 0 && subtotal >= uiConfig.freeShippingThreshold ? "text-emerald-600 dark:text-emerald-500 font-black bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded-md" : ""}>
-                    {uiConfig.freeShippingThreshold > 0 && subtotal >= uiConfig.freeShippingThreshold ? (isRtl ? "مجاني" : "Gratuit") : `${deliveryFee} ${t.currency}`}
-                  </span>
+                <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-black text-sm bg-emerald-50 dark:bg-emerald-900/10 p-2 rounded-lg -mx-2 px-2">
+                  <span>{isRtl ? "الاستلام من المطبعة" : "Retrait à l'atelier"}</span><span>{isRtl ? "مجاني" : "Gratuit"}</span>
                 </div>
-
-                {/* الشريط التحفيزي الذكي للتوصيل المجاني */}
-                {uiConfig.freeShippingThreshold > 0 && subtotal < uiConfig.freeShippingThreshold && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-2.5 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 rounded-xl text-center text-xs font-bold leading-relaxed border border-indigo-100 dark:border-indigo-900/40">
-                    {isRtl 
-                      ? `أضف بقيمة ${uiConfig.freeShippingThreshold - subtotal} دج إضافية للاستفادة من التوصيل المجاني بالكامل! ✨` 
-                      : `Ajoutez encore ${uiConfig.freeShippingThreshold - subtotal} DA pour profiter de la livraison gratuite ! ✨`}
-                  </motion.div>
-                )}
 
                 <div className="flex justify-between items-end pt-4">
                   <span className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">{t.total}</span>
@@ -1175,7 +1056,7 @@ export default function CartPage() {
                   {isSubmitting ? (
                     <><Loader2 className="animate-spin" size={24} /> {isRtl ? "جاري إرسال طلبك..." : "Enregistrement..."}</>
                   ) : (
-                    <><CheckCircle size={24} className="drop-shadow-md"/> {isRtl ? "تأكيد الطلب (الدفع عند الاستلام)" : "Confirmer (Paiement à la livraison)"}</>
+                    <><CheckCircle size={24} className="drop-shadow-md"/> {isRtl ? "تأكيد الطلب (الدفع عند الاستلام)" : "Confirmer (Paiement à la réception)"}</>
                   )}
                 </button>
               )}

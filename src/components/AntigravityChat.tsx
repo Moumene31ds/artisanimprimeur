@@ -12,7 +12,7 @@ import {
   Trash2, ArrowLeftRight, Truck, HelpCircle,
   Square, Copy, Check, RefreshCw, WifiOff, ArrowDown, Mic, MicOff,
   Volume2, ThumbsUp, ThumbsDown, Paperclip, UploadCloud, ExternalLink,
-  ShoppingCart, Cpu, BadgePercent, MapPin
+  ShoppingCart, Cpu, BadgePercent
 } from "lucide-react";
 
 const CHAT_STORAGE_KEY = "lartisan_chat_history";
@@ -63,8 +63,8 @@ export default function AntigravityChat() {
   const isRtl = language === "ar";
 
   const welcomeText = isRtl
-    ? "مرحباً بك! أنا **L'Artisan AI**، مساعدك الذكي في مطبعة الحرفي. أعرف كل شيء عن أسعارنا وتوصيلنا 🚚، مثل **100 بطاقة زيارة = 2500 دج**. اسألني عن أي شيء! 🎨✨"
-    : "Bonjour ! Je suis **L'Artisan AI**, votre assistant intelligent chez L'Artisan Imprimeur. Je connais nos prix et livraison 🚚, par exemple **100 cartes de visite = 2500 DA**. Demandez-moi n'importe quoi ! 🎨✨";
+    ? "مرحباً بك! أنا **L'Artisan AI**، مساعدك الذكي في مطبعة الحرفي. أعرف كل شيء عن أسعارنا وخدماتنا 🖨️، مثل **100 بطاقة زيارة = 2500 دج**. اسألني عن أي شيء! 🎨✨"
+    : "Bonjour ! Je suis **L'Artisan AI**, votre assistant intelligent chez L'Artisan Imprimeur. Je connais nos prix et services 🖨️, par exemple **100 cartes de visite = 2500 DA**. Demandez-moi n'importe quoi ! 🎨✨";
 
   const defaultWelcome: any = {
     id: "welcome",
@@ -520,37 +520,10 @@ export default function AntigravityChat() {
       );
     }
 
-    if (part.toolName === 'getShippingEstimate') {
-      if (!out.success) {
-        return (
-          <div key={`tool-${index}`} className="mt-2 p-2.5 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs font-semibold">
-            ⚠️ {out.message}
-          </div>
-        );
-      }
+    if (part.toolName === 'deliveryStatus') {
       return (
-        <div key={`tool-${index}`} className="mt-2 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1.5">
-          <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-            <MapPin size={13} className="text-cyan-500" /> {out.wilaya} ({isRtl ? "ولاية" : "Wilaya"} {out.code})
-          </span>
-          <div className="flex justify-between text-slate-600 dark:text-slate-400">
-            <span>{isRtl ? "🕐 المدة المتوقعة" : "🕐 Délai"} :</span>
-            <span className="font-bold">{out.deliveryTime}</span>
-          </div>
-          <div className="flex justify-between text-slate-600 dark:text-slate-400">
-            <span>{isRtl ? "🏠 توصيل للمنزل" : "🏠 À domicile"} :</span>
-            <span className="font-bold">{out.homeDeliveryDZD} DZD</span>
-          </div>
-          <div className="flex justify-between text-slate-600 dark:text-slate-400">
-            <span>{isRtl ? "🏢 استلام من المكتب" : "🏢 Retrait bureau"} :</span>
-            <span className="font-bold text-cyan-600 dark:text-cyan-400">{out.bureauPickupDZD} DZD</span>
-          </div>
-          {typeof out.totalWithProductDZD === "number" && (
-            <div className="flex justify-between font-black text-indigo-600 dark:text-indigo-400 pt-2 border-t border-slate-200 dark:border-slate-700">
-              <span>{isRtl ? "الإجمالي (مع الشحن)" : "Total avec livraison"} :</span>
-              <span>{out.totalWithProductDZD} DZD</span>
-            </div>
-          )}
+        <div key={`tool-${index}`} className="mt-2 p-3 bg-cyan-50 dark:bg-cyan-900/20 rounded-xl border border-cyan-200 dark:border-cyan-800 text-cyan-700 dark:text-cyan-300 text-xs font-semibold">
+          📦 {isRtl ? "التوصيل إلى المنزل قريباً جداً! حالياً تُستلم الطلبات من مقر المطبعة (حيّ العقيد لطفي، وهران)." : "La livraison à domicile arrive très bientôt ! Pour l'instant, les commandes se retirent à l'atelier (Cité Akid Lotfi, Oran)."}
         </div>
       );
     }
@@ -670,8 +643,8 @@ export default function AntigravityChat() {
     if (/flyer|منشور|affiche|أفيس/.test(t)) {
       out.push({ text: isRtl ? "سعر 500 منشور" : "Prix 500 flyers", icon: <HelpCircle size={13} />, prompt: isRtl ? "احسب سعر 500 فلاير A5" : "Calcule le prix de 500 flyers A5" });
     }
-    if (/livr|شحن|توصيل|wilaya|ولاية|colis/.test(t)) {
-      out.push({ text: isRtl ? "توصيل لعاصمتي" : "Livraison Alger", icon: <Truck size={13} />, prompt: isRtl ? "كم تكلفة التوصيل إلى الجزائر العاصمة ؟" : "Combien coûte la livraison vers Alger ?" });
+    if (/livr|شحن|توصيل|wilaya|ولاية|colis|استلام/.test(t)) {
+      out.push({ text: isRtl ? "الاستلام من المطبعة" : "Retrait atelier", icon: <Truck size={13} />, prompt: isRtl ? "أين أستلم طلبي وهل يوجد توصيل ؟" : "Où retirer ma commande et y a-t-il une livraison ?" });
     }
     if (/pay|دفع|baridi|بريدي|paiement/.test(t)) {
       out.push({ text: isRtl ? "طرق الدفع" : "Moyens de paiement", icon: <HelpCircle size={13} />, prompt: isRtl ? "ما هي طرق الدفع المتاحة ؟" : "Quels sont les moyens de paiement disponibles ?" });
@@ -699,12 +672,12 @@ export default function AntigravityChat() {
   const quickPrompts = isRtl ? [
     { text: "السلة", icon: <ArrowLeftRight size={13} />, prompt: "خذني إلى سلة المشتريات الخاصة بي." },
     { text: "سعر البطاقات", icon: <HelpCircle size={13} />, prompt: "كم سعر 100 بطاقة زيارة ؟" },
-    { text: "التوصيل", icon: <Truck size={13} />, prompt: "هل تشحنون لـ 58 ولاية وكم يستغرق التوصيل لوهران؟" },
+    { text: "الاستلام", icon: <Truck size={13} />, prompt: "كيف أستلم طلبي وهل التوصيل متاح ؟" },
     { text: "طرق الدفع", icon: <BadgePercent size={13} />, prompt: "ما هي طرق الدفع المتاحة ؟" },
   ] : [
     { text: "Mon Panier", icon: <ArrowLeftRight size={13} />, prompt: "Amène-moi à mon panier." },
     { text: "Prix cartes", icon: <HelpCircle size={13} />, prompt: "Combien coûtent 100 cartes de visite ?" },
-    { text: "Livraison", icon: <Truck size={13} />, prompt: "Livrez-vous dans toutes les 58 wilayas d'Algérie ?" },
+    { text: "Retrait", icon: <Truck size={13} />, prompt: "Où retirer ma commande ? La livraison est-elle disponible ?" },
     { text: "Paiement", icon: <BadgePercent size={13} />, prompt: "Quels sont les moyens de paiement disponibles ?" },
   ];
 
@@ -713,7 +686,7 @@ export default function AntigravityChat() {
   const showContextual = !!lastAssistant && contextualPrompts.length > 0 && !isLoading;
 
   return (
-    <div className={`fixed bottom-24 md:bottom-8 font-sans ${isRtl ? 'right-4 md:right-6' : 'left-4 md:left-6'} ${isOpen ? 'z-[100000]' : 'z-[999]'}`} dir={isRtl ? "rtl" : "ltr"}>
+    <div className={`fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] md:bottom-8 font-sans ${isRtl ? 'right-4 md:right-6' : 'left-4 md:left-6'} ${isOpen ? 'z-[100000]' : 'z-[999]'}`} dir={isRtl ? "rtl" : "ltr"}>
 
       <motion.button
         onClick={() => setIsOpen(!isOpen)}

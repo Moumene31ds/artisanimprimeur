@@ -107,7 +107,7 @@ function SuccessContent() {
         className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white mb-4 tracking-tight"
       >
         {paymentStatus === "failed" 
-          ? (isRtl ? "فشل إتمام الدفع الإلكتروني" : "Échec du paiement en ligne")
+          ? (isRtl ? "فشل التحقق من الدفع" : "Échec de la vérification du paiement")
           : (isRtl ? "تم استلام طلبك بنجاح!" : "Commande reçue avec succès !")}
       </motion.h1>
 
@@ -117,12 +117,12 @@ function SuccessContent() {
       >
         {paymentStatus === "failed"
           ? (isRtl 
-              ? "نعتذر، لم نتمكن من التحقق من إكمال عملية الدفع عبر بطاقتك. يرجى التحقق من الرصيد والمحاولة مجدداً."
-              : "Désolé, nous n'avons pas pu vérifier votre paiement. Veuillez réessayer ou vérifier vos coordonnées bancaires.")
+              ? "نعتذر، لم نتمكن من تأكيد عملية الدفع. يرجى التحقق من بيانات التحويل والمحاولة مجدداً."
+              : "Désolé, nous n'avons pas pu vérifier votre paiement. Veuillez vérifier vos informations et réessayer.")
           : paymentStatus === "paid"
             ? (isRtl
-                ? "شكراً لك! تم تأكيد دفع الفاتورة عبر البطاقة الذهبية / CIB بنجاح. طلبك الآن قيد المراجعة الفنية للتصميم."
-                : "Merci ! Votre paiement par carte Edahabia / CIB a été vérifié avec succès. Votre commande est en cours de conception.")
+                ? "شكراً لك! تم تأكيد استلام المبلغ عبر بريدي موب بنجاح. طلبك الآن قيد المراجعة الفنية للتصميم."
+                : "Merci ! Votre paiement BaridiMob a été vérifié avec succès. Votre commande est en cours de conception.")
             : (isRtl 
                 ? "شكراً لثقتك بنا. سنقوم بمعالجة طلبك فوراً. يمكنك متابعة حالة الطلب خطوة بخطوة من خلال صفحة طلباتي." 
                 : "Merci pour votre confiance. Nous traiterons votre commande immédiatement. Vous pouvez suivre son statut sur la page de vos commandes.")}
@@ -156,7 +156,7 @@ function SuccessContent() {
           <div className="flex justify-between text-xs font-bold">
             <span className="text-slate-400">{isRtl ? "طريقة الدفع:" : "Paiement:"}</span>
             <span className="text-slate-700 dark:text-slate-200">
-              {orderDetails.paymentMethod === "Chargily Pay" ? (isRtl ? "الدفع الإلكتروني (الذهبية / CIB)" : "Paiement électronique") : (isRtl ? "الدفع عند الاستلام" : "Paiement à la livraison")}
+              {orderDetails.paymentMethod === "BaridiMob" ? (isRtl ? "تحويل بريدي موب" : "BaridiMob") : (isRtl ? "الدفع عند الاستلام" : "Paiement à la réception")}
             </span>
           </div>
           <div className="flex justify-between text-xs font-bold">

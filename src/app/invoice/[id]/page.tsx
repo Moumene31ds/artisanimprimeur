@@ -63,7 +63,7 @@ export default function InvoicePage() {
 
   if (loading)
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
+      <div className="h-dvh flex flex-col items-center justify-center bg-slate-50">
         <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
         <p className="text-slate-500 font-medium animate-pulse">Génération de la facture...</p>
       </div>
@@ -71,7 +71,7 @@ export default function InvoicePage() {
 
   if (error || !order)
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+      <div className="h-dvh flex flex-col items-center justify-center bg-slate-50 gap-4">
         <AlertCircle className="text-red-500" size={64} />
         <h2 className="text-2xl font-bold text-slate-800">Facture Introuvable</h2>
         <p className="text-slate-500">الفاتورة التي تبحث عنها غير موجودة أو تم حذفها.</p>
@@ -280,8 +280,8 @@ export default function InvoicePage() {
                   </div>
                 )}
                 <div className="flex justify-between text-slate-600">
-                  <span>Frais de livraison</span>
-                  <span className="font-mono">{order.deliveryFee.toLocaleString()} DA</span>
+                  <span>Livraison (retrait atelier)</span>
+                  <span className="font-mono">{Number(order.deliveryFee) > 0 ? `${Number(order.deliveryFee).toLocaleString()} DA` : "Gratuit"}</span>
                 </div>
                 <div className="flex justify-between items-center pt-4 mt-2 border-t border-slate-200/80">
                   <span className="text-base font-bold text-slate-900 uppercase">Total Net</span>

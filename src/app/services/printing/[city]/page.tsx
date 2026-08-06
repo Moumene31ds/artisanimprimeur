@@ -37,7 +37,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const cityInfo = CITIES_MAP[cityKey] || { fr: city, ar: city };
   
   const title = `Impression Professionnelle & Matériel Publicitaire à ${cityInfo.fr} | L'Artisan Imprimeur`;
-  const description = `Besoin d'impression de cartes de visite, flyers ou étiquettes à ${cityInfo.fr} (${cityInfo.ar}) ? L'Artisan Imprimeur assure une qualité premium, devis en ligne et livraison express.`;
+  const description = `Besoin d'impression de cartes de visite, flyers ou étiquettes à ${cityInfo.fr} (${cityInfo.ar}) ? L'Artisan Imprimeur assure une qualité premium, devis en ligne et retrait à Oran. Livraison bientôt disponible.`;
 
   return {
     title,
@@ -106,7 +106,7 @@ export default async function CityPrintingPage({ params }: PageProps) {
             </h1>
             
             <p className="text-slate-500 dark:text-slate-400 font-bold text-sm max-w-2xl leading-relaxed">
-              L'Artisan Imprimeur dessert {cityName.fr} avec des services d'impressions de haute précision. Profitez d'une tarification dégressive transparente, d'un contrôle automatique de fichiers par IA et d'une expédition directe chez vous.
+              L'Artisan Imprimeur dessert {cityName.fr} avec des services d'impressions de haute précision. Profitez d'une tarification dégressive transparente, d'un contrôle automatique de fichiers par IA et d'un retrait à l'atelier d'Oran. La livraison arrive bientôt.
             </p>
 
             {/* Quick Benefits Section */}
@@ -117,7 +117,7 @@ export default async function CityPrintingPage({ params }: PageProps) {
               </div>
               <div className="flex items-center gap-2 justify-center md:justify-start">
                 <Truck className="text-blue-500" size={18} />
-                <span>Livraison à {cityName.fr}</span>
+                <span>Retrait à Oran (Livraison bientôt)</span>
               </div>
               <div className="flex items-center gap-2 justify-center md:justify-start">
                 <Printer className="text-purple-500" size={18} />
@@ -168,7 +168,7 @@ export default async function CityPrintingPage({ params }: PageProps) {
                         {product.name}
                       </h3>
                       <p className="text-[10px] text-slate-450 dark:text-slate-500 font-bold mt-1">
-                        Disponible en livraison express à {cityName.fr}
+                        Retrait à l'atelier d'Oran — Livraison bientôt
                       </p>
                     </div>
                   </div>

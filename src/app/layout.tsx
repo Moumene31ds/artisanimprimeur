@@ -91,7 +91,7 @@ export default function RootLayout({
             <LiveSales />
             <Navbar />
             
-            <main className="min-h-dvh max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-28 md:pb-12 relative z-10">
+            <main className="min-h-dvh max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[calc(6rem+env(safe-area-inset-top))] pb-28 md:pb-12 relative z-10">
               {children}
             </main>
             

@@ -37,7 +37,7 @@ export default function PrivacyPage() {
         <section className="space-y-4">
           <h2 className="text-2xl font-black text-slate-900 dark:text-white border-b pb-2">{isRtl ? "2. استخدام البيانات" : "2. Utilisation des données"}</h2>
           <ul className="list-disc list-inside pl-5 space-y-2">
-            <li>{isRtl ? "معالجة طلباتك وتوصيلها." : "Traiter et livrer vos commandes."}</li>
+            <li>{isRtl ? "معالجة طلباتك وخدمة الاستلام." : "Traiter vos commandes et gérer leur retrait."}</li>
             <li>{isRtl ? "التواصل معك بخصوص حالة الطلب." : "Vous contacter concernant l'état de votre commande."}</li>
             <li>{isRtl ? "تحسين خدماتنا وتجربة المستخدم." : "Améliorer nos services et l'expérience utilisateur."}</li>
           </ul>

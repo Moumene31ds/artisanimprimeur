@@ -23,8 +23,8 @@ export default function Hero() {
   const isRtl = language === "ar";
 
   const trustItems = [
-    { icon: Truck, text: isRtl ? "توصيل سريع" : "Livraison rapide" },
-    { icon: HandCoins, text: isRtl ? "الدفع عند الاستلام" : "Paiement à la livraison" },
+    { icon: Truck, text: isRtl ? "استلام من وهران" : "Retrait à Oran" },
+    { icon: HandCoins, text: isRtl ? "الدفع عند الاستلام" : "Paiement à la réception" },
     { icon: BadgeCheck, text: isRtl ? "جودة مضمونة" : "Qualité garantie" },
   ];
 

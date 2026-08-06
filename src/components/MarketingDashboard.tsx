@@ -192,11 +192,11 @@ export const MarketingDashboard: React.FC = () => {
       }
     } catch {
       const fallback = isRtl ? {
-        premium: { title: 'حملة العملاء المميزين - خصم VIP 20%', subject: 'عرض حصري لنادي الحرفي VIP : خصم 20% على طلبك القادم!', body: 'عزيزنا العميل المتميز، تقديراً لوفائك لمنصة الحرفي للطباعة، يسعدنا تقديم كود الخصم الحصري VIP20 لطباعة بطاقات أعمالك ومطوياتك مع شحن مجاني.' },
+        premium: { title: 'حملة العملاء المميزين - خصم VIP 20%', subject: 'عرض حصري لنادي الحرفي VIP : خصم 20% على طلبك القادم!', body: 'عزيزنا العميل المتميز، تقديراً لوفائك لمنصة الحرفي للطباعة، يسعدنا تقديم كود الخصم الحصري VIP20 لطباعة بطاقات أعمالك ومطوياتك بأعلى جودة.' },
         inactive: { title: 'حملة إعادة تنشيط العملاء الغائبين', subject: 'اشتقنا إليك! 500 دج هدية في حسابك لطباعتك القادمة', body: 'عد إلينا اليوم واكتشف آخر المنتجات والطباعة ثلاثية الأبعاد. استخدم الكود COMEBACK500 عند إتمام الطلب.' },
         new: { title: 'حملة الترحيب بالعملاء الجدد', subject: 'أهلاً بك في منصة الحرفي - خصم 10% على أول طلب طباعة', body: 'مرحباً بك معنا! جرب طباعة بطاقاتك أو ملصقاتك اليوم بأعلى جودة في الجزائر مع كود الخصم WELCOME10.' },
       } : {
-        premium: { title: 'Campagne Clients Premium - 20% VIP', subject: 'Offre exclusive Club VIP L\'Artisan : -20% sur votre prochaine commande !', body: 'Cher client premium, en reconnaissance de votre fidélité, voici le code VIP20 pour vos cartes et flyers avec livraison offerte.' },
+        premium: { title: 'Campagne Clients Premium - 20% VIP', subject: 'Offre exclusive Club VIP L\'Artisan : -20% sur votre prochaine commande !', body: 'Cher client premium, en reconnaissance de votre fidélité, voici le code VIP20 pour vos cartes et flyers en haute qualité.' },
         inactive: { title: 'Campagne Réactivation', subject: 'Vous nous avez manqué ! 500 DA offerts', body: 'Revenez découvrir nos nouveaux produits et impressions 3D. Utilisez le code COMEBACK500.' },
         new: { title: 'Campagne Bienvenue', subject: 'Bienvenue chez L\'Artisan - 10% sur votre première commande', body: 'Essayez nos impressions premium avec le code WELCOME10.' },
       };

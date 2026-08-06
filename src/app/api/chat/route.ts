@@ -11,8 +11,6 @@ import {
 import {
   buildChatSystemPrompt,
   computePrice,
-  resolveWilaya,
-  deliveryTimeFor,
   lookupPromo,
 } from '@/lib/chat-knowledge';
 import { getCatalogProducts } from '@/lib/catalog';
@@ -51,37 +49,6 @@ export async function POST(req: Request) {
         execute: async ({ productKey, quantity, finish }) => {
           const breakdown = computePrice(productKey, quantity, finish ?? 'standard');
           return { success: true, ...breakdown };
-        },
-      }),
-
-      getShippingEstimate: tool({
-        description:
-          'Estimate Yalidine delivery cost and time to any of the 58 Algerian wilayas. Provide a wilaya name or number.',
-        inputSchema: z.object({
-          wilaya: z.string().describe('Wilaya name or number, e.g. "Oran", "31", "Alger".'),
-          productTotalDZD: z.coerce.number().optional().describe('Optional subtotal of the order to compute the full total.'),
-        }),
-        execute: async ({ wilaya, productTotalDZD }) => {
-          const resolved = resolveWilaya(wilaya);
-          if (!resolved) {
-            return {
-              success: false,
-              message: `Wilaya "${wilaya}" introuvable. Les 58 wilayas d'Algérie sont couvertes.`,
-            };
-          }
-          const homeRate = resolved.rate;
-          const bureauRate = Math.max(200, homeRate - 150);
-          const time = deliveryTimeFor(resolved.code);
-          return {
-            success: true,
-            wilaya: resolved.name,
-            code: resolved.code,
-            homeDeliveryDZD: homeRate,
-            bureauPickupDZD: bureauRate,
-            deliveryTime: time,
-            totalWithProductDZD:
-              typeof productTotalDZD === 'number' ? Math.round(homeRate + productTotalDZD) : undefined,
-          };
         },
       }),
 
@@ -148,7 +115,7 @@ export async function POST(req: Request) {
           phone: z.string().describe('Phone number'),
           product: z.string().describe('Product name'),
           quantity: z.coerce.number().min(1).describe('Quantity'),
-          wilaya: z.string().optional().describe('Delivery wilaya'),
+          wilaya: z.string().optional().describe('Optional wilaya (orders are collected at the Oran workshop)'),
           notes: z.string().optional().describe('Special instructions'),
         }),
         execute: async ({ customerName, phone, product, quantity, wilaya, notes }) => {

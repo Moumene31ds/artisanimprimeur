@@ -31,8 +31,8 @@ const REWARDS = [
   },
   { 
     id: "r2", 
-    title: "Livraison Gratuite", 
-    titleAr: "توصيل مجاني",
+    title: "Bon de 600 DA", 
+    titleAr: "قسيمة 600 دج",
     points: 500, 
     icon: <Zap className="text-emerald-500" size={32} />, 
     type: "fixed", 
@@ -55,7 +55,7 @@ const REWARDS = [
 const SPIN_PRIZES = [
   { label: "10% Remise", labelAr: "خصم 10%", type: "percent", value: 10, color: "#3b82f6" },
   { label: "20 Points", labelAr: "20 نقطة", type: "points", value: 20, color: "#10b981" },
-  { label: "Free Shipping", labelAr: "شحن مجاني", type: "percent", value: 0, color: "#8b5cf6", isFreeShipping: true },
+  { label: "700 DA Bon", labelAr: "قسيمة 700 دج", type: "fixed", value: 700, color: "#8b5cf6" },
   { label: "Pas de chance", labelAr: "حظ أوفر", type: "none", value: 0, color: "#64748b" },
   { label: "50 Points", labelAr: "50 نقطة", type: "points", value: 50, color: "#f59e0b" },
   { label: "15% Remise", labelAr: "خصم 15%", type: "percent", value: 15, color: "#ec4899" },
@@ -585,7 +585,7 @@ export default function RewardsPage() {
                 {totalSpent >= 50000 && (
                   <li className="flex items-center gap-2">
                     <CheckCircle size={14} className="text-emerald-500 shrink-0" />
-                    <span>{isRtl ? "خصومات خاصة بأعضاء VIP وتوصيل أولوية مجاني" : "Livraison priority gratuite & VIP discounts"}</span>
+                    <span>{isRtl ? "خصومات خاصة بأعضاء VIP وأولوية في معالجة الطلبات" : "VIP discounts exclusifs & priorité de traitement"}</span>
                   </li>
                 )}
               </ul>

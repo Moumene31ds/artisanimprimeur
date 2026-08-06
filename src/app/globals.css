@@ -491,3 +491,36 @@ section[id], [id^="section-"] {
   opacity: 0.85;
 }
 
+/* ==========================================
+   تحسينات الموبايل المتقدمة (Android & iOS)
+   ========================================== */
+
+/* iOS: منع التكبير التلقائي للمتصفح عند التركيز على حقول الإدخال
+   (أي حقل أقل من 16px يدفع Safari للتكبير تلقائياً) */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 640px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+}
+
+/* منع اختيار النص المزعج عند الضغط المطوّل على الأزرار (iOS) */
+@media (hover: none) and (pointer: coarse) {
+  button, a, [role="button"] {
+    -webkit-touch-callout: none;
+  }
+  /* ضمان ارتفاع لمس مريح (≥ 44px) للأزرار الأساسية على الجوال */
+  .min-tap {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Android: تجاوب اهتزاز لطيف عند الضغط على عناصر تفاعلية رئيسية */
+@supports (height: 100dvh) {
+  .h-dvh { height: 100dvh; }
+}
+

@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
         const em = await sendSimpleEmail(
           order.customerEmail,
           `Confirmation de votre commande #${orderRef}`,
-          `L'Artisan Imprimeur\n\nBonjour ${customerName},\n\nVotre commande #${orderRef} a bien été enregistrée.\nMontant à payer à la livraison : ${order.total || 0} DZD.\n\nSuivez votre commande : ${process.env.NEXT_PUBLIC_APP_URL || 'https://artisanimprimeur.vercel.app'}/orders\n\nMerci pour votre confiance.`
+          `L'Artisan Imprimeur\n\nBonjour ${customerName},\n\nVotre commande #${orderRef} a bien été enregistrée.\nMontant à payer à la réception : ${order.total || 0} DZD.\n\nRetrait à l'atelier : Cité Akid Lotfi, Oran.\n\nSuivez votre commande : ${process.env.NEXT_PUBLIC_APP_URL || 'https://artisanimprimeur.vercel.app'}/orders\n\nMerci pour votre confiance.`
         );
         results.push({ channel: 'email', success: em.success, detail: em.reason });
       }

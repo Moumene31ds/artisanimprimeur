@@ -1,10 +1,13 @@
-const CACHE_NAME = 'artisan-print-v4';
-const STATIC_CACHE = 'artisan-static-v4';
-const DYNAMIC_CACHE = 'artisan-dynamic-v4';
-const API_CACHE = 'artisan-api-v4';
-const IMAGE_CACHE = 'artisan-images-v4';
-const META_CACHE = 'artisan-meta-v4';
+const CACHE_NAME = 'artisan-print-v5';
+const STATIC_CACHE = 'artisan-static-v5';
+const DYNAMIC_CACHE = 'artisan-dynamic-v5';
+const API_CACHE = 'artisan-api-v5';
+const IMAGE_CACHE = 'artisan-images-v5';
+const META_CACHE = 'artisan-meta-v5';
 const OFFLINE_URL = '/offline';
+
+// إصدار البناء — يُحدَّث عند كل إصدار جديد ليتمكّن العملاء من التحقق منه.
+const BUILD_ID = 'v5';
 
 const STATIC_ASSETS = [
   '/offline',
@@ -20,8 +23,14 @@ const IMAGE_MAX_ENTRIES = 300;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) => cache.addAll(STATIC_ASSETS)).then(() => self.skipWaiting())
+    caches.open(STATIC_CACHE).then((cache) => cache.addAll(STATIC_ASSETS))
   );
+  // نؤجّل السيطرة على الصفحة عند التحديثات: يبقى السيرفس ووركر الجديد في
+  // حالة waiting حتى يقرّر العميل (عبر زر "تحديث الآن") إرسال SKIP_WAITING.
+  // فقط في أول تثبيت (لا يوجد سيرفس ووركر قديم) نستحوذ فوراً.
+  if (!self.registration.active) {
+    event.waitUntil(self.skipWaiting());
+  }
 });
 
 self.addEventListener('activate', (event) => {
@@ -29,7 +38,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((names) =>
       Promise.all(
         names
-          .filter((n) => n.startsWith('artisan-') && !n.endsWith('-v4'))
+          .filter((n) => n.startsWith('artisan-') && !n.endsWith('-v5'))
           .map((n) => caches.delete(n))
       )
     ).then(() => self.clients.claim())
@@ -38,6 +47,14 @@ self.addEventListener('activate', (event) => {
   if (self.registration.navigationPreload) {
     event.waitUntil(self.registration.navigationPreload.enable().catch(() => {}));
   }
+  // إخبار كل النوافذ المفتوحة أن نسخة جديدة أصبحت مسيطرة (لإعادة التحميل).
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        client.postMessage({ type: 'NEW_VERSION_ACTIVATED', version: BUILD_ID });
+      }
+    })
+  );
 });
 
 self.addEventListener('fetch', (event) => {
@@ -53,6 +70,19 @@ self.addEventListener('fetch', (event) => {
       return;
     }
     event.respondWith(networkFirst(request));
+    return;
+  }
+
+  // نقطة نهاية الإصدارات — دائماً من الشبكة (لا تخزين مؤقت) حتى يقارن العميل إصداره بدقة.
+  if (url.pathname === '/api/build-info') {
+    event.respondWith(
+      fetch(request).catch(() =>
+        new Response(JSON.stringify({ error: 'Offline' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    );
     return;
   }
 
@@ -284,6 +314,10 @@ self.addEventListener('message', (event) => {
   if (!data) return;
   if (data.type === 'SKIP_WAITING') {
     self.skipWaiting();
+  } else if (data.type === 'GET_VERSION') {
+    if (event.ports && event.ports[0]) {
+      event.ports[0].postMessage({ type: 'VERSION', version: BUILD_ID });
+    }
   } else if (data.type === 'SYNC_NOW') {
     event.waitUntil(syncHomeData());
   } else if (data.type === 'SYNC_ORDERS') {

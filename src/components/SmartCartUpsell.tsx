@@ -11,7 +11,6 @@ import { toast } from "sonner";
 import { useState, useMemo, useEffect } from "react";
 import { auth } from "@/lib/firebase";
 
-const FREE_SHIPPING_THRESHOLD = 2000;
 const POINTS_PER_100_DA = 1;
 
 interface AiRecommendation extends Product {}
@@ -203,10 +202,10 @@ function getBundleTranslations(isRtl: boolean) {
       pointsSub: "النقاط المكتسبة من هذا الطلب",
       pointsLabel: "نقطة",
       earnMore: "اكسب المزيد",
-      freeShippingTitle: "شحن مجاني",
-      freeShippingSub: "توصيل مجاني للطلبات فوق",
-      freeShippingProgress: "متبقي",
-      freeShippingQualified: "أنت مؤهل للشحن المجاني! 🎉",
+      pickupTitle: "استلام من المطبعة",
+      pickupSub: "حيّ العقيد لطفي، وهران",
+      pickupFree: "مجاني",
+      pickupComingSoon: "التوصيل إلى المنزل قريباً",
       summaryTitle: "ملخص الطلب الذكي",
       nextTierTitle: "الخصم التالي",
       nextTierDesc: "اشترِ",
@@ -240,10 +239,10 @@ function getBundleTranslations(isRtl: boolean) {
     pointsSub: "Points gagnés avec cette commande",
     pointsLabel: "pts",
     earnMore: "Gagnez plus",
-    freeShippingTitle: "Livraison Gratuite",
-    freeShippingSub: "Livraison offerte dès",
-    freeShippingProgress: "Plus que",
-    freeShippingQualified: "Vous êtes éligible à la livraison gratuite ! 🎉",
+    pickupTitle: "Retrait à l'atelier",
+    pickupSub: "Cité Akid Lotfi, Oran",
+    pickupFree: "Gratuit",
+    pickupComingSoon: "Livraison à domicile bientôt",
     summaryTitle: "Résumé Intelligent",
     nextTierTitle: "Paller suivant",
     nextTierDesc: "Ajoutez",
@@ -263,10 +262,8 @@ function getCartSummary(cart: Product[]) {
   const totalQty = cart.reduce((s, i) => s + (i.quantity || 1), 0);
   const subtotal = cart.reduce((s, i) => s + (i.price || 0) * (i.quantity || 1), 0);
   const points = Math.floor(subtotal / 100) * POINTS_PER_100_DA;
-  const freeShippingRemaining = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
-  const qualifiesFreeShipping = subtotal >= FREE_SHIPPING_THRESHOLD;
   const nextTier = getNextTierInfo(totalQty);
-  return { subtotal, points, freeShippingRemaining, qualifiesFreeShipping, nextTier, totalQty };
+  return { subtotal, points, nextTier, totalQty };
 }
 
 export default function SmartCartUpsell({ cart }: { cart: Product[] }) {
@@ -388,15 +385,13 @@ export default function SmartCartUpsell({ cart }: { cart: Product[] }) {
 
   if (cart.length === 0) return null;
 
-  const freeShippingPercent = Math.min(100, (summary.subtotal / FREE_SHIPPING_THRESHOLD) * 100);
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className="space-y-5 mb-6"
     >
-      {/* Points & Free Shipping Summary */}
+      {/* Points & Retrait Summary */}
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -431,47 +426,22 @@ export default function SmartCartUpsell({ cart }: { cart: Product[] }) {
             <div className="flex items-center gap-1.5 mb-1">
               <Truck size={12} className="text-emerald-500" />
               <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                {t.freeShippingTitle}
+                {t.pickupTitle}
               </span>
             </div>
-            {summary.qualifiesFreeShipping ? (
-              <p className="text-xs font-black text-emerald-600 dark:text-emerald-400">
-                {t.freeShippingQualified}
-              </p>
-            ) : (
-              <>
-                <p className="text-lg font-black text-emerald-700 dark:text-emerald-300">
-                  {summary.freeShippingRemaining}{" "}
-                  <span className="text-xs font-bold opacity-75">{t.currency}</span>
-                </p>
-                <p className="text-[9px] text-emerald-500/70 font-semibold mt-0.5">
-                  {t.freeShippingProgress} {FREE_SHIPPING_THRESHOLD} {t.currency}
-                </p>
-              </>
-            )}
+            <p className="text-lg font-black text-emerald-700 dark:text-emerald-300">
+              {t.pickupFree}
+            </p>
+            <p className="text-[9px] text-emerald-500/70 font-semibold mt-0.5">{t.pickupSub}</p>
           </div>
         </div>
 
-        {!summary.qualifiesFreeShipping && (
-          <div className="mt-3">
-            <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${freeShippingPercent}%` }}
-                transition={{ duration: 1, ease: "easeOut" }}
-                className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-full"
-              />
-            </div>
-            <div className="flex justify-between mt-1">
-              <span className="text-[9px] font-bold text-slate-400">
-                {Math.round(freeShippingPercent)}%
-              </span>
-              <span className="text-[9px] font-bold text-emerald-500">
-                {FREE_SHIPPING_THRESHOLD} {t.currency}
-              </span>
-            </div>
-          </div>
-        )}
+        <div className="mt-3 p-3 bg-cyan-50 dark:bg-cyan-950/20 border border-cyan-200/50 dark:border-cyan-800/30 rounded-2xl flex items-center gap-2">
+          <Zap size={14} className="text-cyan-500 shrink-0" />
+          <p className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 leading-relaxed">
+            {t.pickupComingSoon} 🚀
+          </p>
+        </div>
 
         {summary.nextTier && (
           <motion.div

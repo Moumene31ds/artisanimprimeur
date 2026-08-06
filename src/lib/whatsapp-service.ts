@@ -161,7 +161,7 @@ export async function sendOrderReadyNotification(
     `🖨️ *L'Artisan Imprimeur - Commande prête !*\n\n` +
     `Bonjour *${customerName}*,\n\n` +
     `✅ Votre commande #${orderId.slice(-6).toUpperCase()} est *prête* !\n\n` +
-    `📍 Vous pouvez venir la récupérer à notre atelier ou nous contacter pour la livraison.\n\n` +
+    `📍 Vous pouvez venir la récupérer à notre atelier : Cité Akid Lotfi, Oran.\n\n` +
     `📞 Contactez-nous: ${process.env.NEXT_PUBLIC_CONTACT_PHONE || '+213549179000'}\n\n` +
     `Merci de votre confiance 🙏`;
 

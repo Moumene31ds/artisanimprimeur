@@ -1,3 +1,8 @@
+// ---------------------------------------------------------------------------
+// pwa.ts — كل ما يتعلق بدورة حياة الـ PWA: التسجيل، كشف التحديثات الفوري،
+// المزامنة، الإشعارات، وحالة التركيب.
+// ---------------------------------------------------------------------------
+
 export async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return false;
 
@@ -5,7 +10,6 @@ export async function registerServiceWorker() {
     const registration = await navigator.serviceWorker.register('/sw.js', {
       scope: '/',
     });
-
     return registration;
   } catch (error) {
     return false;
@@ -18,29 +22,69 @@ export interface SWUpdateEvent {
 }
 
 /**
- * مراقبة توفّر تحديث جديد للسيرفس ووركر.
- * يعيد دالة فكّ الاشتراك + وسيط updateAvailable لاستدعاء عند ظهور تحديث.
+ * مراقبة توفّر تحديث جديد للسيرفس ووركر (تحديث موثوق):
+ * يغطي الحالات التالية:
+ *  - يوجد بالفعل worker في حالة waiting (اكتُشف التحديث في زيارة سابقة).
+ *  - worker جديد قيد التثبيت (installing) ووصل إلى حالة installed.
+ * يعيد دالة إلغاء الاشتراك + وسيط updateAvailable.
  */
-export function onServiceWorkerUpdate(cb: (hasUpdate: boolean, reg?: ServiceWorkerRegistration) => void): () => void {
+export function onServiceWorkerUpdate(
+  cb: (hasUpdate: boolean, reg?: ServiceWorkerRegistration) => void
+): () => void {
   if (!('serviceWorker' in navigator)) return () => {};
 
   let unregister = () => {};
   navigator.serviceWorker.getRegistration('/').then((registration) => {
     if (!registration) return;
+
+    // تحديث موجود مسبقاً في انتظار السيطرة (وصل في جلسة سابقة).
+    if (registration.waiting) {
+      cb(true, registration);
+      return;
+    }
+
     const onUpdateFound = () => {
-      const newWorker = registration.installing || registration.waiting;
+      const newWorker = registration.installing;
       if (!newWorker) return;
-      newWorker.addEventListener('statechange', () => {
+
+      const onStateChange = () => {
+        // installed = نسخة جديدة جاهزة بالكامل في cache.
         if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
           cb(true, registration);
+          newWorker.removeEventListener('statechange', onStateChange);
         }
-      });
+        // في أول تثبيت (لا يوجد controller) لا حاجة للإبلاغ.
+        if (newWorker.state === 'activated' && !navigator.serviceWorker.controller) {
+          newWorker.removeEventListener('statechange', onStateChange);
+        }
+      };
+      newWorker.addEventListener('statechange', onStateChange);
     };
+
     registration.addEventListener('updatefound', onUpdateFound);
-    unregister = () => registration.removeEventListener('updatefound', onUpdateFound);
+    unregister = () => {
+      registration.removeEventListener('updatefound', onUpdateFound);
+    };
   });
 
   return unregister;
+}
+
+/** مراقبة انتقال السيطرة إلى سيرفس ووركر جديد (controllerchange). */
+export function watchControllerChange(cb: () => void): () => void {
+  if (!('serviceWorker' in navigator)) return () => {};
+  navigator.serviceWorker.addEventListener('controllerchange', cb);
+  return () => navigator.serviceWorker.removeEventListener('controllerchange', cb);
+}
+
+/** الاستماع لرسائل السيرفس ووركر (مثل NEW_VERSION_ACTIVATED). */
+export function onServiceWorkerMessage(
+  cb: (data: any) => void
+): () => void {
+  if (!('serviceWorker' in navigator)) return () => {};
+  const handler = (event: MessageEvent) => cb(event.data);
+  navigator.serviceWorker.addEventListener('message', handler);
+  return () => navigator.serviceWorker.removeEventListener('message', handler);
 }
 
 /** تطبيق التحديث الفوري: يخطّي السيرفس ووركر القديم ثم يُحدَّث التطبيق. */
@@ -49,11 +93,74 @@ export async function applyServiceWorkerUpdate(): Promise<void> {
     const registration = await navigator.serviceWorker.getRegistration('/');
     if (registration?.waiting) {
       registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    } else if (registration?.installing) {
+      registration.installing.postMessage({ type: 'SKIP_WAITING' });
     } else {
       await registration?.update();
     }
   } catch (e) {
     console.error('Failed to apply SW update:', e);
+  }
+}
+
+/** التحقق اليدوي من وجود تحديث جديد (يسحب sw.js الجديد من الشبكة). */
+export async function checkForUpdates(): Promise<ServiceWorkerRegistration | null> {
+  if (!('serviceWorker' in navigator)) return null;
+  try {
+    const registration = await navigator.serviceWorker.getRegistration('/');
+    if (!registration) return null;
+    await registration.update();
+    return registration;
+  } catch {
+    return null;
+  }
+}
+
+/** فحص دوري آلي للتحديثات كل intervalMs (افتراضياً 5 دقائق). */
+export function pollForUpdates(intervalMs = 5 * 60 * 1000): () => void {
+  if (!('serviceWorker' in navigator)) return () => {};
+  let timer: ReturnType<typeof setInterval> | null = null;
+  timer = setInterval(() => {
+    checkForUpdates().catch(() => {});
+  }, intervalMs);
+  return () => {
+    if (timer) clearInterval(timer);
+  };
+}
+
+/** الحصول على نسخة البناء من الخادم (بلا تخزين مؤقت). */
+export async function getBuildInfo(): Promise<{ version: string } | null> {
+  try {
+    const res = await fetch('/api/build-info', { cache: 'no-store' });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+/** الحصول على إصدار السيرفس ووركر الحالي (عبر MessageChannel). */
+export async function getSWVersion(): Promise<string | null> {
+  if (!('serviceWorker' in navigator)) return null;
+  try {
+    const registration = await navigator.serviceWorker.getRegistration('/');
+    const controller = registration?.active || navigator.serviceWorker.controller;
+    if (!controller) return null;
+    return new Promise((resolve) => {
+      const channel = new MessageChannel();
+      const timeout = setTimeout(() => resolve(null), 1500);
+      channel.port1.onmessage = (event) => {
+        clearTimeout(timeout);
+        if (event.data?.type === 'VERSION') {
+          resolve(event.data.version);
+        } else {
+          resolve(null);
+        }
+      };
+      controller.postMessage({ type: 'GET_VERSION' }, [channel.port2]);
+    });
+  } catch {
+    return null;
   }
 }
 
@@ -143,8 +250,10 @@ export async function unsubscribeFromPushNotifications(): Promise<boolean> {
 
 export function isPWAInstalled(): boolean {
   if (typeof window === 'undefined') return false;
-  return window.matchMedia('(display-mode: standalone)').matches ||
-    (window.navigator as any).standalone === true;
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as any).standalone === true
+  );
 }
 
 export function isAppInstalled(): boolean {

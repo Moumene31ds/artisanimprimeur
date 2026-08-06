@@ -429,7 +429,7 @@ export default function PaymentVerifyPage() {
           <p className="text-slate-500 dark:text-slate-400 text-xs font-bold mt-1">
             {isRtl 
               ? "ارفع لقطة شاشة لوصل الدفع وسيقوم الحارس الذكي بمطابقته ببيانات طلبك لتسريع البدء في الطباعة."
-              : "Scannez votre reçu de virement pour accélérer le traitement et la livraison de votre commande."}
+              : "Scannez votre reçu de virement pour accélérer le traitement de votre commande."}
           </p>
         </div>
         <Link href="/profile" className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-xs font-black transition-transform">
@@ -442,7 +442,7 @@ export default function PaymentVerifyPage() {
           <CheckCircle2 size={64} className="mx-auto mb-4 text-emerald-500 animate-pulse" />
           <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">{isRtl ? "لا توجد طلبات معلقة بالدفع" : "Aucune commande en attente"}</h3>
           <p className="text-slate-400 text-xs font-bold max-w-xs mx-auto leading-relaxed mb-6">
-            {isRtl ? "كل طلبياتك تم دفعها أو شحنها بالفعل! شكراً لثقتكم بمطبعتنا." : "Toutes vos commandes sont réglées ou livrées. Merci pour votre fidélité !"}
+            {isRtl ? "كل طلبياتك مدفوعة أو تم تسليمها بالفعل! شكراً لثقتكم بمطبعتنا." : "Toutes vos commandes sont réglées ou retirées. Merci pour votre fidélité !"}
           </p>
           <Link href="/services" className="px-8 py-4 bg-slate-900 dark:bg-accent text-white rounded-2xl font-black text-xs shadow-lg inline-block">
             {isRtl ? "تصفح الخدمات واطلب الآن" : "Commander à nouveau"}
@@ -775,7 +775,7 @@ export default function PaymentVerifyPage() {
               <div className="space-y-1">
                 <h4 className="font-black text-sm">{isRtl ? "بحاجة لمساعدة في الدفع؟" : "Besoin d'aide ?"}</h4>
                 <p className="text-[10px] text-slate-400 font-bold leading-relaxed">
-                  {isRtl ? "تواصل مع خدمة العملاء لتسهيل الدفع والتوصيل" : "Contactez notre support pour finaliser votre commande."}
+                  {isRtl ? "تواصل مع خدمة العملاء لتسهيل عملية الدفع والاستلام" : "Contactez notre support pour finaliser votre commande."}
                 </p>
               </div>
               <a href="tel:+213549179000" className="p-3 bg-emerald-500 text-white rounded-2xl hover:scale-105 active:scale-95 transition-transform shadow-md shrink-0">

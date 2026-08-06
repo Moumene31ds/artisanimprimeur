@@ -30,7 +30,7 @@ export default function VerifiedReviews({ userId }: VerifiedReviewsProps) {
     title: isRtl ? "آراء عملائنا الأوفياء" : "Avis de nos Clients",
     subtitle: isRtl ? "مراجعات موثقة من مشترين حقيقيين" : "Retours authentiques d'acheteurs vérifiés",
     leaveReview: isRtl ? "اكتب مراجعتك" : "Laisser un avis",
-    commentPlaceholder: isRtl ? "شاركنا تجربتك مع جودة الطباعة والتوصيل..." : "Partagez votre expérience sur l'impression et la livraison...",
+    commentPlaceholder: isRtl ? "شاركنا تجربتك مع جودة الطباعة وسرعة الخدمة..." : "Partagez votre expérience sur la qualité d'impression et le service...",
     orderIdPlaceholder: isRtl ? "رقم الطلب (اختياري - للحصول على شارة مشترٍ مؤكد)" : "ID de commande (Optionnel - pour le badge Acheteur Vérifié)",
     submitBtn: isRtl ? "إرسال المراجعة" : "Publier l'avis",
     verifiedBuyer: isRtl ? "مشتري مؤكد" : "Acheteur Vérifié",

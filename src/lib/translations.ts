@@ -49,7 +49,7 @@ export const TRANSLATIONS = {
     appSubtitle: "Impression Premium",
     landingBadge: "Plateforme d'impression N°1 en Algérie",
     landingHeroTitle: "Impression Pro en un clic.",
-    landingHeroSubtitle: "Transformez vos idées en réalité. Haute qualité, prix compétitifs et livraison rapide de vos cartes, flyers et plus.",
+    landingHeroSubtitle: "Transformez vos idées en réalité. Haute qualité, prix compétitifs et retrait à l'atelier à Oran.",
     landingCta: "Commencez l'expérience",
     backToLogin: "Retour à la connexion",
     forgotPasswordTitle: "Mot de passe oublié ?",
@@ -107,7 +107,7 @@ export const TRANSLATIONS = {
 
     // --- Cart Page ---
     emptyCart: "Votre panier est vide",
-    deliveryFee: "Livraison",
+    deliveryFee: "Retrait à l'atelier",
     uploadDesign: "Uploader votre design",
     chooseFile: "Cliquez ici pour choisir un fichier (PDF, PNG, JPG)",
     uploadSuccess: "Fichier téléversé avec succès !",
@@ -331,7 +331,7 @@ export const TRANSLATIONS = {
     appSubtitle: "طباعة مميزة",
     landingBadge: "المنصة الأولى للطباعة في الجزائر",
     landingHeroTitle: "طباعة احترافية بلمسة واحدة.",
-    landingHeroSubtitle: "نحول أفكارك إلى واقع ملموس. جودة عالية، أسعار تنافسية، وتوصيل سريع لبطاقاتك، مطوياتك، والمزيد.",
+    landingHeroSubtitle: "نحول أفكارك إلى واقع ملموس. جودة عالية، أسعار تنافسية، واستلام من مقر المطبعة بوهران.",
     landingCta: "ابدأ تجربتك الآن",
     backToLogin: "العودة لتسجيل الدخول",
     forgotPasswordTitle: "هل نسيت كلمة المرور؟",
@@ -389,7 +389,7 @@ export const TRANSLATIONS = {
     
     // --- صفحة السلة ---
     emptyCart: "سلة التسوق فارغة",
-    deliveryFee: "رسوم التوصيل",
+    deliveryFee: "رسوم الاستلام",
     uploadDesign: "رفع ملف التصميم",
     chooseFile: "اضغط هنا لاختيار ملف (PDF, PNG, JPG)",
     uploadSuccess: "تم رفع الملف بنجاح!",

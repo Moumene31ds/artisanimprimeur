@@ -49,7 +49,7 @@ export default function LandingPage() {
 
   const marketingPrizes = [
     { text: "خصم 15%", textFr: "15% DE RÉDUC", value: 15, code: "MARKET15" },
-    { text: "شحن مجاني", textFr: "LIVRAISON GRATUITE", value: 100, code: "FREESHIP" },
+    { text: "خصم 700 دج", textFr: "700 DA OFFERTS", value: 700, code: "BONUS700" },
     { text: "خصم 500 دج", textFr: "500 DA OFFERTS", value: 500, code: "BONUS500" },
     { text: "تصميم مجاني", textFr: "DESIGN GRATUIT", value: 0, code: "FREEDESIGN" },
     { text: "خصم 10%", textFr: "10% DE RÉDUC", value: 10, code: "MARKET10" },
@@ -106,7 +106,7 @@ export default function LandingPage() {
   const features = [
     { icon: Star, title: isRtl ? 'جودة استثنائية CMYK' : 'Qualité Premium CMYK', desc: isRtl ? 'ورق فاخر 350g وطباعة عالية الدقة' : 'Papier de luxe 350g & impression HD', color: 'text-blue-500', bg: 'bg-blue-500/10' },
     { icon: Clock, title: isRtl ? 'إنجاز وسرعة قياسية' : 'Service Rapide 24/48h', desc: isRtl ? 'تسليم وسرعة تنفيذ مبهرة' : 'Respect total des délais engagés', color: 'text-purple-500', bg: 'bg-purple-500/10' },
-    { icon: Truck, title: isRtl ? 'توصيل لـ 58 ولاية' : 'Livraison 58 Wilayas', desc: isRtl ? 'شحن آمن ومباشر حتى بابك' : 'Livraison rapide vers toute l\'Algérie', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { icon: Truck, title: isRtl ? 'استلام من وهران' : 'Retrait à Oran', desc: isRtl ? 'استلم مطبوعاتك من مقر المطبعة — التوصيل قريباً' : 'Récupérez vos impressions à l\'atelier — Livraison bientôt', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     { icon: ShieldCheck, title: isRtl ? 'ضمان رضا 100%' : 'Garantie Satisfait 100%', desc: isRtl ? 'إعادة الطباعة مجاناً في حال وجود أي خطأ' : 'Réimpression gratuite en cas de défaut', color: 'text-amber-500', bg: 'bg-amber-500/10' }
   ];
 
@@ -201,10 +201,10 @@ export default function LandingPage() {
             >
               <div className="flex justify-between items-start">
                 <Sparkles size={24} className="text-white" />
-                <span className="text-xs font-mono text-white/80 font-bold">58 Wilayas</span>
+                <span className="text-xs font-mono text-white/80 font-bold">Oran</span>
               </div>
               <div>
-                <p className="text-xs font-black uppercase tracking-widest text-white/70">{isRtl ? "شحن سريع وحصري" : "Livraison Express"}</p>
+                <p className="text-xs font-black uppercase tracking-widest text-white/70">{isRtl ? "استلام من مقر المطبعة" : "Retrait à l'atelier"}</p>
                 <h4 className="text-xl font-black text-white mt-1">{isRtl ? "خصومات خاصة للشركات" : "Offres Entreprises"}</h4>
               </div>
             </motion.div>

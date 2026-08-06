@@ -9,7 +9,7 @@ import { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Sparkles, Star, StarHalf, MapPin, Truck, Loader2, Phone, Globe, Gift, X, Copy, Check } from "lucide-react";
-import { WILAYAS, SHIPPING_RATES } from "@/lib/constants";
+import { WILAYAS } from "@/lib/constants";
 import { FEATURED_PRODUCTS } from "@/lib/catalog";
 import { db } from "@/lib/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -19,12 +19,12 @@ import { useSwipe } from "@/hooks/useSwipe";
 const TESTIMONIALS = [
   { name: "Moumene A.", role: "CEO, TechDz", text: "Meilleure qualité d'impression. Rapide et très professionnel !", rating: 5 },
   { name: "Mohamed B.", role: "Designer", text: "Le service client est exceptionnel et les couleurs des cartes sont parfaites.", rating: 4.5 },
-  { name: "Karim A.", role: "Commerçant", text: "Livraison rapide. L'interface du site est très facile à utiliser.", rating: 4.5 },
+  { name: "Karim A.", role: "Commerçant", text: "Retrait rapide à l'atelier. L'interface du site est très facile à utiliser.", rating: 4.5 },
 ];
 
 const WELCOME_PRIZES = [
   { text: "10% OFF", textAr: "خصم 10%", value: 10, type: "percent", codePrefix: "WELCOME10" },
-  { text: "FREE SHIPPING", textAr: "شحن مجاني", value: 100, type: "shipping", codePrefix: "WELCOMESHIP" },
+  { text: "700 DA OFF", textAr: "خصم 700 دج", value: 700, type: "fixed", codePrefix: "WELCOME700" },
   { text: "5% OFF", textAr: "خصم 5%", value: 5, type: "percent", codePrefix: "WELCOME5" },
   { text: "500 DA OFF", textAr: "خصم 500 دج", value: 500, type: "fixed", codePrefix: "WELCOME500" },
   { text: "15% OFF", textAr: "خصم 15%", value: 15, type: "percent", codePrefix: "WELCOME15" },
@@ -90,10 +90,6 @@ export default function Home() {
     },
   });
 
-  const [selectedWilaya, setSelectedWilaya] = useState<string>("31 - Oran");
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [showDropdown, setShowDropdown] = useState<boolean>(false);
-
   // --- Welcome Wheel of Fortune States ---
   const [showWheelModal, setShowWheelModal] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
@@ -102,26 +98,6 @@ export default function Home() {
   const [promoCode, setPromoCode] = useState("");
   const [copiedCode, setCopiedCode] = useState(false);
   const [hasSpun, setHasSpun] = useState(false);
-
-  useEffect(() => {
-    if (userWilaya) {
-      const matched = WILAYAS.find(w => w.toLowerCase().includes(userWilaya.toLowerCase()) || userWilaya.toLowerCase().includes(w.split(" - ")[1].toLowerCase()));
-      if (matched) {
-        setSelectedWilaya(matched);
-      }
-    }
-  }, [userWilaya]);
-
-  const filteredWilayas = useMemo(() => {
-    return WILAYAS.filter(w => w.toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [searchQuery]);
-
-  const wilayaCode = selectedWilaya.split(" - ")[0];
-  const wilayaName = selectedWilaya.split(" - ")[1];
-  const baseRate = SHIPPING_RATES[wilayaCode] || 600;
-  const homeDeliveryCost = baseRate;
-  const deskPickupCost = Math.max(200, baseRate - 150);
-  const deliveryDays = parseInt(wilayaCode) === 31 ? "24h - 48h" : parseInt(wilayaCode) <= 16 ? "2 - 3 jours" : "3 - 5 jours";
 
   const t = TRANSLATIONS[language];
   const isRtl = language === "ar";
@@ -147,16 +123,16 @@ export default function Home() {
 
   const faqs = useMemo(() => isRtl ? [
     {
-      question: "كم تستغرق مدة توصيل المطبوعات؟",
-      answer: "يستغرق التوصيل عادةً من 24 إلى 48 ساعة داخل ولاية وهران، ومن 3 إلى 5 أيام عمل لباقي الولايات الـ 58 عبر شريكنا Yalidine Express."
+      question: "كيف أستلم طلبي حالياً؟",
+      answer: "حالياً الاستلام يتم من مقر المطبعة بحيّ العقيد لطفي، وهران (مفتوح من 9:00 صباحاً إلى 6:00 مساءً) مجاناً ودون أي تكاليف إضافية. خدمة التوصيل إلى المنزل ستكون متاحة قريباً جداً."
     },
     {
       question: "ما هي صيغ الملفات المقبولة لرفع التصاميم؟",
       answer: "نقبل ملفات PDF و PNG و JPEG عالية الدقة. نوصي بأن تكون دقة الألوان بصيغة CMYK وبجودة لا تقل عن 300 DPI لضمان طباعة ممتازة وألوان مطابقة للتصميم."
     },
     {
-      question: "هل يمكنني الدفع عبر الإنترنت باستخدام بطاقة الذهبية أو CIB؟",
-      answer: "نعم، نقدم خيار الدفع الإلكتروني (الذهبية / CIB) بالإضافة إلى الدفع عند الاستلام. يمكنك أيضاً تأكيد طلبك بنقل مبلغ الفاتورة عبر بريدي موب ورفع وصل الدفع في صفحة تأكيد الدفع ليتحقق فريقنا منه بسرعة."
+      question: "كيف يمكنني الدفع؟",
+      answer: "الدفع عند الاستلام (نقداً عند استلام طلبك من المطبعة)، أو عبر تحويل المبلغ عبر بريدي موب ورفع وصل الدفع في صفحة تأكيد الدفع ليتحقق فريقنا منه بسرعة. الدفع الإلكتروني (الذهبية / CIB) غير متاح حالياً على الموقع."
     },
     {
       question: "ماذا لو لم يكن لدي تصميم جاهز للطباعة؟",
@@ -164,16 +140,16 @@ export default function Home() {
     }
   ] : [
     {
-      question: "Combien de temps prend la livraison ?",
-      answer: "La livraison prend généralement 24h à 48h à Oran, et 3 à 5 jours ouvrables vers les autres wilayas de l'Algérie via Yalidine Express."
+      question: "Comment récupérer ma commande ?",
+      answer: "Le retrait se fait actuellement à l'atelier, Cité Akid Lotfi, Oran (ouvert de 09h à 18h), gratuitement et sans frais supplémentaires. La livraison à domicile sera disponible très prochainement."
     },
     {
       question: "Quels formats de fichiers sont acceptés ?",
       answer: "Nous acceptons les fichiers PDF, PNG et JPEG haute définition. Nous recommandons un profil de couleur CMYK et une résolution minimale de 300 DPI."
     },
     {
-      question: "Puis-je payer en ligne avec Edahabia ou CIB ?",
-      answer: "Oui, nous proposons le paiement électronique (Edahabia / CIB) en plus du paiement à la livraison. Vous pouvez aussi transférer le montant via BaridiMob et téléverser votre reçu sur la page de confirmation de paiement pour une vérification rapide par notre équipe."
+      question: "Comment puis-je payer ?",
+      answer: "Paiement à la réception (en espèces lors du retrait à l'atelier), ou par virement BaridiMob puis en téléversant votre reçu sur la page de confirmation de paiement pour une vérification rapide par notre équipe. Le paiement électronique (Edahabia / CIB) n'est pas disponible actuellement."
     },
     {
       question: "Comment faire si je n'ai pas de design prêt ?",
@@ -301,8 +277,6 @@ export default function Home() {
     return JSON.stringify(baseLd).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
   }, [userWilaya]);
 
-  const isLocalHQ = userWilaya && (userWilaya.includes("وهران") || userWilaya.toLowerCase().includes("oran"));
-
   if (!mounted) return null;
 
   return (
@@ -364,14 +338,8 @@ export default function Home() {
             </h2>
             
             <div className="mt-4 flex items-center justify-center md:justify-start gap-2 text-slate-700 dark:text-slate-300 font-medium bg-white/40 dark:bg-black/20 p-3 rounded-2xl w-fit mx-auto md:mx-0 border border-white/20">
-              <Truck size={18} className={isLocalHQ ? "text-emerald-500" : "text-accent"} />
-              {isLocalHQ ? (
-                <span>{isRtl ? "توصيل سريع ومجاني داخل ولاية وهران 🚀" : "Livraison rapide et GRATUITE à Oran 🚀"}</span>
-              ) : userWilaya ? (
-                <span>{isRtl ? `شحن متوفر إلى ${userWilaya} عبر Yalidine Express` : `Livraison vers ${userWilaya} via Yalidine Express`}</span>
-              ) : (
-                <span>{isRtl ? "شحن متوفر لجميع الولايات 🇩🇿" : "Livraison disponible vers les 58 wilayas 🇩🇿"}</span>
-              )}
+              <Truck size={18} className="text-accent" />
+              <span>{isRtl ? "الاستلام من مقر المطبعة بوهران — التوصيل قريباً 🚀" : "Retrait à l'atelier d'Oran — Livraison bientôt 🚀"}</span>
             </div>
           </div>
           <Link href="/services" className="px-8 py-4 bg-slate-900 dark:bg-accent text-white rounded-2xl font-bold shadow-lg hover:scale-105 transition-transform active:scale-95 whitespace-nowrap btn-shine relative overflow-hidden">
@@ -575,183 +543,34 @@ export default function Home() {
         </div>
       </section>
 
-      {/* --- Yalidine Live Delivery Estimator Widget --- */}
-      <section className="max-w-5xl mx-auto w-full my-12 scroll-mt-24 bg-gradient-to-tr from-slate-50 to-indigo-50/20 dark:from-slate-900/40 dark:to-indigo-950/10 border border-slate-200/50 dark:border-slate-800 p-8 md:p-12 rounded-[3rem] shadow-xl relative overflow-hidden">
-        <style>{`
-          .timeline-connector {
-            position: absolute;
-            top: 24px;
-            left: 50%;
-            width: 100%;
-            height: 4px;
-            background: #e2e8f0;
-            z-index: 1;
-          }
-          .dark .timeline-connector {
-            background: #1e293b;
-          }
-          .timeline-connector-active {
-            background: linear-gradient(90deg, #4f46e5, #06b6d4);
-          }
-        `}</style>
-        <div className="absolute top-0 left-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl -ml-20 -mt-20"></div>
-        <div className="absolute bottom-0 right-0 w-64 h-64 bg-cyan-500/5 rounded-full blur-3xl -mr-20 -mb-20"></div>
+            {/* --- Delivery Status (Livraison bientôt disponible) --- */}
+      <section className="max-w-5xl mx-auto w-full my-12 scroll-mt-24 bg-gradient-to-tr from-slate-900 via-slate-800 to-indigo-950 text-white border border-white/10 p-8 md:p-12 rounded-[3rem] shadow-2xl relative overflow-hidden">
+        <div className="absolute -top-24 -right-16 w-72 h-72 bg-blue-500/20 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute -bottom-24 -left-16 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl pointer-events-none"></div>
 
-        <div className="text-center mb-10 relative z-10">
-          <span className="px-3.5 py-1.5 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-xs font-black uppercase tracking-wider">
-            Yalidine Express Algerian Shipping Hub
-          </span>
-          <h2 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white mt-3">
-            {isRtl ? "محاكي وحاسبة أسعار التوصيل لـ 58 ولاية" : "Estimez votre Livraison dans les 58 Wilayas"}
-          </h2>
-          <p className="text-slate-500 dark:text-slate-400 text-sm font-semibold max-w-xl mx-auto mt-2 leading-relaxed">
-            {isRtl 
-              ? "اختر ولايتك لمعرفة تكاليف الشحن الدقيقة، مواقع مكاتب الاستلام، وجدول التوصيل الزمني التفاعلي."
-              : "Sélectionnez votre Wilaya pour voir les frais de port précis, nos agences partenaires et votre calendrier de livraison."}
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start relative z-10">
-          {/* Select Box Block */}
-          <div className="lg:col-span-1 bg-white dark:bg-slate-950 p-6 rounded-[2rem] border border-slate-200/50 dark:border-slate-800/80 shadow-md relative">
-            <label className="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2.5">
-              {isRtl ? "اختر الولاية 🇩🇿 :" : "Sélectionnez la Wilaya 🇩🇿 :"}
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={searchQuery || selectedWilaya}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setShowDropdown(true);
-                }}
-                onFocus={() => {
-                  setSearchQuery("");
-                  setShowDropdown(true);
-                }}
-                placeholder={isRtl ? "ابحث عن ولاية..." : "Rechercher une wilaya..."}
-                className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl border border-slate-200 dark:border-slate-700 outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 text-xs font-bold transition-all"
-              />
-              <div className="absolute right-4 top-3.5 text-slate-400 pointer-events-none">
-                <MapPin size={18} />
-              </div>
-
-              {showDropdown && (
-                <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl max-h-60 overflow-y-auto z-[999] scrollbar-thin">
-                  {filteredWilayas.length > 0 ? (
-                    filteredWilayas.map((w) => (
-                      <button
-                        key={w}
-                        onClick={() => {
-                          setSelectedWilaya(w);
-                          setSearchQuery("");
-                          setShowDropdown(false);
-                        }}
-                        className={`w-full px-4 py-3 text-start text-xs font-bold transition-colors hover:bg-slate-50 dark:hover:bg-slate-900 flex items-center gap-2.5 border-b border-slate-100 dark:border-slate-800 last:border-0 ${
-                          selectedWilaya === w ? "text-indigo-600 dark:text-accent bg-indigo-50/20 dark:bg-slate-900" : "text-slate-700 dark:text-slate-350"
-                        }`}
-                      >
-                        <span className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-[10px] text-slate-400">📍</span>
-                        <span>{w}</span>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="p-4 text-center text-xs text-slate-400 font-bold">
-                      {isRtl ? "لم يتم العثور على ولايات" : "Aucune wilaya trouvée"}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Simulated pickup instruction cards */}
-            <div className="mt-6 border-t border-slate-100 dark:border-slate-800/80 pt-5 space-y-4">
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isRtl ? "مواقع مكاتب Yalidine المقترحة" : "Agences Yalidine Suggérées"}</h4>
-              <div className="space-y-2">
-                {[
-                  `Agence Yalidine - ${wilayaName} Centre`,
-                  `Agence Yalidine - ${wilayaName} Nord`
-                ].map((agency, i) => (
-                  <div key={i} className="flex items-center gap-2.5 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200/50 dark:border-slate-800/30">
-                    <span className="text-lg">🏢</span>
-                    <div className="text-[11px] font-bold text-slate-750 dark:text-slate-300">
-                      <div>{agency}</div>
-                      <div className="text-[9px] text-slate-400 font-medium">{isRtl ? "مفتوح: 8:00 - 17:00 (السبت-الخميس)" : "Ouvert: 8h - 17h (Sam-Jeu)"}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8 text-center md:text-start">
+          <div className="flex-1">
+            <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 text-amber-300 text-xs font-black uppercase tracking-wider border border-white/10 mb-4">
+              <Truck size={14} className="animate-pulse" />
+              {isRtl ? "التوصيل إلى المنزل قريباً 🚀" : "Livraison à domicile bientôt 🚀"}
+            </span>
+            <h2 className="text-2xl md:text-3xl font-black tracking-tight">
+              {isRtl ? "التوصيل متاح قريباً — استلم الآن من المطبعة" : "La livraison arrive bientôt — Retrait immédiat à l'atelier"}
+            </h2>
+            <p className="mt-3 text-sm text-slate-300 font-semibold leading-relaxed max-w-2xl">
+              {isRtl
+                ? "حالياً يمكنك استلام طلباتك من مقر المطبعة بحيّ العقيد لطفي، وهران (مفتوح من 9:00 صباحاً إلى 6:00 مساءً). خدمة التوصيل إلى جميع الولايات ستصبح متاحة قريباً جداً — تابعنا!"
+                : "Pour le moment, retirez vos commandes à l'atelier, Cité Akid Lotfi, Oran (ouvert de 09h à 18h). La livraison dans toutes les wilayas sera disponible très prochainement !"}
+            </p>
           </div>
-
-          {/* Costs & Timeline Block */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Rates Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Home Delivery */}
-              <div className="bg-gradient-to-tr from-white to-slate-50 dark:from-slate-950 dark:to-slate-900 p-6 rounded-[2rem] border border-slate-200/50 dark:border-slate-800 shadow-md relative group hover:border-indigo-500/40 dark:hover:border-indigo-400/40 transition-colors">
-                <div className="absolute top-4 right-4 text-2xl">🚚</div>
-                <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{isRtl ? "توصيل للمنزل" : "À Domicile"}</h3>
-                <p className="text-[10px] font-bold text-indigo-500 uppercase mb-3">{isRtl ? "شحن آمن ومباشر لعنوانك" : "Livraison directe à votre adresse"}</p>
-                <div className="text-3xl font-black text-slate-900 dark:text-white flex items-baseline gap-1.5">
-                  {homeDeliveryCost} <span className="text-sm font-bold text-slate-500">{t.currency}</span>
-                </div>
-                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-400">
-                  <span>{isRtl ? "مدة الوصول المقدرة:" : "Délai estimé :"}</span>
-                  <span className="text-indigo-600 dark:text-accent font-black">{deliveryDays}</span>
-                </div>
-              </div>
-
-              {/* Desk Pickup */}
-              <div className="bg-gradient-to-tr from-white to-slate-50 dark:from-slate-950 dark:to-slate-900 p-6 rounded-[2rem] border border-slate-200/50 dark:border-slate-800 shadow-md relative group hover:border-cyan-500/40 dark:hover:border-cyan-400/40 transition-colors">
-                <div className="absolute top-4 right-4 text-2xl">🏢</div>
-                <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{isRtl ? "استلام من المكتب" : "Bureau Yalidine"}</h3>
-                <p className="text-[10px] font-bold text-cyan-500 uppercase mb-3">{isRtl ? "وفر المال واستلم من أقرب فرع" : "Économisez en retirant au guichet"}</p>
-                <div className="text-3xl font-black text-slate-900 dark:text-white flex items-baseline gap-1.5">
-                  {deskPickupCost} <span className="text-sm font-bold text-slate-500">{t.currency}</span>
-                </div>
-                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-400">
-                  <span>{isRtl ? "مدة الوصول المقدرة:" : "Délai estimé :"}</span>
-                  <span className="text-cyan-500 dark:text-cyan-400 font-black">{deliveryDays}</span>
-                </div>
-              </div>
+          <div className="shrink-0 flex items-center gap-4">
+            <div className="px-6 py-4 bg-white/10 backdrop-blur rounded-2xl border border-white/10 text-center">
+              <span className="block text-[9px] font-black uppercase tracking-widest text-slate-300">{isRtl ? "الاستلام من المطبعة" : "Retrait à l'atelier"}</span>
+              <span className="block text-2xl font-black text-emerald-400 mt-1">{isRtl ? "مجاني" : "Gratuit"}</span>
             </div>
-
-            {/* Shipping Timeline */}
-            <div className="bg-white dark:bg-slate-950 p-6 md:p-8 rounded-[2rem] border border-slate-200/50 dark:border-slate-800 shadow-md relative">
-              <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-6">{isRtl ? "الجدول الزمني التفاعلي للطلب والشحن" : "Calendrier de Production & Expédition"}</h3>
-              
-              <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6 md:gap-4">
-                {/* Horizontal line for desktop */}
-                <div className="hidden md:block timeline-connector timeline-connector-active left-0 w-3/4"></div>
-                <div className="hidden md:block timeline-connector left-3/4 w-1/4"></div>
-
-                {[
-                  { title: isRtl ? "تأكيد الطلب" : "Validation", subtitle: isRtl ? "خلال ساعات" : "Instantané", active: true, icon: "✅" },
-                  { title: isRtl ? "طباعة ورق وهران" : "Impression HQ", subtitle: isRtl ? "1 - 2 أيام" : "1 - 2 jours", active: true, icon: "🖨️" },
-                  { title: isRtl ? "فرز ياليدين" : "Yalidine Sorting", subtitle: isRtl ? "1 يوم" : "1 jour", active: true, icon: "📦" },
-                  { title: isRtl ? "الاستلام والوصول" : "Arrivée", subtitle: deliveryDays, active: false, icon: "🎁", highlight: true }
-                ].map((step, idx) => (
-                  <div key={idx} className="relative z-10 flex md:flex-col items-center md:text-center gap-4 md:gap-2 flex-1 w-full">
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg shadow-md border ${
-                      step.highlight 
-                        ? "bg-accent border-transparent text-white animate-pulse" 
-                        : step.active 
-                          ? "bg-gradient-to-tr from-indigo-600 to-indigo-800 border-transparent text-white" 
-                          : "bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400"
-                    }`}>
-                      {step.icon}
-                    </div>
-                    <div>
-                      <h4 className={`text-xs font-black ${step.highlight ? "text-accent" : step.active ? "text-slate-800 dark:text-slate-100" : "text-slate-400"}`}>
-                        {step.title}
-                      </h4>
-                      <p className="text-[10px] text-slate-400 font-bold mt-0.5">{step.subtitle}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <Link href="/cart" className="px-6 py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-amber-500/25 hover:scale-105 active:scale-95 transition-all whitespace-nowrap">
+              {isRtl ? "اطلب الآن" : "Commander"}
+            </Link>
           </div>
         </div>
       </section>
@@ -804,7 +623,7 @@ export default function Home() {
             </a>
             <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
               <Globe size={12} />
-              <span>{userWilaya ? `${isRtl ? 'توصيل متاح إلى' : 'Livraison vers'} : ${userWilaya}` : "58 Wilayas"}</span>
+              <span>{isRtl ? "الاستلام من وهران — التوصيل قريباً" : "Retrait à Oran — Livraison bientôt"}</span>
             </div>
           </div>
 

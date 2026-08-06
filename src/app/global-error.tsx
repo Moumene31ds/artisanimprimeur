@@ -12,7 +12,7 @@ export default function GlobalError({
       <body style={{ fontFamily: "'Cairo', sans-serif", background: "#0f172a" }}>
         <div
           style={{
-            minHeight: "100vh",
+            minHeight: "100dvh",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
