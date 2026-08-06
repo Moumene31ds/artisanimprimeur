@@ -8,6 +8,11 @@
   --color-accent: #3b82f6;
 }
 
+::selection {
+  background: rgba(59, 130, 246, 0.22);
+  color: #0f172a;
+}
+
 html {
   color-scheme: light;
 }
@@ -417,5 +422,72 @@ section[id], [id^="section-"] {
 /* Anchored sections (#products, ...) must not hide behind the fixed navbar */
 section[id], [id^="section-"] {
   scroll-margin-top: 6rem;
+}
+
+/* ==========================================
+   Hero Aurora: خلفية متحركة مذهلة للجوال
+   ========================================== */
+@keyframes aurora {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  25% { transform: translate3d(6%, -8%, 0) scale(1.12); }
+  50% { transform: translate3d(-5%, 6%, 0) scale(0.94); }
+  75% { transform: translate3d(4%, -4%, 0) scale(1.06); }
+}
+
+.animate-aurora {
+  animation: aurora 14s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-aurora-2 {
+  animation: aurora 18s ease-in-out infinite reverse;
+  will-change: transform;
+}
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-14px); }
+}
+
+.animate-float-y {
+  animation: float-y 5s ease-in-out infinite;
+}
+
+.animate-float-y-delayed {
+  animation: float-y 6s ease-in-out 1.2s infinite;
+}
+
+/* glow خاص بأزرار الـ CTA الرئيسية */
+.btn-glow {
+  position: relative;
+}
+
+/* شريحة زجاجية داكنة عائمة داخل الـ Hero */
+.glass-dark-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.btn-glow::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(120deg, rgba(59, 130, 246, 0.5), rgba(168, 85, 247, 0.5));
+  filter: blur(16px);
+  opacity: 0.55;
+  z-index: -1;
+  transition: opacity 0.3s ease;
+}
+.btn-glow:hover::after {
+  opacity: 0.85;
 }
 

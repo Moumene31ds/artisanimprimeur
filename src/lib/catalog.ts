@@ -16,33 +16,34 @@ export interface CatalogProduct {
 }
 
 // Featured products shown on the home page
+// صور حقيقية للمنتجات (مستضافة محلياً في /public/products لتعمل أوفلاين مع PWA)
 export const FEATURED_PRODUCTS: CatalogProduct[] = [
   {
     id: "p1",
     name: "Cartes de Visite Premium",
     price: 2500,
-    image: "https://img.magnific.com/psd-gratuit/modele-conception-carte-visite-professionnelle_47987-19617.jpg?semt=ais_hybrid&w=740&q=80",
+    image: "/products/cartes-premium.jpg",
     category: "Cartes",
   },
   {
     id: "p2",
     name: "Flyers Publicitaires (A5)",
     price: 4500,
-    image: "https://images.unsplash.com/photo-1563298723-dcfebaa392e3?auto=format&fit=crop&q=80&w=800",
+    image: "/products/flyers.jpg",
     category: "Flyers",
   },
   {
     id: "p3",
     name: "Stickers Personnalisés",
     price: 1200,
-    image: "https://lesgommettesfrancaises.com/wp-content/uploads/2024/01/GF506-stickers-joyeux-anniversaire-personnalise-gommettes-francaises.jpg",
+    image: "/products/stickers.jpg",
     category: "Goodies",
   },
   {
     id: "p4",
     name: "Affiches de Luxe (A3)",
     price: 3000,
-    image: "https://images.unsplash.com/photo-1572044162444-ad60f128bdea?auto=format&fit=crop&q=80&w=800",
+    image: "/products/affiches.jpg",
     category: "Impression",
   },
 ];
@@ -54,7 +55,7 @@ export const FALLBACK_PRODUCTS: CatalogProduct[] = [
     id: "p5",
     name: "Invitations Mariage",
     price: 5000,
-    image: "https://images.unsplash.com/photo-1515934751635-c81c6bc9a2d8?auto=format&fit=crop&q=80&w=800",
+    image: "/products/invitations.jpg",
     category: "Cartes",
   },
 ];

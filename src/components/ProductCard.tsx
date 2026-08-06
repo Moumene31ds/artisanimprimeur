@@ -54,7 +54,7 @@ export default function ProductCard({ product }: { product: Product }) {
         whileHover={{ y: -8 }}
         className="premium-glass rounded-[2rem] overflow-hidden group flex flex-col h-full shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/60 dark:border-white/5 relative"
       >
-        <div className="relative h-64 w-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+        <div className="relative h-72 sm:h-64 w-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
           <Image
             src={product.image}
             alt={product.name}
@@ -64,7 +64,8 @@ export default function ProductCard({ product }: { product: Product }) {
             className="object-cover transition-transform duration-700 group-hover:scale-110"
           />
           
-          <div className="absolute inset-0 bg-brand/40 dark:bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-4">
+          {/* أزرار hover للشاشات الكبيرة (ماوس) */}
+          <div className="absolute inset-0 bg-brand/40 dark:bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 hidden md:flex items-center justify-center gap-4">
             <motion.button 
               whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
               onClick={() => handleAddToCart(1, finition)}
@@ -80,6 +81,24 @@ export default function ProductCard({ product }: { product: Product }) {
               <Eye size={22} />
             </motion.button>
           </div>
+
+          {/* زر إضافة سريع دائم على الموبايل (لا يوجد hover باللمس) */}
+          <motion.button
+            whileTap={{ scale: 0.85 }}
+            onClick={() => handleAddToCart(1, finition)}
+            aria-label={isRtl ? "أضف إلى السلة" : "Ajouter au panier"}
+            className={`absolute bottom-3 ${isRtl ? 'right-3' : 'left-3'} p-3.5 md:hidden rounded-2xl bg-accent text-white shadow-xl shadow-blue-500/40 flex items-center justify-center z-10 border border-white/20`}
+          >
+            <motion.span
+              key={isAdding ? "check" : "cart"}
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 400, damping: 18 }}
+              className="flex items-center justify-center"
+            >
+              {isAdding ? <Check size={20} /> : <ShoppingCart size={20} />}
+            </motion.span>
+          </motion.button>
 
           <button 
             onClick={() => toggleFavorite(product)}
