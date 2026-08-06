@@ -4,6 +4,7 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/context/AuthContext"; // استيراد AuthProvider
 import SyncManager from "@/components/SyncManager";
+import PWALifecycle from "@/components/PWALifecycle";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -31,6 +32,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         {/* 4. محتوى التطبيق (Navbar, Pages, Chatbot...) */}
         {children}
       </ThemeProvider>
+
+      {/* دورة حياة PWA: تسجيل السيرفس ووركر + تحديثات + حالة الاتصال */}
+      <PWALifecycle />
     </AuthProvider>
   );
 }

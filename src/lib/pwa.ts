@@ -12,6 +12,83 @@ export async function registerServiceWorker() {
   }
 }
 
+export interface SWUpdateEvent {
+  hasUpdate: boolean;
+  registration?: ServiceWorkerRegistration;
+}
+
+/**
+ * مراقبة توفّر تحديث جديد للسيرفس ووركر.
+ * يعيد دالة فكّ الاشتراك + وسيط updateAvailable لاستدعاء عند ظهور تحديث.
+ */
+export function onServiceWorkerUpdate(cb: (hasUpdate: boolean, reg?: ServiceWorkerRegistration) => void): () => void {
+  if (!('serviceWorker' in navigator)) return () => {};
+
+  let unregister = () => {};
+  navigator.serviceWorker.getRegistration('/').then((registration) => {
+    if (!registration) return;
+    const onUpdateFound = () => {
+      const newWorker = registration.installing || registration.waiting;
+      if (!newWorker) return;
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          cb(true, registration);
+        }
+      });
+    };
+    registration.addEventListener('updatefound', onUpdateFound);
+    unregister = () => registration.removeEventListener('updatefound', onUpdateFound);
+  });
+
+  return unregister;
+}
+
+/** تطبيق التحديث الفوري: يخطّي السيرفس ووركر القديم ثم يُحدَّث التطبيق. */
+export async function applyServiceWorkerUpdate(): Promise<void> {
+  try {
+    const registration = await navigator.serviceWorker.getRegistration('/');
+    if (registration?.waiting) {
+      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    } else {
+      await registration?.update();
+    }
+  } catch (e) {
+    console.error('Failed to apply SW update:', e);
+  }
+}
+
+/** تفعيل المزامنة الدورية للأوامر والبيانات الرئيسية (Chrome-based). */
+export async function registerPeriodicSync(): Promise<void> {
+  try {
+    if (!('serviceWorker' in navigator) || !('PeriodicSyncManager' in navigator)) return;
+    const registration = await navigator.serviceWorker.ready;
+    const periodicSync = (registration as any).periodicSync;
+    if (!periodicSync) return;
+    const status = await (navigator as any).permissions.query({ name: 'periodic-background-sync' });
+    if (status.state === 'granted') {
+      await periodicSync.register('sync-orders', { minInterval: 6 * 60 * 60 * 1000 });
+      await periodicSync.register('sync-home', { minInterval: 12 * 60 * 60 * 1000 });
+    }
+  } catch (e) {
+    console.debug('Periodic sync unavailable:', e);
+  }
+}
+
+/** طلب مزامنة فورية من السيرفس ووركر (يُستخدم عند توفّر الشبكة). */
+export async function triggerSyncNow(kind: 'orders' | 'home'): Promise<void> {
+  try {
+    const registration = await navigator.serviceWorker.getRegistration('/');
+    registration?.active?.postMessage({ type: kind === 'orders' ? 'SYNC_ORDERS' : 'SYNC_NOW' });
+  } catch (e) {
+    console.debug('triggerSyncNow failed:', e);
+  }
+}
+
+/** حالة الشبكة الحالية. */
+export function isOnline(): boolean {
+  return typeof navigator === 'undefined' ? true : navigator.onLine;
+}
+
 export async function requestNotificationPermission(): Promise<NotificationPermission | null> {
   if (!('Notification' in window)) return null;
   if (!('serviceWorker' in navigator)) return null;

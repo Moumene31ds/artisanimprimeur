@@ -2,26 +2,29 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, LayoutGrid, ShoppingBag, Heart, User } from "lucide-react";
+import { Home, LayoutGrid, ShoppingBag, Heart, User, Bell } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import { useNotifications } from "@/hooks/useNotifications";
 import { motion } from "framer-motion";
 
 export default function BottomNav() {
   const pathname = usePathname();
   const { language } = useAppStore();
   const isRtl = language === 'ar';
+  const { unreadCount } = useNotifications({ limitCount: 30, toastOnNew: false });
 
   const navItems = [
     { icon: Home, label: isRtl ? "الرئيسية" : "Accueil", href: "/" },
     { icon: LayoutGrid, label: isRtl ? "خدماتنا" : "Services", href: "/services" },
     { icon: Heart, label: isRtl ? "المفضلة" : "Favoris", href: "/favorites" },
+    { icon: Bell, label: isRtl ? "الإشعارات" : "Notifications", href: "/notifications", badge: unreadCount },
     { icon: ShoppingBag, label: isRtl ? "السلة" : "Panier", href: "/cart" },
     { icon: User, label: isRtl ? "بروفيلي" : "Profil", href: "/profile" },
   ];
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 premium-glass h-[76px] pb-safe border-t border-white/20 dark:border-white/5 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
-      <div className="flex justify-around items-center h-full px-2 max-w-md mx-auto">
+      <div className="flex justify-around items-center h-full px-2 max-w-lg mx-auto">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
@@ -35,8 +38,13 @@ export default function BottomNav() {
                   transition={{ type: "spring", stiffness: 300, damping: 20 }}
                 />
               )}
-              <div className={`p-2 rounded-2xl transition-all duration-300 ${isActive ? "text-accent bg-accent/10 scale-110" : "text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300"}`}>
+              <div className={`relative p-2 rounded-2xl transition-all duration-300 ${isActive ? "text-accent bg-accent/10 scale-110" : "text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300"}`}>
                 <Icon size={24} strokeWidth={isActive ? 2.5 : 2} />
+                {typeof item.badge === "number" && item.badge > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center shadow-md ring-2 ring-white dark:ring-slate-900 animate-pulse">
+                    {item.badge > 99 ? "99+" : item.badge}
+                  </span>
+                )}
               </div>
               <span className={`text-[10px] mt-1 font-bold transition-colors ${isActive ? "text-accent" : "text-slate-400 dark:text-slate-500"}`}>
                 {item.label}

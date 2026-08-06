@@ -6,7 +6,7 @@ import { TRANSLATIONS } from "@/lib/translations";
 import { 
   Trash2, Plus, Minus, ShoppingBag, CheckCircle, 
   UploadCloud, FileCheck, Loader2, ArrowRight, Tag, MapPin, Heart, AlertTriangle, Sparkles, Wand2, ShieldCheck, HelpCircle,
-  Truck, Smartphone, Banknote
+  Truck, Banknote
 } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -19,7 +19,6 @@ import { GlobalLoader } from "@/components/GlobalLoader";
 import { WILAYAS, SHIPPING_RATES } from "@/lib/constants";
 import SecurityVerification from "@/components/SecurityVerification";
 import SmartCartUpsell from "@/components/SmartCartUpsell";
-import GooglePayButton from "@/components/GooglePayButton";
 import PullToRefresh from "@/components/PullToRefresh";
 import { buildStatusHistory } from "@/lib/order-status";
 
@@ -59,9 +58,6 @@ export default function CartPage() {
   const [deliveryType, setDeliveryType] = useState<'domicile' | 'desk'>('domicile');
   const [shippingMethod, setShippingMethod] = useState<'national' | 'local_express' | 'collect'>('national');
   const [designReady, setDesignReady] = useState<boolean>(true);
-
-  // --- طريقة الدفع: COD (افتراضي) أو دفع إلكتروني عبر Google Pay ---
-  const [paymentMode, setPaymentMode] = useState<'cod' | 'online'>('cod');
 
   // --- بيانات العميل ---
   const [formData, setFormData] = useState({ name: "", phone: "", wilaya: "", notes: "" });
@@ -166,16 +162,6 @@ export default function CartPage() {
 
   const totalBeforeDelivery = Math.max(0, subtotal - discountAmount);
   const finalTotal = totalBeforeDelivery + deliveryFee;
-
-  const handleGooglePaySuccess = (orderId: string) => {
-    clearCart();
-    toast.success(
-      isRtl
-        ? "تم الدفع بنجاح عبر Google Pay! سيتم تجهيز طلبك فوراً. 🎉"
-        : "Paiement Google Pay réussi ! Votre commande est en cours de préparation. 🎉"
-    );
-    router.push(`/success?orderId=${orderId}&paid=1`);
-  };
 
   const runPreflightCheck = async (url: string, width?: number, height?: number) => {    setIsCheckingPreflight(true);
     try {
@@ -409,13 +395,6 @@ export default function CartPage() {
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) return;
-
-    // في وضع الدفع الإلكتروني، لا نقوم بتسجيل طلب COD —
-    // الطلب يُنشأ فقط بعد نجاح الدفع عبر خادم Google Pay.
-    if (paymentMode === 'online') {
-      toast.info(isRtl ? "أكمل الدفع عبر Google Pay في قسم طريقة الدفع أعلاه." : "Terminez le paiement Google Pay dans la section ci-dessus.");
-      return;
-    }
 
     // التحقق الإضافي الصارم من حالة المتجر قبل ترحيل الفاتورة للاحتياط الأمني
     if (uiConfig.storeOpen === false) {
@@ -1077,99 +1056,25 @@ export default function CartPage() {
                     {isRtl ? "طريقة الدفع" : "Mode de Paiement"}
                   </label>
 
-                  {/* MODE 1 — Paiement en ligne (Google Pay) */}
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMode('online')}
-                    className={`w-full p-4 rounded-2xl border text-start flex items-center justify-between gap-3 transition-all active:scale-[0.99] ${
-                      paymentMode === 'online'
-                        ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-lg scale-[1.01]'
-                        : 'bg-white/40 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-white/60'
-                    }`}
-                  >
+                  {/* الدفع عند الاستلام (COD) */}
+                  <div className="w-full p-4 rounded-2xl border text-start flex items-center justify-between gap-3 bg-emerald-600 dark:bg-emerald-500 text-white border-transparent shadow-lg">
                     <div className="flex items-center gap-3">
-                      <div className={`p-2.5 rounded-xl ${paymentMode === 'online' ? 'bg-white/20 dark:bg-slate-100/20' : 'bg-slate-100 dark:bg-slate-850'}`}>
-                        <Smartphone size={18} className={paymentMode === 'online' ? '' : 'text-slate-500 dark:text-slate-400'} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-black flex items-center gap-1.5">
-                          <span>{isRtl ? "دفع إلكتروني فوري (Google Pay / Apple Pay)" : "Paiement en ligne (Google Pay / Apple Pay)"}</span>
-                          <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase ${paymentMode === 'online' ? 'bg-white/20' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'}`}>
-                            {isRtl ? "أسرع وأأمن" : "Rapide"}
-                          </span>
-                        </p>
-                        <p className="text-[10px] opacity-60 font-semibold mt-0.5">
-                          {isRtl ? "ادفع الآن ببطاقتك مباشرة من هاتفك، مشفّر بالكامل وبتأكيد فوري." : "Payez immédiatement par carte depuis votre téléphone, chiffré et confirmé en direct."}
-                        </p>
-                      </div>
-                    </div>
-                    <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg shrink-0 ${paymentMode === 'online' ? 'bg-white/20' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'}`}>
-                      {isRtl ? "G Pay" : "G Pay"}
-                    </span>
-                  </button>
-
-                  {paymentMode === 'online' && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="p-4 bg-white/50 dark:bg-slate-900/40 rounded-2xl border border-slate-200/60 dark:border-slate-800"
-                    >
-                      <GooglePayButton
-                        amount={finalTotal}
-                        items={cart.map((it) => ({
-                          id: it.id,
-                          name: it.name,
-                          price: Number(it.price) || 0,
-                          quantity: it.quantity || 1,
-                          category: it.category,
-                        }))}
-                        deliveryFee={deliveryFee}
-                        discountAmount={discountAmount}
-                        customer={{
-                          name: formData.name,
-                          phone: formData.phone,
-                          wilaya: formData.wilaya,
-                          notes: formData.notes,
-                        }}
-                        delivery={{
-                          type: deliveryType,
-                          shippingMethod,
-                          promoCode: appliedPromo ? appliedPromo.id : null,
-                        }}
-                        language={language}
-                        onSuccess={handleGooglePaySuccess}
-                      />
-                    </motion.div>
-                  )}
-
-                  {/* MODE 2 — Paiement à la livraison (COD) */}
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMode('cod')}
-                    className={`w-full p-4 rounded-2xl border text-start flex items-center justify-between gap-3 transition-all active:scale-[0.99] ${
-                      paymentMode === 'cod'
-                        ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-transparent shadow-lg scale-[1.01]'
-                        : 'bg-white/40 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-white/60'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2.5 rounded-xl ${paymentMode === 'cod' ? 'bg-white/20 dark:bg-slate-100/20' : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'}`}>
+                      <div className="p-2.5 rounded-xl bg-white/20 dark:bg-slate-100/20">
                         <Banknote size={18} />
                       </div>
                       <div>
                         <p className="text-xs font-black">
                           {isRtl ? "الدفع عند الاستلام (COD)" : "Paiement à la livraison (COD)"}
                         </p>
-                        <p className="text-[10px] opacity-60 font-semibold mt-0.5">
+                        <p className="text-[10px] opacity-80 font-semibold mt-0.5">
                           {isRtl ? "ادفع نقداً بعد استلام طلبيتك وفحص جودة المطبوعات بنفسك." : "Payez en espèces après réception et vérification de vos impressions."}
                         </p>
                       </div>
                     </div>
-                    <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg shrink-0 ${paymentMode === 'cod' ? 'bg-white/20' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'}`}>
+                    <span className="text-[10px] font-black px-2.5 py-1 rounded-lg shrink-0 bg-white/20">
                       {isRtl ? "نقداً" : "Cash"}
                     </span>
-                  </button>
+                  </div>
                 </div>
                 
                 <textarea value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder={t.orderDetails} rows={3} className="w-full p-4 rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-accent transition-all resize-none font-medium text-sm"></textarea>
@@ -1262,15 +1167,13 @@ export default function CartPage() {
                 </div>
               ) : (
                 <button 
-                  disabled={isSubmitting || fileStatus === 'uploading' || !securityVerified || paymentMode === 'online'} 
+                  disabled={isSubmitting || fileStatus === 'uploading' || !securityVerified} 
                   type="submit" 
                   className="w-full py-5 bg-gradient-to-r from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 text-white rounded-3xl font-black text-lg shadow-xl hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center gap-3 relative overflow-hidden group cursor-pointer"
                 >
                   <span className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></span>
                   {isSubmitting ? (
                     <><Loader2 className="animate-spin" size={24} /> {isRtl ? "جاري إرسال طلبك..." : "Enregistrement..."}</>
-                  ) : paymentMode === 'online' ? (
-                    <><ShieldCheck size={24} className="drop-shadow-md" /> {isRtl ? "الدفع يتم أعلاه عبر Google Pay" : "Paiement via Google Pay ci-dessus"}</>
                   ) : (
                     <><CheckCircle size={24} className="drop-shadow-md"/> {isRtl ? "تأكيد الطلب (الدفع عند الاستلام)" : "Confirmer (Paiement à la livraison)"}</>
                   )}

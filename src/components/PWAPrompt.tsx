@@ -2,23 +2,30 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Download, Bell, Smartphone, Shield } from "lucide-react";
+import { X, Download, Bell, Smartphone, Shield, Share2 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { createTranslator } from "@/lib/translations";
 import { auth } from "@/lib/firebase";
 import {
-  registerServiceWorker,
   requestNotificationPermission,
   subscribeToPushNotifications,
   unsubscribeFromPushNotifications,
-  canInstallPWA,
+  isPWAInstalled,
 } from "@/lib/pwa";
 
 type InstallState = "prompt" | "dismissed" | "installing" | "installed";
 
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return /iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream;
+}
+
+function isStandalone(): boolean {
+  return window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone === true;
+}
+
 export default function PWAPrompt() {
   const { language } = useAppStore();
-  const t = createTranslator(language);
   const [state, setState] = useState<InstallState>("dismissed");
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [pushStep, setPushStep] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
@@ -26,21 +33,26 @@ export default function PWAPrompt() {
   useEffect(() => {
     const dismissed = localStorage.getItem("pwa-prompt-dismissed");
     const installed = localStorage.getItem("pwa-installed");
-    if (dismissed || installed || canInstallPWA() === false) {
+    if (dismissed || installed || isPWAInstalled()) {
       if (installed) setState("installed");
       return;
     }
 
-    registerServiceWorker().then((reg) => {
-      if (reg) {
-        setTimeout(() => {
-          if (state === "dismissed" && !localStorage.getItem("pwa-prompt-dismissed")) {
-            setState("prompt");
-          }
-        }, 10000);
-      }
-    });
-  }, [state]);
+    // iOS: لا يدعم beforeinstallprompt — نعرض توجيهات "إضافة إلى الشاشة الرئيسية".
+    if (isIOS() && !isStandalone()) {
+      const timer = setTimeout(() => {
+        if (!localStorage.getItem("pwa-prompt-dismissed")) setState("prompt");
+      }, 12000);
+      return () => clearTimeout(timer);
+    }
+
+    // Android/Chrome: ننتظر قبلinstallprompt أو نعرض المطالبة بعد مهلة.
+    const timer = setTimeout(() => {
+      if (!localStorage.getItem("pwa-prompt-dismissed")) setState("prompt");
+    }, 15000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -53,7 +65,11 @@ export default function PWAPrompt() {
 
   const handleInstall = useCallback(async () => {
     if (!deferredPrompt) {
-      window.location.href = "/manifest.json";
+      if (isIOS()) {
+        // توجيهات iOS
+        setState("installing");
+        return;
+      }
       return;
     }
 
@@ -86,11 +102,10 @@ export default function PWAPrompt() {
         setPushStep("denied");
       }
     } else {
-      // Permission denied or blocked: clean up any stale subscription locally
       try {
         await unsubscribeFromPushNotifications();
       } catch {
-        // Ignore cleanup errors
+        // ignore
       }
       setPushStep("denied");
     }
@@ -114,6 +129,9 @@ export default function PWAPrompt() {
     setState("dismissed");
     localStorage.setItem("pwa-prompt-dismissed", "true");
   }, []);
+
+  const isRtl = language === "ar";
+  const isIosDevice = isIOS();
 
   return (
     <AnimatePresence>
@@ -147,29 +165,60 @@ export default function PWAPrompt() {
               </div>
             </div>
 
-            <div className="space-y-2 mb-5">
-              <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-400">
-                <Download size={12} className="text-emerald-500 shrink-0" />
-                <span>{language === "ar" ? "يعمل بدون إنترنت" : "Fonctionne hors-ligne"}</span>
+            {isIosDevice && !deferredPrompt ? (
+              <div className="space-y-3 mb-5">
+                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400 font-semibold">
+                  {language === "ar"
+                    ? "لإضافة التطبيق إلى شاشتك الرئيسية على iPhone/iPad:"
+                    : "Pour installer l'application sur votre iPhone/iPad :"}
+                </p>
+                <div className="flex items-center gap-3 text-[11px] text-slate-600 dark:text-slate-400">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 shrink-0 font-black">1</span>
+                  <span>{language === "ar" ? "اضغط على زر المشاركة" : "Appuyez sur le bouton Partager"}</span>
+                  <Share2 size={16} className="shrink-0 text-blue-500" />
+                </div>
+                <div className="flex items-center gap-3 text-[11px] text-slate-600 dark:text-slate-400">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 shrink-0 font-black">2</span>
+                  <span>{language === "ar" ? "اختر \"إضافة إلى الشاشة الرئيسية\"" : "Choisissez « Ajouter à l'écran d'accueil »"}</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-400">
-                <Bell size={12} className="text-blue-500 shrink-0" />
-                <span>{language === "ar" ? "إشعارات لحظية للطلبات" : "Notifications en temps réel"}</span>
+            ) : (
+              <div className="space-y-2 mb-5">
+                <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-400">
+                  <Download size={12} className="text-emerald-500 shrink-0" />
+                  <span>{language === "ar" ? "يعمل بدون إنترنت" : "Fonctionne hors-ligne"}</span>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-400">
+                  <Bell size={12} className="text-blue-500 shrink-0" />
+                  <span>{language === "ar" ? "إشعارات لحظية للطلبات" : "Notifications en temps réel"}</span>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-400">
+                  <Shield size={12} className="text-purple-500 shrink-0" />
+                  <span>{language === "ar" ? "فتح أسرع وأكثر أماناً" : "Ouverture rapide et sécurisée"}</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-400">
-                <Shield size={12} className="text-purple-500 shrink-0" />
-                <span>{language === "ar" ? "فتح أسرع وأكثر أماناً" : "Ouverture rapide et sécurisée"}</span>
-              </div>
-            </div>
+            )}
 
             <div className="flex flex-col gap-2">
-              <button
-                onClick={handleInstall}
-                className="w-full py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-2xl font-black text-xs shadow-lg shadow-blue-500/20 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-              >
-                <Download size={16} />
-                {language === "ar" ? "تثبيت التطبيق" : "Installer l'application"}
-              </button>
+              {!isIosDevice && (
+                <button
+                  onClick={handleInstall}
+                  className="w-full py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-2xl font-black text-xs shadow-lg shadow-blue-500/20 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  <Download size={16} />
+                  {language === "ar" ? "تثبيت التطبيق" : "Installer l'application"}
+                </button>
+              )}
+
+              {isIosDevice && (
+                <button
+                  onClick={handleDismiss}
+                  className="w-full py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-2xl font-black text-xs shadow-lg shadow-blue-500/20 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  <Download size={16} />
+                  {language === "ar" ? "حسناً، فهمت" : "J'ai compris"}
+                </button>
+              )}
 
               {pushStep === "idle" && (
                 <button

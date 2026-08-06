@@ -37,3 +37,38 @@ export function isSafeUrl(url: string): boolean {
     return false;
   }
 }
+
+let notifAudioCtx: AudioContext | null = null;
+
+/**
+ * تشغيل صوت إشعار قصير (نغمة ثنائية) عبر Web Audio API — بدون ملفات صوتية.
+ * لا يحتاج أذونات ويُستخدم عند وصول إشعار جديد أو تحديث حالة طلب.
+ */
+export function playNotificationSound() {
+  if (typeof window === 'undefined') return;
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    if (!notifAudioCtx) notifAudioCtx = new Ctx();
+    const ctx = notifAudioCtx;
+    if (ctx.state === 'suspended') void ctx.resume();
+    const now = ctx.currentTime;
+    const playTone = (freq: number, start: number, dur = 0.18, gainVal = 0.12) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(gainVal, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + dur + 0.02);
+    };
+    playTone(880, now);
+    playTone(1174.66, now + 0.15);
+  } catch {
+    /* الصوت غير مدعوم — تجاهل */
+  }
+}

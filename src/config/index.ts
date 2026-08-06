@@ -60,6 +60,7 @@ export const config = {
 
   // طريقة الدفع: الدفع عند الاستلام (COD) + التحقق اليدوي من وصولات الدفع.
   // لا يوجد أي مزود دفع إلكتروني (لا Stripe، لا PayPal، لا Chargily).
+  // ملاحظة: حُذف Google Pay/Stripe نهائياً — الدفع عبر الإنترنت غير متاح حالياً.
   payment: {
     method: 'cod' as const,
     label: 'Paiement à la livraison',

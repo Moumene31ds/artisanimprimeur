@@ -184,6 +184,39 @@ export default function AdminPage() {
       } catch (notifyErr) {
         console.error("Notify dispatch failed:", notifyErr);
       }
+
+      // إشعار داخل التطبيق (جرس + تنبيه حي) للمستخدم المسجل
+      const customerUserId = order?.customerUserId;
+      if (customerUserId && customerUserId !== "guest") {
+        try {
+          const statusLabels: Record<string, { ar: string; fr: string }> = {
+            "En attente": { ar: "بانتظار التأكيد", fr: "En attente" },
+            "En cours": { ar: "قيد التنفيذ", fr: "En cours" },
+            "Expédiée": { ar: "تم الشحن", fr: "Expédiée" },
+            "Livrée": { ar: "تم التسليم", fr: "Livrée" },
+            "Annulée": { ar: "ملغاة", fr: "Annulée" },
+          };
+          const label = statusLabels[newStatus] || { ar: newStatus, fr: newStatus };
+          await addDoc(collection(db, "users", customerUserId, "notifications"), {
+            title: {
+              ar: "تحديث حالة طلبك",
+              fr: "Mise à jour de votre commande",
+            },
+            message: {
+              ar: `طلبك #${orderId.slice(-6).toUpperCase()} أصبح الآن: ${label.ar}`,
+              fr: `Votre commande #${orderId.slice(-6).toUpperCase()} est maintenant : ${label.fr}`,
+            },
+            category: "orders",
+            type: "status",
+            orderId,
+            link: "/orders",
+            read: false,
+            date: serverTimestamp(),
+          });
+        } catch (notifErr) {
+          console.error("In-app notification failed:", notifErr);
+        }
+      }
     } catch (e) {
       toast.error("Erreur de mise à jour");
     }

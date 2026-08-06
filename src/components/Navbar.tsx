@@ -13,10 +13,11 @@ import { ThemeSwitcher } from "./ThemeSwitcher";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
 import { auth, db } from "@/lib/firebase";
-import { collection, query, orderBy, onSnapshot, limit, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { toast } from "sonner";
 import NotificationCenter from "./NotificationCenter";
+import { useNotifications } from "@/hooks/useNotifications";
 
 export default function Navbar() {
   const { cart, language, setLanguage, favorites } = useAppStore(); // جلب المفضلة إن وجدت في الستور
@@ -27,12 +28,20 @@ export default function Navbar() {
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [loadingNotifications, setLoadingNotifications] = useState(true);
+  const router = useRouter();
+  const { notifications, unreadCount, loading: loadingNotifications } = useNotifications({
+    onNavigate: (n) => {
+      if (n.category === "orders" && n.orderId) {
+        router.push("/orders");
+      } else if (n.category === "billing" && (n.invoiceId || n.orderId)) {
+        window.open(`/invoice/${n.invoiceId || n.orderId}`, "_blank");
+      } else if (n.link) {
+        router.push(n.link);
+      }
+    },
+  });
   
   const pathname = usePathname();
-  const router = useRouter();
   const isRtl = language === "ar";
 
   useEffect(() => {
@@ -42,13 +51,9 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // مزامنة ملف المستخدم عند أول دخول.
   useEffect(() => {
-    if (!isLoggedIn || !user) {
-      setNotifications([]);
-      setUnreadCount(0);
-      setLoadingNotifications(false);
-      return;
-    }
+    if (!isLoggedIn || !user) return;
 
     const syncUserProfile = async () => {
       try {
@@ -68,57 +73,7 @@ export default function Navbar() {
       }
     };
     syncUserProfile();
-
-    setLoadingNotifications(true);
-    const q = query(
-      collection(db, `users/${user.uid}/notifications`),
-      orderBy("date", "desc"),
-      limit(50)
-    );
-
-    let isFirstLoad = true;
-    const unsubscribe = onSnapshot(q, (snap) => {
-      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-      setNotifications(list);
-      setUnreadCount(list.filter(n => !n.read).length);
-      setLoadingNotifications(false);
-
-      if (!isFirstLoad) {
-        snap.docChanges().forEach((change) => {
-          if (change.type === "added") {
-            const notif = change.doc.data();
-            if (!notif.read) {
-              const titleText = typeof notif.title === 'object' ? notif.title[language] : notif.title || "";
-              const messageText = typeof notif.message === 'object' ? notif.message[language] : notif.message || "";
-              
-              toast.info(titleText || (isRtl ? "إشعار جديد" : "Nouvelle notification"), {
-                description: messageText,
-                action: (notif.orderId || notif.invoiceId || notif.link) ? {
-                  label: isRtl ? "عرض" : "Voir",
-                  onClick: () => {
-                    if (notif.category === 'orders' && notif.orderId) {
-                      router.push(`/orders`);
-                    } else if (notif.category === 'billing' && (notif.invoiceId || notif.orderId)) {
-                      window.open(`/invoice/${notif.invoiceId || notif.orderId}`, '_blank');
-                    } else if (notif.link) {
-                      router.push(notif.link);
-                    }
-                  }
-                } : undefined,
-                duration: 6000,
-              });
-            }
-          }
-        });
-      }
-      isFirstLoad = false;
-    }, (error) => {
-      console.error("Error subscribing to notifications:", error);
-      setLoadingNotifications(false);
-    });
-
-    return () => unsubscribe();
-  }, [isLoggedIn, user, language, isRtl, router]);
+  }, [isLoggedIn, user]);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLAnchorElement | HTMLButtonElement>) => {
     const el = e.currentTarget;
