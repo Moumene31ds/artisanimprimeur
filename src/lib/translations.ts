@@ -325,6 +325,44 @@ export const TRANSLATIONS = {
     settingsSectionFont: "Texte",
     langAr: "العربية",
     langFr: "Français",
+
+    // --- Appareil (détection intelligente) ---
+    settingsDevice: "Appareil",
+    settingsDeviceDesc: "Détection intelligente des performances",
+    deviceScore: "Score de performance",
+    tierWeak: "Modeste",
+    tierMedium: "Intermédiaire",
+    tierPowerful: "Puissant",
+    deviceCores: "Cœurs",
+    deviceMemory: "Mémoire",
+    deviceNetwork: "Réseau",
+    deviceScreen: "Écran",
+    deviceDetection: "Détection intelligente",
+    deviceDetectionDesc: "Analyse le CPU, la RAM, le réseau et l'écran pour adapter l'application à votre appareil.",
+    detectAgain: "Analyser à nouveau",
+    analyzing: "Analyse en cours…",
+    autoOptimize: "Optimisation intelligente",
+    autoOptimizeDesc: "Active automatiquement le mode performance lorsqu'un appareil modeste est détecté.",
+    applyRecommendation: "Appliquer la recommandation",
+    memoryNullHint: "estimation",
+
+    // --- Sensations ---
+    hapticFeedback: "Vibrations tactiles",
+    hapticFeedbackDesc: "Réponse vibratoire lors des touches (appareils compatibles).",
+    pushNotifications: "Notifications push",
+    pushNotificationsDesc: "Recevez les mises à jour de commandes et les offres en temps réel.",
+    notifDenied: "Autorisation refusée — activez les notifications dans le navigateur",
+
+    // --- Mises à jour ---
+    updateTitle: "Mises à jour",
+    updateDesc: "Version actuelle et nouveautés",
+    currentVersion: "Version actuelle",
+    newFeatures: "✨ Nouveautés",
+    checkForUpdates: "Vérifier les mises à jour",
+    checkingForUpdates: "Vérification en cours…",
+    upToDate: "Vous êtes à jour ✓",
+    updateAvailable: "Nouvelle version disponible — elle va s'afficher 🚀",
+    applyUpdateNow: "Mettre à jour maintenant",
   },
   ar: {
     // --- عام ---
@@ -646,6 +684,44 @@ export const TRANSLATIONS = {
     settingsSectionFont: "النص",
     langAr: "العربية",
     langFr: "Français",
+
+    // --- الجهاز (الكشف الذكي) ---
+    settingsDevice: "الجهاز",
+    settingsDeviceDesc: "الكشف الذكي عن قدرات الجهاز",
+    deviceScore: "نقاط الأداء",
+    tierWeak: "محدود",
+    tierMedium: "متوسط",
+    tierPowerful: "قوي",
+    deviceCores: "المعالجات",
+    deviceMemory: "الذاكرة",
+    deviceNetwork: "الشبكة",
+    deviceScreen: "الشاشة",
+    deviceDetection: "الكشف الذكي",
+    deviceDetectionDesc: "يحلل المعالج والذاكرة والشبكة والشاشة لتكييف التطبيق مع جهازك.",
+    detectAgain: "إعادة التحليل",
+    analyzing: "جارٍ التحليل…",
+    autoOptimize: "التحسين الذكي",
+    autoOptimizeDesc: "تفعيل وضع الأداء تلقائياً عند اكتشاف جهاز محدود.",
+    applyRecommendation: "تطبيق التوصية",
+    memoryNullHint: "تقديري",
+
+    // --- الأحاسيس ---
+    hapticFeedback: "الاهتزازات",
+    hapticFeedbackDesc: "استجابة اهتزازية عند اللمس (للأجهزة الداعمة).",
+    pushNotifications: "الإشعارات الفورية",
+    pushNotificationsDesc: "استقبال تحديثات الطلبات والعروض لحظة بلحظة.",
+    notifDenied: "تم رفض الإذن — فعّل الإشعارات من المتصفح",
+
+    // --- التحديثات ---
+    updateTitle: "التحديثات",
+    updateDesc: "أحدث إصدار والميزات الجديدة",
+    currentVersion: "الإصدار الحالي",
+    newFeatures: "✨ الميزات الجديدة",
+    checkForUpdates: "التحقق من التحديثات",
+    checkingForUpdates: "جارٍ التحقق…",
+    upToDate: "أنت على أحدث إصدار ✓",
+    updateAvailable: "نسخة جديدة متاحة — ستظهر لك الآن 🚀",
+    applyUpdateNow: "تحديث الآن",
   }
 } as const;
 

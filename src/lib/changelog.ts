@@ -4,7 +4,7 @@
 // CHANGELOG يعرض الميزات للعملاء بالعربية والفرنسية.
 // ---------------------------------------------------------------------------
 
-export const APP_VERSION = 'v6.0';
+export const APP_VERSION = 'v6.1';
 
 export interface ChangelogEntry {
   version: string;
@@ -12,6 +12,29 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'v6.1',
+    features: {
+      ar: [
+        '⚙️ صفحة الإعدادات الشاملة: اللغة، المظهر، الأداء وحجم النص',
+        '📱 كشف ذكي للجهاز: تحليل المعالج والذاكرة والشبكة مع نقاط أداء',
+        '🚀 وضع الأداء للهواتف الضعيفة + تعطيل الحركات للحصول على سلاسة قصوى',
+        '⚡ تحسين تلقائي ذكي يفعّل الوضع الأمثل لجهازك',
+        '📶 التحقق من التحديثات يدوياً وعرض الميزات الجديدة',
+        '🔔 إعدادات الإشعارات الفورية والاهتزازات',
+        '📏 ثلاثة أحجام للخط لراحة أفضل للقراءة',
+      ],
+      fr: [
+        '⚙️ Page Paramètres complète : langue, apparence, performance et taille du texte',
+        '📱 Détection intelligente de l\u2019appareil : CPU, RAM, réseau avec score de performance',
+        '🚀 Mode performance pour les téléphones modestes + désactivation des animations',
+        '⚡ Optimisation automatique qui active le meilleur réglage pour votre appareil',
+        '📶 Vérification manuelle des mises à jour et liste des nouveautés',
+        '🔔 Réglages des notifications push et des vibrations',
+        '📏 Trois tailles de texte pour un meilleur confort de lecture',
+      ],
+    },
+  },
   {
     version: 'v6.0',
     features: {

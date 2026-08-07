@@ -1,11 +1,20 @@
 // src/lib/utils.ts
 
 /**
+ * علم عام يتحكم في الاهتزازات (يُفعَّل من الإعدادات عبر SettingsManager).
+ */
+let hapticsEnabled = true;
+export function setHapticsEnabled(enabled: boolean) {
+  hapticsEnabled = enabled;
+}
+
+/**
  * دالة لتشغيل اهتزازات خفيفة (Haptic Feedback) في الأجهزة التي تدعمها.
  * لتعزيز تجربة المستخدم عند التفاعل مع الأزرار.
  * @param type نوع الاهتزاز ('light', 'medium', 'heavy')
  */
 export function triggerHapticFeedback(type: 'light' | 'medium' | 'heavy' = 'light') {
+  if (!hapticsEnabled) return;
   if (typeof window !== 'undefined' && 'navigator' in window && 'vibrate' in navigator) {
     if (type === 'light') {
       navigator.vibrate(50); // اهتزاز خفيف (50 مللي ثانية)

@@ -6,12 +6,16 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import {
   Languages, Palette, Gauge, Type as TypeIcon, RotateCcw, Check, Sun, Moon,
-  Monitor, Smartphone, Sparkles, ChevronRight, ArrowLeft, Zap
+  Monitor, Smartphone, Sparkles, ChevronRight, ArrowLeft, Zap, Cpu, MemoryStick,
+  Wifi, RefreshCw, Rocket, Bell, Vibrate, Loader2, Activity
 } from "lucide-react";
-import { useAppStore, type ThemeMode, type FontSizeMode } from "@/lib/store";
+import { useAppStore, type ThemeMode, type FontSizeMode, type DeviceTier } from "@/lib/store";
 import { useTheme } from "next-themes";
 import { TRANSLATIONS, normalizeLanguage } from "@/lib/translations";
 import Reveal from "@/components/Reveal";
+import { detectDevice, getDeviceFacts, describeDevice, type DeviceSignals } from "@/lib/device";
+import { checkForUpdates, getBuildInfo, applyServiceWorkerUpdate, requestNotificationPermission } from "@/lib/pwa";
+import { APP_VERSION, CHANGELOG } from "@/lib/changelog";
 
 function Toggle({
   checked,
@@ -77,6 +81,42 @@ function SectionCard({
   );
 }
 
+const TIER_COLORS: Record<DeviceTier, string> = {
+  weak: "text-red-500",
+  medium: "text-amber-500",
+  powerful: "text-emerald-500",
+};
+
+const TIER_BG: Record<DeviceTier, string> = {
+  weak: "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400",
+  medium: "bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400",
+  powerful: "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400",
+};
+
+function ScoreGauge({ score }: { score: number }) {
+  const tier: DeviceTier = score < 45 ? "weak" : score <= 70 ? "medium" : "powerful";
+  const radius = 36;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - score / 100);
+  const stroke = tier === "weak" ? "#ef4444" : tier === "medium" ? "#f59e0b" : "#10b981";
+  return (
+    <div className="relative w-28 h-28">
+      <svg viewBox="0 0 96 96" className="w-full h-full -rotate-90">
+        <circle cx="48" cy="48" r={radius} fill="none" strokeWidth="10" className="stroke-slate-200 dark:stroke-slate-800" />
+        <circle
+          cx="48" cy="48" r={radius} fill="none" strokeWidth="10" strokeLinecap="round"
+          stroke={stroke} strokeDasharray={circumference} strokeDashoffset={offset}
+          style={{ transition: "stroke-dashoffset 1s cubic-bezier(0.16,1,0.3,1)" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-2xl font-black text-slate-900 dark:text-white leading-none">{score}</span>
+        <span className="text-[9px] font-bold text-slate-400 mt-0.5">/ 100</span>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const {
     language, setLanguage,
@@ -84,28 +124,110 @@ export default function SettingsPage() {
     performanceMode, setPerformanceMode,
     animationsEnabled, setAnimationsEnabled,
     fontSize, setFontSize,
+    autoOptimize, setAutoOptimize,
+    hapticFeedback, setHapticFeedback,
+    notificationsEnabled, setNotificationsEnabled,
+    deviceScore, deviceTier, setDeviceInfo,
     resetSettings,
   } = useAppStore();
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const [wasAutoDetected, setWasAutoDetected] = useState(false);
-
-  useEffect(() => { setMounted(true); }, []);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [facts, setFacts] = useState<ReturnType<typeof getDeviceFacts> | null>(null);
 
   useEffect(() => {
-    if (!mounted) return;
-    if (performanceMode && !animationsEnabled) {
-      setWasAutoDetected(true);
-    } else {
-      setWasAutoDetected(false);
-    }
-  }, [performanceMode, animationsEnabled, mounted]);
+    setMounted(true);
+    setFacts(getDeviceFacts());
+  }, []);
 
   if (!mounted) return null;
 
   const isRtl = language === "ar";
   const t = TRANSLATIONS[normalizeLanguage(language)] as Record<string, string>;
   const tr = (key: string, fallback?: string) => (t as any)[key] ?? fallback ?? key;
+  const isDarkNow = resolvedTheme === "dark";
+
+  const tierLabel = (tier: DeviceTier | null) =>
+    tier === "weak" ? tr("tierWeak") : tier === "medium" ? tr("tierMedium") : tier === "powerful" ? tr("tierPowerful") : "—";
+
+  const reDetect = async () => {
+    setAnalyzing(true);
+    try {
+      const signals: DeviceSignals = await detectDevice();
+      setDeviceInfo(signals.score, signals.tier);
+      setFacts(getDeviceFacts());
+      toast.success(
+        isRtl ? `نقاط الأداء: ${signals.score} (${tierLabel(signals.tier)})`
+          : `Score de performance : ${signals.score} (${tierLabel(signals.tier)})`
+      );
+    } catch {
+      toast.error(isRtl ? "تعذّر تحليل الجهاز" : "Impossible d'analyser l'appareil");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const applyRecommendation = async () => {
+    const signals = await detectDevice();
+    setDeviceInfo(signals.score, signals.tier);
+    if (signals.tier === "weak") {
+      setPerformanceMode(true);
+      setAnimationsEnabled(false);
+    } else {
+      setPerformanceMode(false);
+      setAnimationsEnabled(true);
+    }
+    toast.success(isRtl ? "تم تطبيق الوضع الموصى به لجهازك ✨" : "Réglage recommandé appliqué ✨");
+  };
+
+  const handleNotificationToggle = async (enabled: boolean) => {
+    if (enabled) {
+      const permission = await requestNotificationPermission();
+      if (permission !== "granted") {
+        toast.error(tr("notifDenied"));
+        return;
+      }
+      setNotificationsEnabled(true);
+      toast.success(isRtl ? "تم تفعيل الإشعارات ✓" : "Notifications activées ✓");
+    } else {
+      setNotificationsEnabled(false);
+      toast.success(isRtl ? "تم إيقاف الإشعارات" : "Notifications désactivées");
+    }
+  };
+
+  const handleCheckUpdates = async () => {
+    setCheckingUpdate(true);
+    try {
+      await checkForUpdates();
+      await new Promise((r) => setTimeout(r, 1200));
+      const info = await getBuildInfo();
+      let lastSeen: string | null = null;
+      try {
+        lastSeen = localStorage.getItem("pwa-last-seen-build");
+      } catch { /* ignore */ }
+      if (info && lastSeen === info.version) {
+        toast.success(tr("upToDate"));
+      } else if (info) {
+        toast.info(tr("updateAvailable"), { duration: 4000 });
+      } else {
+        toast.success(tr("upToDate"));
+      }
+    } catch {
+      toast.success(tr("upToDate"));
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const handleApplyUpdate = async () => {
+    setUpdating(true);
+    try {
+      await applyServiceWorkerUpdate();
+    } catch { /* ignore */ }
+    setTimeout(() => { window.location.reload(); }, 1200);
+  };
 
   const themes: { value: ThemeMode; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
     { value: "light", label: tr("themeLight"), icon: Sun },
@@ -114,19 +236,18 @@ export default function SettingsPage() {
   ];
 
   const fontSizes: { value: FontSizeMode; label: string; px: string }[] = [
-    { value: "sm", label: tr("fontSizeSmall"), px: "90%" },
+    { value: "sm", label: tr("fontSizeSmall"), px: "85%" },
     { value: "md", label: tr("fontSizeMedium"), px: "100%" },
-    { value: "lg", label: tr("fontSizeLarge"), px: "112%" },
-    { value: "xl", label: tr("fontSizeXl"), px: "125%" },
+    { value: "lg", label: tr("fontSizeLarge"), px: "115%" },
+    { value: "xl", label: tr("fontSizeXl"), px: "130%" },
   ];
 
-  const activeTheme = theme;
-  const isDarkNow = resolvedTheme === "dark";
+  const changelogEntry = CHANGELOG.find((e) => e.version === APP_VERSION);
 
   return (
-    <div className="min-h-dvh pb-10">
+    <div className="min-h-dvh pb-28 md:pb-12">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 mb-6 shadow-xl">
+      <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 mb-6 shadow-xl">
         <div className="decor-blob absolute -top-20 -right-10 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl animate-blob"></div>
         <div className="decor-blob absolute -bottom-24 -left-10 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl animate-blob animation-delay-1000"></div>
         <div className="relative z-10">
@@ -157,15 +278,15 @@ export default function SettingsPage() {
         >
           <div className="grid grid-cols-2 gap-3">
             {[
-              { code: "ar" as const, label: tr("langAr"), flag: "🇩🇿", dir: "rtl" },
-              { code: "fr" as const, label: tr("langFr"), flag: "🇫🇷", dir: "ltr" },
+              { code: "ar" as const, label: tr("langAr"), flag: "🇩🇿" },
+              { code: "fr" as const, label: tr("langFr"), flag: "🇫🇷" },
             ].map((lang) => {
               const active = language === lang.code;
               return (
                 <button
                   key={lang.code}
                   onClick={() => setLanguage(lang.code)}
-                  className={`relative flex flex-col items-center gap-2 py-4 rounded-2xl border-2 transition-all ${
+                  className={`relative flex flex-col items-center gap-2 py-4 min-h-[88px] rounded-2xl border-2 transition-all active:scale-[0.98] ${
                     active
                       ? "border-blue-500 bg-blue-50 dark:bg-blue-950/40 shadow-lg shadow-blue-500/10"
                       : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-600"
@@ -199,12 +320,12 @@ export default function SettingsPage() {
         >
           <div className="grid grid-cols-3 gap-2.5">
             {themes.map(({ value, label, icon: Icon }) => {
-              const active = activeTheme === value;
+              const active = theme === value;
               return (
                 <button
                   key={value}
                   onClick={() => setTheme(value)}
-                  className={`relative flex flex-col items-center gap-2 py-3.5 rounded-2xl border-2 transition-all ${
+                  className={`relative flex flex-col items-center gap-2 py-3.5 min-h-[72px] rounded-2xl border-2 transition-all active:scale-[0.98] ${
                     active
                       ? "border-amber-500 bg-amber-50 dark:bg-amber-950/30 shadow-lg shadow-amber-500/10"
                       : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-600"
@@ -235,6 +356,82 @@ export default function SettingsPage() {
           </div>
         </SectionCard>
 
+        {/* Device (smart detection) */}
+        <SectionCard
+          icon={Activity}
+          title={tr("settingsDevice")}
+          desc={tr("settingsDeviceDesc")}
+          iconClass="bg-gradient-to-tr from-cyan-500 to-blue-600"
+        >
+          <div className="flex flex-col sm:flex-row items-center gap-5 mb-5">
+            <ScoreGauge score={deviceScore ?? 50} />
+            <div className="flex-1 w-full text-center sm:text-start">
+              <div className="flex items-center justify-center sm:justify-start gap-2 mb-2">
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{tr("deviceScore")}</span>
+                <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${TIER_BG[deviceTier ?? "medium"]}`}>
+                  {tierLabel(deviceTier)}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-3">
+                {describeDevice(deviceTier ?? "medium")[isRtl ? "ar" : "fr"]}
+              </p>
+              <div className="grid grid-cols-2 gap-2 text-center">
+                <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 rounded-xl px-2 py-2.5">
+                  <Cpu size={15} className="mx-auto mb-1 text-cyan-500" />
+                  <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{tr("deviceCores")}</p>
+                  <p className="text-sm font-black text-slate-800 dark:text-white">{facts?.cores ?? "—"}</p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 rounded-xl px-2 py-2.5">
+                  <MemoryStick size={15} className="mx-auto mb-1 text-violet-500" />
+                  <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{tr("deviceMemory")}</p>
+                  <p className="text-sm font-black text-slate-800 dark:text-white">
+                    {facts?.memory ? `${facts.memory} GB` : `4 GB ${tr("memoryNullHint")}`}
+                  </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 rounded-xl px-2 py-2.5">
+                  <Wifi size={15} className="mx-auto mb-1 text-emerald-500" />
+                  <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{tr("deviceNetwork")}</p>
+                  <p className="text-sm font-black text-slate-800 dark:text-white uppercase">{facts?.network || "—"}</p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 rounded-xl px-2 py-2.5">
+                  <Smartphone size={15} className="mx-auto mb-1 text-amber-500" />
+                  <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{tr("deviceScreen")}</p>
+                  <p className="text-sm font-black text-slate-800 dark:text-white">{facts?.dpr ? `${facts.dpr}x` : "—"}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-start gap-3">
+              <Sparkles size={20} className={`${autoOptimize ? "text-blue-500" : "text-slate-400"} shrink-0 mt-0.5`} />
+              <div>
+                <p className="font-black text-sm text-slate-800 dark:text-slate-100">{tr("autoOptimize")}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{tr("autoOptimizeDesc")}</p>
+              </div>
+            </div>
+            <Toggle checked={autoOptimize} onChange={setAutoOptimize} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5 mt-3">
+            <button
+              onClick={reDetect}
+              disabled={analyzing}
+              className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-black hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+            >
+              {analyzing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+              {analyzing ? tr("analyzing") : tr("detectAgain")}
+            </button>
+            <button
+              onClick={applyRecommendation}
+              className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-xs font-black shadow-md shadow-cyan-500/20 hover:brightness-110 active:scale-[0.98] transition-all"
+            >
+              <Zap size={15} />
+              {tr("applyRecommendation")}
+            </button>
+          </div>
+        </SectionCard>
+
         {/* Performance */}
         <SectionCard
           icon={Gauge}
@@ -242,15 +439,6 @@ export default function SettingsPage() {
           desc={tr("settingsPerformanceDesc")}
           iconClass="bg-gradient-to-tr from-emerald-500 to-teal-600"
         >
-          {wasAutoDetected && (
-            <div className="mb-4 flex items-start gap-3 p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60">
-              <Smartphone size={18} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-black text-emerald-700 dark:text-emerald-300">{tr("settingsDetected")}</p>
-                <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80 mt-0.5">{tr("settingsDetectedDesc")}</p>
-              </div>
-            </div>
-          )}
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
               <div className="flex items-start gap-3">
@@ -275,6 +463,37 @@ export default function SettingsPage() {
           </div>
         </SectionCard>
 
+        {/* Sensations */}
+        <SectionCard
+          icon={Bell}
+          title={isRtl ? "الأحاسيس" : "Sensations"}
+          desc={isRtl ? "الإشعارات والاهتزازات" : "Notifications et vibrations"}
+          iconClass="bg-gradient-to-tr from-rose-500 to-pink-600"
+        >
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-start gap-3">
+                <Bell size={20} className={`${notificationsEnabled ? "text-rose-500" : "text-slate-400"} shrink-0 mt-0.5`} />
+                <div>
+                  <p className="font-black text-sm text-slate-800 dark:text-slate-100">{tr("pushNotifications")}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{tr("pushNotificationsDesc")}</p>
+                </div>
+              </div>
+              <Toggle checked={notificationsEnabled} onChange={handleNotificationToggle} />
+            </div>
+            <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-start gap-3">
+                <Vibrate size={20} className={`${hapticFeedback ? "text-pink-500" : "text-slate-400"} shrink-0 mt-0.5`} />
+                <div>
+                  <p className="font-black text-sm text-slate-800 dark:text-slate-100">{tr("hapticFeedback")}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{tr("hapticFeedbackDesc")}</p>
+                </div>
+              </div>
+              <Toggle checked={hapticFeedback} onChange={setHapticFeedback} />
+            </div>
+          </div>
+        </SectionCard>
+
         {/* Font size */}
         <SectionCard
           icon={TypeIcon}
@@ -289,7 +508,7 @@ export default function SettingsPage() {
                 <button
                   key={value}
                   onClick={() => setFontSize(value)}
-                  className={`relative flex flex-col items-center gap-1.5 py-3.5 rounded-2xl border-2 transition-all ${
+                  className={`relative flex flex-col items-center gap-1.5 py-3.5 min-h-[76px] rounded-2xl border-2 transition-all active:scale-[0.98] ${
                     active
                       ? "border-purple-500 bg-purple-50 dark:bg-purple-950/30 shadow-lg shadow-purple-500/10"
                       : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-600"
@@ -314,6 +533,57 @@ export default function SettingsPage() {
           </div>
         </SectionCard>
 
+        {/* Updates */}
+        <SectionCard
+          icon={Rocket}
+          title={tr("updateTitle")}
+          desc={tr("updateDesc")}
+          iconClass="bg-gradient-to-tr from-indigo-500 to-purple-600"
+        >
+          <div className="flex items-center justify-between gap-4 mb-4 p-4 rounded-2xl bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/40 dark:to-purple-950/40 border border-indigo-100 dark:border-indigo-800/60">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-md">
+                <Sparkles size={18} />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{tr("currentVersion")}</p>
+                <p className="font-black text-slate-900 dark:text-white text-sm">{APP_VERSION}</p>
+              </div>
+            </div>
+            <button
+              onClick={handleCheckUpdates}
+              disabled={checkingUpdate}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-black shadow-md hover:scale-[1.03] active:scale-[0.97] transition-all disabled:opacity-50"
+            >
+              {checkingUpdate ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              {checkingUpdate ? tr("checkingForUpdates") : tr("checkForUpdates")}
+            </button>
+          </div>
+
+          {changelogEntry && (
+            <div className="mb-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-2">
+                {tr("newFeatures")}
+              </p>
+              <ul className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                {(changelogEntry.features[isRtl ? "ar" : "fr"] as string[]).map((f, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-[12px] font-bold text-slate-700 dark:text-slate-300">
+                    <Check size={14} className="text-indigo-500 shrink-0 mt-0.5" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {updating && (
+            <div className="flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400">
+              <Loader2 size={14} className="animate-spin" />
+              {isRtl ? "جارٍ التحديث وإعادة التحميل…" : "Mise à jour et rechargement…"}
+            </div>
+          )}
+        </SectionCard>
+
         {/* Reset */}
         <Reveal direction="up" className="w-full">
           <button
@@ -322,7 +592,7 @@ export default function SettingsPage() {
               setTheme("system");
               toast.success(tr("settingsResetDone"));
             }}
-            className="w-full flex items-center justify-center gap-2.5 py-4 rounded-3xl border-2 border-dashed border-red-300 dark:border-red-800/60 text-red-600 dark:text-red-400 font-black text-sm hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+            className="w-full flex items-center justify-center gap-2.5 py-4 rounded-3xl border-2 border-dashed border-red-300 dark:border-red-800/60 text-red-600 dark:text-red-400 font-black text-sm hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors active:scale-[0.98]"
           >
             <RotateCcw size={18} />
             {tr("settingsReset")}

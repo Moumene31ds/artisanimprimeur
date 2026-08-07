@@ -20,6 +20,7 @@ export interface Product {
 // أنواع الإعدادات المتوفرة
 export type ThemeMode = "light" | "dark" | "system";
 export type FontSizeMode = "sm" | "md" | "lg" | "xl";
+export type DeviceTier = "weak" | "medium" | "powerful";
 
 // 2. تعريف بنية الحالة للمتجر (Store State Interface)
 interface AppState {
@@ -39,6 +40,17 @@ interface AppState {
   settingsConfigured: boolean;
   setSettingsConfigured: (configured: boolean) => void;
   resetSettings: () => void;
+
+  // --- الإعدادات الذكية ---
+  autoOptimize: boolean;
+  setAutoOptimize: (enabled: boolean) => void;
+  hapticFeedback: boolean;
+  setHapticFeedback: (enabled: boolean) => void;
+  notificationsEnabled: boolean;
+  setNotificationsEnabled: (enabled: boolean) => void;
+  deviceScore: number | null;
+  deviceTier: DeviceTier | null;
+  setDeviceInfo: (score: number, tier: DeviceTier) => void;
 
   // حالة سلة التسوق
   cart: Product[];
@@ -80,8 +92,22 @@ export const useAppStore = create<AppState>()(
         performanceMode: false,
         animationsEnabled: true,
         fontSize: "md",
+        autoOptimize: true,
+        hapticFeedback: true,
+        notificationsEnabled: true,
         settingsConfigured: true,
       }),
+
+      // --- الإعدادات الذكية ---
+      autoOptimize: true,
+      setAutoOptimize: (autoOptimize) => set({ autoOptimize }),
+      hapticFeedback: true,
+      setHapticFeedback: (hapticFeedback) => set({ hapticFeedback }),
+      notificationsEnabled: true,
+      setNotificationsEnabled: (notificationsEnabled) => set({ notificationsEnabled }),
+      deviceScore: null,
+      deviceTier: null,
+      setDeviceInfo: (deviceScore, deviceTier) => set({ deviceScore, deviceTier }),
 
       // حالة وإجراءات سلة التسوق (Cart Actions)
       cart: [],
