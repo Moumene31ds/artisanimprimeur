@@ -4,7 +4,7 @@
 // CHANGELOG يعرض الميزات للعملاء بالعربية والفرنسية.
 // ---------------------------------------------------------------------------
 
-export const APP_VERSION = 'v6.4.1';
+export const APP_VERSION = 'v6.5';
 
 export interface ChangelogEntry {
   version: string;
@@ -12,6 +12,25 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'v6.5',
+    features: {
+      ar: [
+        '📲 واجهة تثبيت التطبيق أصبحت شاشة سفلية أنيقة تتلاءم تماماً مع جميع الهواتف',
+        '👆 يمكن إغلاقها بسحبها لأسفل (Swipe) مع مراعاة مساحة الشاشة الآمنة',
+        '✅ شاشة نجاح بعد التثبيت مباشرة',
+        '📱 توجيهات واضحة خطوة بخطوة لأجهزة iPhone/iPad',
+        '🛠️ تحسينات عامة في الأداء والثبات',
+      ],
+      fr: [
+        '📲 L\u2019écran d\u2019installation devient une feuille (bottom sheet) qui épouse parfaitement les téléphones',
+        '👆 Fermeture par glissement vers le bas + prise en charge de la zone de sécurité',
+        '✅ Écran de succès dès l\u2019installation terminée',
+        '📱 Instructions pas à pas pour iPhone/iPad',
+        '🛠️ Améliorations générales de performance et stabilité',
+      ],
+    },
+  },
   {
     version: 'v6.4.1',
     features: {
