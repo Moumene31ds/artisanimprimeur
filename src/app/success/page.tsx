@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, Home, ListChecks, PartyPopper, Loader2, AlertCircle, ShieldCheck } from "lucide-react";
+import { CheckCircle, Home, ListChecks, PartyPopper, Loader2, AlertCircle, ShieldCheck, Share2 } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useAppStore } from "@/lib/store";
@@ -9,6 +9,8 @@ import { useSearchParams } from "next/navigation";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import confetti from "canvas-confetti"; // تأثير الاحتفال الرائع
+import { toast } from "sonner";
+import { nativeShare } from "@/lib/native";
 
 function SuccessContent() {
   const { language } = useAppStore();
@@ -183,6 +185,34 @@ function SuccessContent() {
             <span className="text-accent dark:text-blue-400">{orderDetails.total} {isRtl ? "دج" : "DA"}</span>
           </div>
         </motion.div>
+      )}
+
+      {/* مشاركة الفاتورة */}
+      {orderId && (
+        <motion.button
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.38 }}
+          onClick={async () => {
+            const url = `https://lartisan.dz/invoice/${orderId}`;
+            const ok = await nativeShare({
+              title: isRtl ? "فاتورة طلبي" : "Ma facture",
+              text: isRtl ? `فاتورة رقم ${orderId.slice(-8).toUpperCase()}` : `Facture N° ${orderId.slice(-8).toUpperCase()}`,
+              url,
+            });
+            if (!ok) {
+              try {
+                await navigator.clipboard.writeText(url);
+                toast.success(isRtl ? "تم نسخ رابط الفاتورة" : "Lien de la facture copié");
+              } catch {
+                toast.error(isRtl ? "تعذر مشاركة الفاتورة" : "Impossible de partager la facture");
+              }
+            }
+          }}
+          className="w-full max-w-md flex items-center justify-center gap-2 px-6 py-3.5 mb-4 rounded-2xl premium-glass text-slate-700 dark:text-slate-200 font-bold hover:shadow-lg transition-all hover:scale-[1.02] active:scale-95 border border-slate-200 dark:border-slate-700"
+        >
+          <Share2 size={18} /> {isRtl ? "مشاركة الفاتورة" : "Partager la facture"}
+        </motion.button>
       )}
 
       <motion.div 

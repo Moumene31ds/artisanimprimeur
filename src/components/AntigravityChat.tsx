@@ -14,6 +14,7 @@ import {
   Volume2, ThumbsUp, ThumbsDown, Paperclip, UploadCloud, ExternalLink,
   ShoppingCart, Cpu, BadgePercent
 } from "lucide-react";
+import { nativeHaptic, nativeHapticSuccess } from "@/lib/native";
 
 const CHAT_STORAGE_KEY = "lartisan_chat_history";
 
@@ -306,31 +307,61 @@ export default function AntigravityChat() {
     }
   };
 
+  const recognitionRef = useRef<any>(null);
+
   const toggleVoiceInput = () => {
     if (typeof window !== "undefined" && !("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
-      alert(isRtl ? "المتصفح لا يدعم الإدخال الصوتي" : "Votre navigateur ne supporte pas la dictée vocale.");
+      toast.error(isRtl ? "المتصفح لا يدعم الإدخال الصوتي" : "Votre navigateur ne supporte pas la dictée vocale.");
       return;
     }
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+      setIsListening(false);
+      return;
+    }
+
     const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
     recognition.lang = isRtl ? "ar-DZ" : "fr-FR";
     recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
 
-    if (!isListening) {
-      setIsListening(true);
-      recognition.start();
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
+    const finish = (transcript?: string) => {
+      if (transcript) {
         setTextInput((prev) => (prev ? prev + " " + transcript : transcript));
-        setIsListening(false);
-      };
-      recognition.onerror = () => setIsListening(false);
-      recognition.onend = () => setIsListening(false);
-    } else {
-      recognition.stop();
+        nativeHapticSuccess();
+      }
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
+      setIsListening(false);
+    };
+
+    recognition.onresult = (event: any) => {
+      finish(event.results?.[0]?.[0]?.transcript ?? "");
+    };
+    recognition.onerror = (event: any) => {
+      if (event?.error !== "aborted") {
+        toast.error(isRtl ? "تعذّر التقاط الصوت، حاول مجدداً" : "Impossible de capturer votre voix, réessayez");
+        nativeHaptic("heavy");
+      }
+      finish();
+    };
+    recognition.onend = () => finish();
+
+    nativeHaptic("medium");
+    setIsListening(true);
+    try {
+      recognition.start();
+    } catch {
       setIsListening(false);
     }
+
+    setTimeout(() => {
+      if (recognitionRef.current === recognition) recognition.stop();
+    }, 15000);
   };
 
   const speakMessage = (text: string, id: string) => {

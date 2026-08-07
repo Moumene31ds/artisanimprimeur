@@ -54,7 +54,14 @@ export default function NativeBootstrap() {
       },
     });
 
-    const lockEnabled = isBiometricLockEnabled();
+    const newAppLockActive = (() => {
+      try {
+        return !!localStorage.getItem("applock_pin_hash");
+      } catch {
+        return false;
+      }
+    })();
+    const lockEnabled = newAppLockActive ? false : isBiometricLockEnabled();
     if (lockEnabled) {
       setLocked(true);
       authenticateWithBiometric("افتح التطبيق ببصمة إصبعك").then((ok) => {

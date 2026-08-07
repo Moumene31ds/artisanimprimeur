@@ -4,7 +4,7 @@
 // CHANGELOG يعرض الميزات للعملاء بالعربية والفرنسية.
 // ---------------------------------------------------------------------------
 
-export const APP_VERSION = 'v6.7';
+export const APP_VERSION = 'v6.8';
 
 export interface ChangelogEntry {
   version: string;
@@ -12,6 +12,27 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'v6.8',
+    features: {
+      ar: [
+        '🔐 قفل التطبيق المتقدم: رمز PIN (6 أرقام) + بصمة/وجه + أوضاع قفل (عند الفتح، الخلفية، بعد الخمول)',
+        '⏱️ قفل تلقائي بعد فترة إهمال قابلة للتخصيص + قفل فوري عند إخفاء التطبيق',
+        '🚫 حماية من التصوير والتسجيل: إخفاء المعاينة ومنع لقطات الشاشة في التطبيق الأصلي',
+        '🔒 قفل مؤقت بعد 5 محاولات خاطئة لحماية رمزك',
+        '🖱️ الإدخال الصوتي للذكاء الاصطناعي أصبح أكثر ذكاءً: توقف تلقائي، اهتزاز، ورسائل خطأ واضحة',
+        '📤 مشاركة الفواتير والوصلات مباشرة (ورقة المشاركة الأصلية أو نسخ الرابط)',
+      ],
+      fr: [
+        '🔐 Verrouillage avancé de l\u2019application : code PIN (6 chiffres) + biométrie + modes (démarrage, arrière-plan, inactivité)',
+        '⏱️ Verrouillage automatique après une inactivité configurable + verrouillage immédiat quand l\u2019app passe en arrière-plan',
+        '🚫 Anti-capture & confidentialité : aperçu masqué et captures d\u2019écran bloquées dans l\u2019app native',
+        '🔒 Verrouillage temporaire après 5 tentatives incorrectes pour protéger votre code',
+        '🖱️ La dictée vocale de l\u2019IA est plus fiable : arrêt automatique, vibrations et messages d\u2019erreur clairs',
+        '📤 Partage des factures et reçus directement (feuille de partage native ou copie du lien)',
+      ],
+    },
+  },
   {
     version: 'v6.7',
     features: {

@@ -43,6 +43,9 @@ const config: CapacitorConfig = {
       allowDeviceCredentials: true,
       enableDebugLog: false,
     },
+    PrivacyScreen: {
+      enable: false,
+    },
   },
 };
 

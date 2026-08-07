@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { Loader2, Printer, ArrowLeft, CheckCircle, MessageCircle, AlertCircle } from "lucide-react";
+import { Loader2, Printer, ArrowLeft, CheckCircle, MessageCircle, AlertCircle, Share2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import Barcode from "react-barcode"; // المكتبة الجديدة للباركود
+import { toast } from "sonner";
+import { nativeShare } from "@/lib/native";
 
 interface OrderItem {
   name: { fr?: string } | string;
@@ -92,6 +94,22 @@ export default function InvoicePage() {
     window.open(whatsappUrl, "_blank");
   };
 
+  const handleNativeShare = async () => {
+    const ok = await nativeShare({
+      title: `Facture ${invoiceNumber}`,
+      text: `Facture ${invoiceNumber} — ${order.customerName} — ${order.total.toLocaleString()} DA`,
+      url: currentUrl,
+    });
+    if (!ok) {
+      try {
+        await navigator.clipboard.writeText(currentUrl);
+        toast.success("Lien de la facture copié !");
+      } catch {
+        toast.error("Impossible de partager la facture");
+      }
+    }
+  };
+
   const isPaid = order.status.toLowerCase() === "livré" || order.status.toLowerCase() === "payé";
   
   const invoiceDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date();
@@ -116,10 +134,16 @@ export default function InvoicePage() {
         </button>
         <div className="flex gap-3 w-full sm:w-auto">
           <button
+            onClick={handleNativeShare}
+            className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl shadow-md hover:bg-blue-700 transition-all font-medium"
+          >
+            <Share2 size={18} /> Partager
+          </button>
+          <button
             onClick={handleWhatsAppShare}
             className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-[#25D366] text-white px-5 py-2.5 rounded-xl shadow-md hover:bg-[#1ebd5c] transition-all font-medium"
           >
-            <MessageCircle size={18} /> Partager
+            <MessageCircle size={18} /> WhatsApp
           </button>
           <button
             onClick={handlePrint}

@@ -6,6 +6,7 @@ import { AuthProvider } from "@/context/AuthContext"; // استيراد AuthProv
 import SyncManager from "@/components/SyncManager";
 import PWALifecycle from "@/components/PWALifecycle";
 import NativeBootstrap from "@/components/NativeBootstrap";
+import LockManager from "@/components/LockManager";
 import { MotionConfig } from "framer-motion";
 import { useAppStore } from "@/lib/store";
 
@@ -47,6 +48,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
       {/* إقلاع التطبيق الأصلي (أندرويد/iOS): شاشة البداية، الإشعارات، قفل البصمة */}
       <NativeBootstrap />
+
+      {/* قفل التطبيق المتقدم: PIN + بصمة + مهلة إهمال + قفل الخلفية + الخصوصية */}
+      <LockManager />
     </AuthProvider>
   );
 }

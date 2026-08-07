@@ -9,7 +9,7 @@ import {
   Monitor, Smartphone, Sparkles, ChevronRight, ArrowLeft, Zap, Cpu, MemoryStick,
   Wifi, RefreshCw, Rocket, Bell, Vibrate, Loader2, Activity, Droplets, Eye,
   HardDrive, Trash2, Battery, BatteryCharging, Clock, Download, CheckCircle2,
-  Share2, Fingerprint
+  Share2, Fingerprint, ShieldCheck, Lock, KeyRound, Timer, EyeOff
 } from "lucide-react";
 import { useAppStore, type ThemeMode, type FontSizeMode, type DeviceTier } from "@/lib/store";
 import { useTheme } from "next-themes";
@@ -24,6 +24,8 @@ import { checkForUpdates, getBuildInfo, applyServiceWorkerUpdate, requestNotific
 import { APP_VERSION, CHANGELOG } from "@/lib/changelog";
 import { isNative, getNativePlatform, getNativeAppInfo, nativeShare, isBiometricAvailable, authenticateWithBiometric } from "@/lib/native";
 import { isBiometricLockEnabled, setBiometricLockEnabled } from "@/components/NativeBootstrap";
+import { useAppLock, type LockMode } from "@/lib/applock";
+import { PinSetupSheet, VerifyPinSheet } from "@/components/PinSheets";
 
 function Toggle({
   checked,
@@ -157,6 +159,11 @@ export default function SettingsPage() {
   const [facts, setFacts] = useState<ReturnType<typeof getDeviceFacts> | null>(null);
   const [battery, setBattery] = useState<BatteryInfo | null>(null);
   const [storage, setStorage] = useState<{ local: number; cache: number }>({ local: 0, cache: 0 });
+
+  const lock = useAppLock();
+  const [pinSetupOpen, setPinSetupOpen] = useState(false);
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [verifyAction, setVerifyAction] = useState<"change" | "disable" | null>(null);
 
   const fmtBytes = (b: number) => {
     if (b <= 0) return "0";
@@ -1013,6 +1020,200 @@ export default function SettingsPage() {
             </div>
           </SectionCard>
         )}
+
+        {/* قفل التطبيق والأمان */}
+        <SectionCard
+          icon={ShieldCheck}
+          title={tr("lockSecurityTitle")}
+          desc={tr("lockSecurityDesc")}
+          iconClass="bg-gradient-to-tr from-violet-600 to-indigo-700"
+        >
+          {/* الحالة + القفل الفوري */}
+          <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 mb-3">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-md ${
+                !lock.pinSet
+                  ? "bg-slate-100 dark:bg-slate-800 text-slate-400"
+                  : lock.isLocked
+                    ? "bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400"
+                    : "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400"
+              }`}>
+                <Lock size={18} />
+              </div>
+              <div>
+                <p className="text-xs font-black text-slate-800 dark:text-white">{tr("lockStatusTitle")}</p>
+                <p className="text-[10px] font-bold text-slate-400">
+                  {!lock.pinSet
+                    ? tr("lockInactive")
+                    : lock.isLocked
+                      ? tr("locked")
+                      : tr("unlocked")}
+                </p>
+              </div>
+            </div>
+            {lock.pinSet && !lock.isLocked && (
+              <button
+                onClick={() => lock.lock()}
+                className="text-[11px] font-black px-4 py-2 rounded-xl bg-violet-100 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 hover:brightness-95 active:scale-95 transition-all"
+              >
+                {tr("lockNow")}
+              </button>
+            )}
+          </div>
+
+          {/* رمز PIN */}
+          <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 mb-3">
+            <div className="flex items-center gap-3">
+              <KeyRound size={18} className="text-violet-500 shrink-0" />
+              <div>
+                <p className="text-xs font-black text-slate-800 dark:text-white">{tr("lockPinTitle")}</p>
+                <p className="text-[10px] font-bold text-slate-400">
+                  {lock.pinSet ? tr("lockPinEnabled") : tr("lockPinDisabled")}
+                </p>
+              </div>
+            </div>
+            {lock.pinSet ? (
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    setVerifyAction("change");
+                    setVerifyOpen(true);
+                  }}
+                  className="text-[11px] font-black px-3.5 py-2 rounded-xl bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:brightness-95 active:scale-95 transition-all"
+                >
+                  {tr("lockPinChange")}
+                </button>
+                <button
+                  onClick={() => {
+                    setVerifyAction("disable");
+                    setVerifyOpen(true);
+                  }}
+                  className="text-[11px] font-black px-3.5 py-2 rounded-xl bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:brightness-95 active:scale-95 transition-all"
+                >
+                  {tr("lockPinDisable")}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setPinSetupOpen(true)}
+                className="text-[11px] font-black px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md hover:brightness-110 active:scale-95 transition-all shrink-0"
+              >
+                {tr("lockPinEnable")}
+              </button>
+            )}
+          </div>
+
+          {/* وضع القفل */}
+          {lock.pinSet && (
+            <>
+              <div className="flex items-center gap-2 px-1 mb-2">
+                <Timer size={14} className="text-slate-400" />
+                <p className="text-xs font-black text-slate-700 dark:text-slate-300">{tr("lockModeTitle")}</p>
+              </div>
+              <div className="grid grid-cols-4 gap-2 mb-4">
+                {([
+                  { value: "off" as LockMode, label: tr("lockModeOff") },
+                  { value: "launch" as LockMode, label: tr("lockModeLaunch") },
+                  { value: "background" as LockMode, label: tr("lockModeBackground") },
+                  { value: "timeout" as LockMode, label: tr("lockModeTimeout") },
+                ]).map((m) => (
+                  <button
+                    key={m.value}
+                    onClick={() => lock.setMode(m.value)}
+                    className={`px-1 py-2.5 rounded-xl text-[10px] font-black border transition-all active:scale-95 ${
+                      lock.mode === m.value
+                        ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white border-transparent shadow-md"
+                        : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+
+              {lock.mode === "timeout" && (
+                <>
+                  <div className="flex items-center gap-2 px-1 mb-2">
+                    <Clock size={14} className="text-slate-400" />
+                    <p className="text-xs font-black text-slate-700 dark:text-slate-300">{tr("lockTimeoutTitle")}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {[0.5, 1, 2, 5, 10].map((min) => {
+                      const label =
+                        min === 0.5
+                          ? tr("lockTimeout30")
+                          : `${min} ${isRtl ? "دقيقة" : "min"}`;
+                      return (
+                        <button
+                          key={min}
+                          onClick={() => lock.setTimeoutMinutes(min)}
+                          className={`px-3.5 py-2 rounded-xl text-[11px] font-black border transition-all active:scale-95 ${
+                            lock.timeoutMinutes === min
+                              ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white border-transparent shadow-md"
+                              : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {/* البصمة/الوجه */}
+          {isNative() && biometricAvailable && (
+            <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 mb-3">
+              <div className="flex items-center gap-3">
+                <Fingerprint size={18} className="text-violet-500 shrink-0" />
+                <div>
+                  <p className="text-xs font-black text-slate-800 dark:text-white">{tr("biometricLockTitle")}</p>
+                  <p className="text-[10px] font-bold text-slate-400">{tr("biometricLockDesc")}</p>
+                </div>
+              </div>
+              <Toggle
+                checked={lock.biometricEnabled}
+                onChange={lock.setBiometric}
+                disabled={!lock.pinSet}
+              />
+            </div>
+          )}
+
+          {/* منع التصوير والخصوصية */}
+          <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <EyeOff size={18} className="text-violet-500 shrink-0" />
+              <div>
+                <p className="text-xs font-black text-slate-800 dark:text-white">{tr("lockPrivacyTitle")}</p>
+                <p className="text-[10px] font-bold text-slate-400">{tr("lockPrivacyDesc")}</p>
+              </div>
+            </div>
+            <Toggle checked={lock.privacyEnabled} onChange={lock.setPrivacy} disabled={!lock.pinSet} />
+          </div>
+        </SectionCard>
+
+        <PinSetupSheet
+          open={pinSetupOpen}
+          onClose={() => setPinSetupOpen(false)}
+          onDone={() => toast.success(tr("lockPinDone"))}
+          isRtl={isRtl}
+        />
+        <VerifyPinSheet
+          open={verifyOpen}
+          onClose={() => setVerifyOpen(false)}
+          isRtl={isRtl}
+          onSuccess={() => {
+            if (verifyAction === "change") {
+              setPinSetupOpen(true);
+            } else if (verifyAction === "disable") {
+              lock.removePin();
+              toast.success(tr("lockPinRemoved"));
+            }
+            setVerifyAction(null);
+          }}
+        />
 
         {/* Storage & data */}
         <SectionCard
