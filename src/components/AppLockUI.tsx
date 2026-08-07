@@ -32,9 +32,9 @@ export function PinDots({
   wrong?: boolean;
   size?: "sm" | "md";
 }) {
-  const dot = size === "sm" ? "w-3 h-3" : "w-3.5 h-3.5";
+  const dot = size === "sm" ? "w-2.5 h-2.5" : "w-3 h-3 sm:w-3.5 sm:h-3.5";
   return (
-    <div className="flex items-center justify-center gap-3" dir="ltr">
+    <div className="flex items-center justify-center gap-2 sm:gap-3" dir="ltr">
       {Array.from({ length: PIN_LENGTH }).map((_, i) => (
         <motion.span
           key={i}
@@ -68,8 +68,8 @@ export function PinKeypad({
   isRtl: boolean;
   size?: "md" | "lg";
 }) {
-  const btnH = size === "lg" ? "h-[72px]" : "h-16";
-  const btnW = size === "lg" ? "w-[72px]" : "w-16";
+  const btnH = size === "lg" ? "h-16 sm:h-[72px]" : "h-14 sm:h-16";
+  const btnW = size === "lg" ? "w-16 sm:w-[72px]" : "w-14 sm:w-16";
 
   const handle = (v: string) => {
     if (disabled) return;
@@ -83,7 +83,7 @@ export function PinKeypad({
   };
 
   return (
-    <div className="grid grid-cols-3 gap-3 sm:gap-4 select-none" dir="ltr">
+    <div className="grid grid-cols-3 gap-2 sm:gap-3.5 select-none" dir="ltr">
       {KEYPAD.map((v, i) => {
         if (v === "back") {
           return (
@@ -251,57 +251,57 @@ export function AppLockScreen() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[120] flex flex-col items-center justify-center overflow-hidden bg-slate-950"
+      className="fixed inset-0 z-[120] flex flex-col overflow-y-auto overscroll-contain bg-slate-950"
       dir={isRtl ? "rtl" : "ltr"}
     >
       {/* خلفية زخرفية */}
-      <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full bg-blue-600/30 blur-[100px]" />
-      <div className="absolute -bottom-40 -left-32 w-[28rem] h-[28rem] rounded-full bg-indigo-600/20 blur-[120px]" />
-      <div className="absolute inset-0 opacity-[0.04] bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:22px_22px]" />
+      <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full bg-blue-600/30 blur-[100px] pointer-events-none" />
+      <div className="absolute -bottom-40 -left-32 w-[28rem] h-[28rem] rounded-full bg-indigo-600/20 blur-[120px] pointer-events-none" />
+      <div className="absolute inset-0 opacity-[0.04] bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:22px_22px] pointer-events-none" />
 
-      <div className="relative flex flex-col items-center px-6 w-full max-w-sm">
+      <div className="relative m-auto flex flex-col items-center px-6 py-8 w-full max-w-sm">
         {/* الشعار */}
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: 0.1 }}
-          className="w-20 h-20 rounded-3xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-2xl shadow-blue-500/30 mb-5"
+          className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-2xl shadow-blue-500/30 mb-4"
         >
-          <Lock size={34} className="text-white" />
+          <Lock size={28} className="text-white" />
         </motion.div>
 
-        <h1 className="text-white font-black text-lg mb-1" dir="ltr">
+        <h1 className="text-white font-black text-base mb-0.5" dir="ltr">
           L&apos;Artisan Imprimeur
         </h1>
-        <p className="text-white/50 text-sm mb-8">{isRtl ? "الحرفي للطباعة" : "Impression professionnelle"}</p>
+        <p className="text-white/50 text-xs mb-6">{isRtl ? "الحرفي للطباعة" : "Impression professionnelle"}</p>
 
         {/* الساعة */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="text-center mb-6"
+          className="text-center mb-4"
           dir="ltr"
         >
-          <div className="text-5xl font-black text-white tracking-tight tabular-nums">{clock}</div>
-          <div className="text-white/50 text-sm mt-1.5 capitalize">{dateStr}</div>
+          <div className="text-4xl font-black text-white tracking-tight tabular-nums">{clock}</div>
+          <div className="text-white/50 text-xs mt-1 capitalize">{dateStr}</div>
         </motion.div>
 
         {/* الترحيب */}
-        <p className="text-white/60 text-sm mb-6">{greeting}</p>
+        <p className="text-white/60 text-sm mb-5">{greeting}</p>
 
         {/* النقاط مع اهتزاز عند الخطأ */}
         <motion.div
           key={wrong ? "wrong" : "ok"}
           animate={wrong ? { x: [0, -10, 10, -6, 6, 0] } : {}}
           transition={{ duration: 0.4 }}
-          className="mb-6"
+          className="mb-4"
         >
           <PinDots count={count} wrong={wrong} />
         </motion.div>
 
         {/* حالة الخطأ أو القفل المؤقت */}
-        <div className="h-6 mb-4 flex items-center justify-center">
+        <div className="h-5 mb-3 flex items-center justify-center">
           <AnimatePresence>
             {lockoutLeft > 0 ? (
               <motion.p

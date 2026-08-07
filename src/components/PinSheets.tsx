@@ -73,10 +73,10 @@ function PinFlowBody({
   };
 
   return (
-    <div className="flex flex-col items-center gap-6 py-2">
+    <div className="flex flex-col items-center gap-5 py-1">
       <div className="text-center">
-        <h3 className="font-black text-slate-900 dark:text-white text-lg">{title}</h3>
-        <p className="text-xs font-bold text-slate-400 mt-1">{subtitle}</p>
+        <h3 className="font-black text-slate-900 dark:text-white text-base">{title}</h3>
+        <p className="text-xs font-bold text-slate-400 mt-0.5">{subtitle}</p>
       </div>
 
       {onBack && (

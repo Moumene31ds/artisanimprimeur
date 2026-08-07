@@ -66,5 +66,9 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>La dictée vocale est utilisée pour saisir vos messages dans l'assistant intelligent.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Le microphone est utilisé uniquement pour la dictée vocale de vos messages.</string>
 </dict>
 </plist>

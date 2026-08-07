@@ -170,6 +170,38 @@ export async function authenticateWithBiometric(reason: string): Promise<boolean
   }
 }
 
+/**
+ * إملاء صوتي أصلي (الإدخال الصوتي في شات الذكاء الاصطناعي).
+ * يعمل داخل التطبيق الأصلي فقط (WebView) حيث أن Web Speech API غير متوفر.
+ * `lang` بصيغة BCP-47 مثل "ar" أو "fr-FR".
+ * تعيد { supported, transcript } — transcript null عند الإلغاء أو عدم النطق.
+ */
+export async function nativeSpeechRecognize(lang: string): Promise<{ supported: boolean; transcript: string | null }> {
+  if (!isNative()) return { supported: false, transcript: null };
+  try {
+    const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
+    const availability = await SpeechRecognition.available();
+    if (!availability.available) return { supported: false, transcript: null };
+
+    let perm = await SpeechRecognition.checkPermissions();
+    if (perm.speechRecognition !== "granted") {
+      perm = await SpeechRecognition.requestPermissions();
+    }
+    if (perm.speechRecognition !== "granted") return { supported: true, transcript: null };
+
+    const result = await SpeechRecognition.start({
+      language: lang,
+      maxResults: 1,
+      popup: true,
+      prompt: "",
+      partialResults: false,
+    });
+    return { supported: true, transcript: result.matches?.[0] ?? null };
+  } catch {
+    return { supported: false, transcript: null };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // الإشعارات الأصلية (FCM على أندرويد / APNs على iOS)
 // ---------------------------------------------------------------------------

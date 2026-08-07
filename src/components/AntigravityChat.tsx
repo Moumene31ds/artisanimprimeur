@@ -14,7 +14,7 @@ import {
   Volume2, ThumbsUp, ThumbsDown, Paperclip, UploadCloud, ExternalLink,
   ShoppingCart, Cpu, BadgePercent
 } from "lucide-react";
-import { nativeHaptic, nativeHapticSuccess } from "@/lib/native";
+import { nativeHaptic, nativeHapticSuccess, nativeSpeechRecognize, isNative } from "@/lib/native";
 
 const CHAT_STORAGE_KEY = "lartisan_chat_history";
 
@@ -309,7 +309,36 @@ export default function AntigravityChat() {
 
   const recognitionRef = useRef<any>(null);
 
-  const toggleVoiceInput = () => {
+  const toggleVoiceInput = async () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+      setIsListening(false);
+      return;
+    }
+
+    // داخل التطبيق الأصلي: الإملاء عبر التعرف الأصلي للكلام (Web Speech غير متوفر في WebView)
+    if (isNative()) {
+      setIsListening(true);
+      nativeHaptic("medium");
+      const res = await nativeSpeechRecognize(isRtl ? "ar" : "fr-FR");
+      setIsListening(false);
+      if (res.supported && res.transcript) {
+        nativeHapticSuccess();
+        const transcript = res.transcript;
+        setTextInput((prev) => (prev ? prev + " " + transcript : transcript));
+      } else if (res.supported) {
+        toast.error(isRtl ? "لم يُلتقط أي صوت، حاول مجدداً" : "Aucune voix captée, réessayez");
+      } else {
+        toast.error(
+          isRtl
+            ? "الإدخال الصوتي غير متوفر على هذا الجهاز"
+            : "La dictée vocale est indisponible sur cet appareil"
+        );
+      }
+      return;
+    }
+
     if (typeof window !== "undefined" && !("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
       toast.error(isRtl ? "المتصفح لا يدعم الإدخال الصوتي" : "Votre navigateur ne supporte pas la dictée vocale.");
       return;
