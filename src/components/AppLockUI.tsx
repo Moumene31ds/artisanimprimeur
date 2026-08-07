@@ -6,11 +6,12 @@
 // القفل وإعدادات PIN (الإنشاء/التحقق).
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Delete, Fingerprint, Lock, ShieldCheck } from "lucide-react";
+import { Delete, Fingerprint, Lock, ScanFace, ShieldCheck } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { nativeHaptic, nativeHapticSuccess } from "@/lib/native";
+import { nativeHaptic, nativeHapticSuccess, getBiometryKind, biometryKindLabel } from "@/lib/native";
+import type { BiometryKind } from "@/lib/native";
 import { useAppLock, PIN_LENGTH } from "@/lib/applock";
 
 const KEYPAD = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"] as const;
@@ -130,6 +131,8 @@ export function PinKeypadPanel({
   biometricAvailable,
   isRtl,
   size = "md",
+  biometricLabel,
+  biometricIcon,
 }: {
   count: number;
   wrong: boolean;
@@ -139,6 +142,8 @@ export function PinKeypadPanel({
   biometricAvailable?: boolean;
   isRtl: boolean;
   size?: "md" | "lg";
+  biometricLabel?: string;
+  biometricIcon?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col items-center gap-6">
@@ -150,8 +155,8 @@ export function PinKeypadPanel({
           onClick={onBiometric}
           className="flex items-center gap-2 text-white/70 hover:text-white transition-colors text-sm font-medium"
         >
-          <Fingerprint size={18} />
-          {isRtl ? "دخول بالبصمة" : "Déverrouillage biométrique"}
+          {biometricIcon ?? <Fingerprint size={18} />}
+          {biometricLabel ?? (isRtl ? "دخول بالبصمة" : "Déverrouillage biométrique")}
         </button>
       )}
     </div>
@@ -168,7 +173,9 @@ export function AppLockScreen() {
   const [pin, setPin] = useState("");
   const [wrong, setWrong] = useState(false);
   const [now, setNow] = useState(() => new Date());
-  const [biometricOk, setBiometricOk] = useState(false);
+  const [biometryKind, setBiometryKind] = useState<BiometryKind>("unknown");
+  const [biometricError, setBiometricError] = useState<string | null>(null);
+  const autoPrompted = useRef(false);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -177,16 +184,31 @@ export function AppLockScreen() {
 
   useEffect(() => {
     let mounted = true;
-    import("@/lib/applock")
-      .then((m) => m.checkBiometricSupport())
-      .then((ok) => {
-        if (mounted) setBiometricOk(ok);
-      })
-      .catch(() => {});
+    getBiometryKind().then((kind) => {
+      if (mounted) setBiometryKind(kind);
+    });
     return () => {
       mounted = false;
     };
   }, []);
+
+  // نافذة البيومترية تُفتح تلقائياً عند ظهور شاشة القفل (مرة واحدة فقط)
+  useEffect(() => {
+    if (autoPrompted.current) return;
+    autoPrompted.current = true;
+    const state = useAppLock.getState();
+    if (!state.biometricEnabled || state.lockoutUntil > Date.now()) return;
+    const timer = setTimeout(() => {
+      if (useAppLock.getState().isLocked) handleBiometric();
+    }, 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const kind = biometryKind !== "unknown" ? biometryKind : lockStore.biometryKind;
+  const bioAvailable = kind === "fingerprint" || kind === "face" || kind === "iris";
+  const bioIcon = kind === "face" || kind === "iris" ? <ScanFace size={18} /> : <Fingerprint size={18} />;
+  const bioLabel = biometryKindLabel(kind, isRtl);
 
   const clock = now.toLocaleTimeString(isRtl ? "ar-DZ" : "fr-FR", {
     hour: "2-digit",
@@ -240,10 +262,38 @@ export function AppLockScreen() {
   };
 
   const handleBiometric = async () => {
-    const ok = await lockStore.unlockByBiometric(
-      isRtl ? "افتح التطبيق ببصمة إصبعك" : "Déverrouiller avec votre empreinte"
-    );
-    if (ok) nativeHapticSuccess();
+    setBiometricError(null);
+    const reasonText =
+      kind === "face"
+        ? isRtl ? "افتح التطبيق بوجهك" : "Déverrouiller avec Face ID"
+        : isRtl ? "افتح التطبيق ببصمة إصبعك" : "Déverrouiller avec votre empreinte";
+    const result = await lockStore.unlockByBiometric(reasonText);
+    if (result.ok) {
+      nativeHapticSuccess();
+      return;
+    }
+    nativeHaptic("heavy");
+    switch (result.reason) {
+      case "canceled":
+        break;
+      case "failed":
+        setBiometricError(isRtl ? "تعذّر التعرف — حاول مجدداً" : "Reconnaissance échouée, réessayez");
+        break;
+      case "locked":
+        setBiometricError(isRtl ? "أُقفلت البيومترية مؤقتاً — استعمل رمز PIN" : "Biométrie verrouillée — utilisez le code PIN");
+        break;
+      case "unavailable":
+        setBiometricError(isRtl ? "البيومترية غير متاحة على هذا الجهاز" : "Biométrie indisponible sur cet appareil");
+        break;
+      case "not_enrolled":
+        setBiometricError(isRtl ? "لا توجد بصمة/وجه مسجّل في الجهاز" : "Aucune empreinte/visage enregistré sur l\u2019appareil");
+        break;
+      case "no_credential":
+        setBiometricError(isRtl ? "فعّل قفل شاشة الجهاز أولاً لاستعمال هذه الميزة" : "Activez d\u2019abord le verrouillage d\u2019écran");
+        break;
+      default:
+        setBiometricError(isRtl ? "تعذّر التحقق" : "Échec de l\u2019authentification");
+    }
   };
 
   return (
@@ -315,6 +365,15 @@ export function AppLockScreen() {
                   ? `أُقفل مؤقتاً — أعد المحاولة بعد ${lockoutLeft} ثانية`
                   : `Verrouillé — réessayez dans ${lockoutLeft}s`}
               </motion.p>
+            ) : biometricError ? (
+              <motion.p
+                key="bio"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-red-400 text-sm font-semibold"
+              >
+                {biometricError}
+              </motion.p>
             ) : wrong ? (
               <motion.p
                 key="wrong"
@@ -337,8 +396,10 @@ export function AppLockScreen() {
           wrong={wrong}
           onDigit={handleDigit}
           onDelete={resetInput}
-          onBiometric={lockStore.biometricEnabled && biometricOk ? handleBiometric : undefined}
-          biometricAvailable={biometricOk}
+          onBiometric={lockStore.biometricEnabled && bioAvailable ? handleBiometric : undefined}
+          biometricAvailable={bioAvailable}
+          biometricLabel={bioLabel}
+          biometricIcon={bioIcon}
           isRtl={isRtl}
         />
       </div>

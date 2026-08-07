@@ -10,7 +10,7 @@ import {
   setupNativePushListeners,
   registerAndroidBackButton,
   authenticateWithBiometric,
-  getNativePlatform,
+  getBiometryKind,
 } from "@/lib/native";
 
 const BIOMETRIC_LOCK_KEY = "native_biometric_lock";
@@ -38,9 +38,15 @@ export default function NativeBootstrap() {
   const [locked, setLocked] = useState(false);
   const [authError, setAuthError] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [biometryKind, setBiometryKind] = useState<"fingerprint" | "face" | "other">("other");
 
   useEffect(() => {
     if (!isNative()) return;
+
+    getBiometryKind().then((kind) => {
+      if (kind === "face" || kind === "iris") setBiometryKind("face");
+      else if (kind === "fingerprint") setBiometryKind("fingerprint");
+    });
 
     setupNativeApp();
     registerAndroidBackButton(() => {
@@ -88,7 +94,7 @@ export default function NativeBootstrap() {
         transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}
         className="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500 to-accent flex items-center justify-center shadow-2xl shadow-indigo-500/30"
       >
-        {getNativePlatform() === "ios" ? <ScanFace size={40} /> : <Fingerprint size={40} />}
+        {biometryKind === "face" ? <ScanFace size={40} /> : <Fingerprint size={40} />}
       </motion.div>
 
       <div className="text-center space-y-1">

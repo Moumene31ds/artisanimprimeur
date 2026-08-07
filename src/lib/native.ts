@@ -152,22 +152,116 @@ export async function isBiometricAvailable(): Promise<boolean> {
   try {
     const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
     const result: any = await BiometricAuth.checkBiometry();
-    return !!(result && result.isAvailable && result.biometryType && result.biometryType !== "none");
+    return !!(result && result.isAvailable && result.biometryType !== undefined && result.biometryType !== 0);
   } catch {
     return false;
   }
 }
 
-/** طلب التحقق بالمصادقة البيومترية (بصمة/وجه/رمز الجهاز). */
-export async function authenticateWithBiometric(reason: string): Promise<boolean> {
-  if (!isNative()) return false;
+/** نوع البيومترية المتوفرة على الجهاز. */
+export type BiometryKind = "fingerprint" | "face" | "iris" | "none" | "unknown";
+
+/**
+ * يحدد نوع البيومترية (بصمة / وجه / عين / بلا).
+ * الأجهزة تُرجع أرقاماً مطابقة لـ BiometryType:
+ *  0=none, 1=touchId, 2=faceId, 3=fingerprint, 4=faceAuth, 5=iris
+ */
+export async function getBiometryKind(): Promise<BiometryKind> {
+  if (!isNative()) return "unknown";
   try {
     const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
-    await BiometricAuth.authenticate({ reason, allowDeviceCredential: true });
-    return true;
+    const result: any = await BiometricAuth.checkBiometry();
+    if (!result || !result.isAvailable) return "none";
+    const t = result.biometryType;
+    const num = typeof t === "number" ? t : Number(t);
+    const name = typeof t === "string" ? t.toLowerCase() : "";
+    if (num === 1 || num === 3 || name.includes("finger") || name.includes("touch")) return "fingerprint";
+    if (num === 2 || num === 4 || name.includes("face")) return "face";
+    if (num === 5 || name.includes("iris")) return "iris";
+    return "none";
   } catch {
-    return false;
+    return "unknown";
   }
+}
+
+/** عنوان البيومترية للعرض (بصمة / Face ID / عين). */
+export function biometryKindLabel(kind: BiometryKind, isRtl: boolean): string {
+  switch (kind) {
+    case "face":
+      return "Face ID";
+    case "fingerprint":
+      return isRtl ? "بصمة الإصبع" : "Empreinte digitale";
+    case "iris":
+      return isRtl ? "بصمة العين" : "Scanner d\u2019iris";
+    case "none":
+    case "unknown":
+    default:
+      return isRtl ? "البيومترية" : "Biométrie";
+  }
+}
+
+export type BiometricPromptReason =
+  | "canceled"
+  | "failed"
+  | "locked"
+  | "fallback"
+  | "unavailable"
+  | "not_enrolled"
+  | "no_credential"
+  | "error";
+
+export type BiometricPromptResult = { ok: true } | { ok: false; reason: BiometricPromptReason };
+
+/**
+ * نافذة تحقق بيومترية احترافية مع تصنيف نتيجة فشل دقيق.
+ * `allowDeviceCredential` يتيح بديل رمز الجهاز (PIN/نمط/كلمة مرور).
+ */
+export async function biometricPrompt(
+  reason: string,
+  opts?: { allowDeviceCredential?: boolean; cancelTitle?: string; iosFallbackTitle?: string }
+): Promise<BiometricPromptResult> {
+  if (!isNative()) return { ok: false, reason: "unavailable" };
+  try {
+    const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
+    await BiometricAuth.authenticate({
+      reason,
+      allowDeviceCredential: opts?.allowDeviceCredential ?? true,
+      cancelTitle: opts?.cancelTitle ?? undefined,
+      iosFallbackTitle: opts?.iosFallbackTitle ?? undefined,
+      androidTitle: "",
+      androidSubtitle: "",
+    });
+    return { ok: true };
+  } catch (err: any) {
+    const code = err?.code ?? "";
+    switch (code) {
+      case "userCancel":
+      case "systemCancel":
+      case "appCancel":
+        return { ok: false, reason: "canceled" };
+      case "authenticationFailed":
+        return { ok: false, reason: "failed" };
+      case "biometryLockout":
+        return { ok: false, reason: "locked" };
+      case "userFallback":
+        return { ok: false, reason: "fallback" };
+      case "biometryNotAvailable":
+        return { ok: false, reason: "unavailable" };
+      case "biometryNotEnrolled":
+        return { ok: false, reason: "not_enrolled" };
+      case "noDeviceCredential":
+      case "passcodeNotSet":
+        return { ok: false, reason: "no_credential" };
+      default:
+        return { ok: false, reason: "error" };
+    }
+  }
+}
+
+/** طلب التحقق بالمصادقة البيومترية (بصمة/وجه/رمز الجهاز) — إصدار بسيط. */
+export async function authenticateWithBiometric(reason: string): Promise<boolean> {
+  const result = await biometricPrompt(reason, { allowDeviceCredential: true });
+  return result.ok;
 }
 
 /**

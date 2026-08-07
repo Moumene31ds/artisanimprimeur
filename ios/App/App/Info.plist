@@ -70,5 +70,7 @@
 	<string>La dictée vocale est utilisée pour saisir vos messages dans l'assistant intelligent.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Le microphone est utilisé uniquement pour la dictée vocale de vos messages.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Face ID est utilisé pour déverrouiller l'application en toute sécurité.</string>
 </dict>
 </plist>

@@ -9,7 +9,7 @@ import {
   Monitor, Smartphone, Sparkles, ChevronRight, ArrowLeft, Zap, Cpu, MemoryStick,
   Wifi, RefreshCw, Rocket, Bell, Vibrate, Loader2, Activity, Droplets, Eye,
   HardDrive, Trash2, Battery, BatteryCharging, Clock, Download, CheckCircle2,
-  Share2, Fingerprint, ShieldCheck, Lock, KeyRound, Timer, EyeOff
+  Share2, Fingerprint, ScanFace, ShieldCheck, Lock, KeyRound, Timer, EyeOff
 } from "lucide-react";
 import { useAppStore, type ThemeMode, type FontSizeMode, type DeviceTier } from "@/lib/store";
 import { useTheme } from "next-themes";
@@ -22,7 +22,8 @@ import {
 } from "@/lib/device";
 import { checkForUpdates, getBuildInfo, applyServiceWorkerUpdate, requestNotificationPermission, getLastSeenBuild, dispatchShowUpdate, promptInstall, isAppInstalled } from "@/lib/pwa";
 import { APP_VERSION, CHANGELOG } from "@/lib/changelog";
-import { isNative, getNativePlatform, getNativeAppInfo, nativeShare, isBiometricAvailable, authenticateWithBiometric } from "@/lib/native";
+import { isNative, getNativePlatform, getNativeAppInfo, nativeShare, isBiometricAvailable, authenticateWithBiometric, getBiometryKind, biometryKindLabel } from "@/lib/native";
+import type { BiometryKind } from "@/lib/native";
 import { isBiometricLockEnabled, setBiometricLockEnabled } from "@/components/NativeBootstrap";
 import { useAppLock, type LockMode } from "@/lib/applock";
 import { PinSetupSheet, VerifyPinSheet } from "@/components/PinSheets";
@@ -154,6 +155,7 @@ export default function SettingsPage() {
   const [appInstalled, setAppInstalled] = useState(false);
   const [nativeInfo, setNativeInfo] = useState<{ version: string | null; build: string | null } | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometryKind, setBiometryKind] = useState<BiometryKind>("unknown");
   const [biometricLock, setBiometricLock] = useState(false);
   const [sharingApp, setSharingApp] = useState(false);
   const [facts, setFacts] = useState<ReturnType<typeof getDeviceFacts> | null>(null);
@@ -180,7 +182,10 @@ export default function SettingsPage() {
     getBatteryInfo().then(setBattery);
     if (isNative()) {
       getNativeAppInfo().then(setNativeInfo);
-      isBiometricAvailable().then(setBiometricAvailable);
+      getBiometryKind().then((kind) => {
+        setBiometryKind(kind);
+        setBiometricAvailable(kind === "fingerprint" || kind === "face" || kind === "iris");
+      });
       setBiometricLock(isBiometricLockEnabled());
     }
     (async () => {
@@ -999,12 +1004,16 @@ export default function SettingsPage() {
               {biometricAvailable && (
                 <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                   <div className="flex items-center gap-3">
+                  {biometryKind === "face" || biometryKind === "iris" ? (
+                    <ScanFace size={18} className="text-accent shrink-0" />
+                  ) : (
                     <Fingerprint size={18} className="text-accent shrink-0" />
-                    <div>
-                      <p className="text-xs font-black text-slate-800 dark:text-white">{tr("biometricLockTitle")}</p>
-                      <p className="text-[10px] font-bold text-slate-400">{tr("biometricLockDesc")}</p>
-                    </div>
+                  )}
+                  <div>
+                    <p className="text-xs font-black text-slate-800 dark:text-white">{tr("biometricLockTitle")}</p>
+                    <p className="text-[10px] font-bold text-slate-400">{tr("biometricLockDesc")}</p>
                   </div>
+                </div>
                   <Toggle checked={biometricLock} onChange={handleToggleBiometricLock} />
                 </div>
               )}
@@ -1167,10 +1176,20 @@ export default function SettingsPage() {
           {isNative() && biometricAvailable && (
             <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 mb-3">
               <div className="flex items-center gap-3">
-                <Fingerprint size={18} className="text-violet-500 shrink-0" />
+                <div className="relative">
+                  {biometryKind === "face" || biometryKind === "iris" ? (
+                    <ScanFace size={18} className="text-violet-500 shrink-0" />
+                  ) : (
+                    <Fingerprint size={18} className="text-violet-500 shrink-0" />
+                  )}
+                </div>
                 <div>
                   <p className="text-xs font-black text-slate-800 dark:text-white">{tr("biometricLockTitle")}</p>
-                  <p className="text-[10px] font-bold text-slate-400">{tr("biometricLockDesc")}</p>
+                  <p className="text-[10px] font-bold text-slate-400">
+                    {biometryKindLabel(biometryKind, isRtl)}
+                    {" · "}
+                    {tr("biometricLockDesc")}
+                  </p>
                 </div>
               </div>
               <Toggle

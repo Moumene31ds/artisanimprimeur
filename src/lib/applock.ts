@@ -8,8 +8,10 @@
 import { create } from "zustand";
 import {
   isNative,
-  isBiometricAvailable,
-  authenticateWithBiometric,
+  getBiometryKind,
+  biometricPrompt,
+  type BiometryKind,
+  type BiometricPromptResult,
 } from "./native";
 
 export type LockMode = "off" | "launch" | "background" | "timeout";
@@ -97,6 +99,7 @@ export interface AppLockState {
   timeoutMinutes: number;
   biometricEnabled: boolean;
   privacyEnabled: boolean;
+  biometryKind: BiometryKind;
   failedAttempts: number;
   lockoutUntil: number;
   lastActivity: number;
@@ -104,7 +107,7 @@ export interface AppLockState {
   setupPin: (pin: string) => Promise<void>;
   removePin: () => void;
   verifyPin: (pin: string) => Promise<boolean>;
-  unlockByBiometric: (reason: string) => Promise<boolean>;
+  unlockByBiometric: (reason: string) => Promise<BiometricPromptResult>;
   lock: () => void;
   unlock: () => void;
   touch: () => void;
@@ -124,6 +127,7 @@ export const useAppLock = create<AppLockState>()((set, get) => ({
   timeoutMinutes: DEFAULT_TIMEOUT_MINUTES,
   biometricEnabled: false,
   privacyEnabled: false,
+  biometryKind: "unknown",
   failedAttempts: 0,
   lockoutUntil: 0,
   lastActivity: Date.now(),
@@ -134,6 +138,7 @@ export const useAppLock = create<AppLockState>()((set, get) => ({
     const pinSet = !!pinHash && !!pinSalt;
     const mode = (read(K.mode, "off") as LockMode) || "off";
     const now = Date.now();
+    const biometryKind = await getBiometryKind();
     const shouldLock = pinSet && mode !== "off";
     set({
       ready: true,
@@ -144,6 +149,7 @@ export const useAppLock = create<AppLockState>()((set, get) => ({
       timeoutMinutes: Number(read(K.timeout, String(DEFAULT_TIMEOUT_MINUTES))) || DEFAULT_TIMEOUT_MINUTES,
       biometricEnabled: read(K.biometric, "0") === "1",
       privacyEnabled: read(K.privacy, "0") === "1",
+      biometryKind,
       failedAttempts: Number(read(K.attempts, "0")) || 0,
       lockoutUntil: Number(read(K.lockoutUntil, "0")) || 0,
       lastActivity: Number(read(K.lastActivity, String(now))) || now,
@@ -214,15 +220,15 @@ export const useAppLock = create<AppLockState>()((set, get) => ({
   },
 
   unlockByBiometric: async (reason) => {
-    if (!isNative()) return false;
-    const ok = await authenticateWithBiometric(reason);
-    if (ok) {
+    if (!isNative()) return { ok: false, reason: "unavailable" };
+    const result = await biometricPrompt(reason, { allowDeviceCredential: true });
+    if (result.ok) {
       write(K.attempts, "0");
       write(K.lockoutUntil, "0");
       write(K.lastActivity, String(Date.now()));
       set({ failedAttempts: 0, lockoutUntil: 0, isLocked: false, lastActivity: Date.now() });
     }
-    return ok;
+    return result;
   },
 
   lock: () => {
@@ -301,7 +307,7 @@ export async function syncPrivacyProtection(enabled: boolean): Promise<void> {
   }
 }
 
-/** هل البصمة/الوجه متاحان؟ (يُستعمل في الإعدادات وإظهار زر الدخول). */
-export async function checkBiometricSupport(): Promise<boolean> {
-  return isBiometricAvailable();
+/** نوع البيومترية المتوفرة على الجهاز (بصمة/وجه/بلا). */
+export async function checkBiometricSupport(): Promise<BiometryKind> {
+  return getBiometryKind();
 }
