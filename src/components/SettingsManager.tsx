@@ -46,8 +46,8 @@ export default function SettingsManager() {
   useEffect(() => {
     if (typeof window === "undefined" || settingsConfigured) return;
     (async () => {
-      const signals = await detectDevice();
-      setDeviceInfo(signals.score, signals.tier);
+      const signals = await detectDevice({ full: true });
+      setDeviceInfo(signals.score, signals.tier, signals);
 
       // احترام إعداد النظام "تقليل الحركة"
       if (signals.reducedMotion) {
@@ -75,10 +75,10 @@ export default function SettingsManager() {
     if (typeof window === "undefined" || !settingsConfigured) return;
     let disposed = false;
     const run = async () => {
-      const signals = await detectDevice();
+      const signals = await detectDevice({ prev: useAppStore.getState().deviceDetail });
       if (disposed) return;
       const prevTier = useAppStore.getState().deviceTier;
-      setDeviceInfo(signals.score, signals.tier);
+      setDeviceInfo(signals.score, signals.tier, signals);
       // تدهور واضح → نفعّل وضع الأداء تلقائياً دون لمس إعدادات المستخدم عند التحسن
       if (autoOptimize && signals.tier === "weak" && prevTier !== "weak") {
         setPerformanceMode(true);

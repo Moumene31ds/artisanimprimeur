@@ -353,6 +353,10 @@ export const TRANSLATIONS = {
     lastDetected: "Dernière analyse",
     justNow: "à l'instant",
     minutesAgo: "il y a {n} min",
+    confidence: "Fiabilité",
+    factorsTitle: "Détail du score (facteurs pondérés)",
+    measured: "mesuré",
+    estimated: "estimé",
 
     // --- Sensations ---
     hapticFeedback: "Vibrations tactiles",
@@ -743,6 +747,10 @@ export const TRANSLATIONS = {
     lastDetected: "آخر تحليل",
     justNow: "الآن",
     minutesAgo: "منذ {n} دقيقة",
+    confidence: "الموثوقية",
+    factorsTitle: "تفصيل النقاط (عوامل مرجّحة)",
+    measured: "مقاس",
+    estimated: "مُقدَّر",
 
     // --- الأحاسيس ---
     hapticFeedback: "الاهتزازات",

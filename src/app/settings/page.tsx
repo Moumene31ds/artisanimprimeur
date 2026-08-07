@@ -16,7 +16,8 @@ import { TRANSLATIONS, normalizeLanguage } from "@/lib/translations";
 import Reveal from "@/components/Reveal";
 import {
   detectDevice, getDeviceFacts, describeDevice, getBatteryInfo,
-  getRecommendations, estimateBatterySavings, type DeviceSignals, type BatteryInfo,
+  getRecommendations, estimateBatterySavings, getConfidenceInfo,
+  type DeviceSignals, type BatteryInfo,
 } from "@/lib/device";
 import { checkForUpdates, getBuildInfo, applyServiceWorkerUpdate, requestNotificationPermission } from "@/lib/pwa";
 import { APP_VERSION, CHANGELOG } from "@/lib/changelog";
@@ -131,7 +132,7 @@ export default function SettingsPage() {
     autoOptimize, setAutoOptimize,
     hapticFeedback, setHapticFeedback,
     notificationsEnabled, setNotificationsEnabled,
-    deviceScore, deviceTier, deviceDetectedAt, setDeviceInfo,
+    deviceScore, deviceTier, deviceDetectedAt, deviceDetail, setDeviceInfo,
     backgroundEffects, setBackgroundEffects,
     reduceBlur, setReduceBlur,
     keepAwake, setKeepAwake,
@@ -202,16 +203,19 @@ export default function SettingsPage() {
   const batterySavings = estimateBatterySavings(deviceTier ?? "medium");
   const recommendations = getRecommendations(deviceTier ?? "medium");
   const suggestPerformance = deviceTier === "weak" && !performanceMode;
+  const confidence = deviceDetail?.confidence ?? null;
+  const confidenceInfo = confidence != null ? getConfidenceInfo(confidence) : null;
+  const factors = deviceDetail?.factors ?? [];
 
   const reDetect = async () => {
     setAnalyzing(true);
     try {
-      const signals: DeviceSignals = await detectDevice();
-      setDeviceInfo(signals.score, signals.tier);
+      const signals: DeviceSignals = await detectDevice({ full: true });
+      setDeviceInfo(signals.score, signals.tier, signals);
       setFacts(getDeviceFacts());
       toast.success(
-        isRtl ? `نقاط الأداء: ${signals.score} (${tierLabel(signals.tier)})`
-          : `Score de performance : ${signals.score} (${tierLabel(signals.tier)})`
+        isRtl ? `اكتمل التحليل: ${signals.score} (${tierLabel(signals.tier)}) · موثوقية ${signals.confidence}%`
+          : `Analyse terminée : ${signals.score} (${tierLabel(signals.tier)}) · fiabilité ${signals.confidence}%`
       );
     } catch {
       toast.error(isRtl ? "تعذّر تحليل الجهاز" : "Impossible d'analyser l'appareil");
@@ -221,8 +225,8 @@ export default function SettingsPage() {
   };
 
   const applyRecommendation = async () => {
-    const signals = await detectDevice();
-    setDeviceInfo(signals.score, signals.tier);
+    const signals = await detectDevice({ prev: deviceDetail });
+    setDeviceInfo(signals.score, signals.tier, signals);
     if (signals.tier === "weak") {
       setPerformanceMode(true);
       setAnimationsEnabled(false);
@@ -476,6 +480,81 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+
+          {/* موثوقية التحليل */}
+          {confidence != null && confidenceInfo && (
+            <div
+              className={`flex items-center justify-between gap-3 p-3.5 rounded-2xl border mb-3 ${
+                confidenceInfo.level === "high"
+                  ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60"
+                  : confidenceInfo.level === "medium"
+                    ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/60"
+                    : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/60"
+              }`}
+            >
+              <div className="flex items-start gap-2.5">
+                <Activity size={17} className={`shrink-0 mt-0.5 ${
+                  confidenceInfo.level === "high" ? "text-emerald-500" : confidenceInfo.level === "medium" ? "text-amber-500" : "text-red-500"
+                }`} />
+                <div className="min-w-0">
+                  <p className="font-black text-xs text-slate-800 dark:text-slate-100">
+                    {tr("confidence")}: {confidence}%
+                  </p>
+                  <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                    {confidenceInfo[isRtl ? "ar" : "fr"]}
+                  </p>
+                </div>
+              </div>
+              <span className="text-2xl font-black text-slate-900 dark:text-white shrink-0">{confidence}%</span>
+            </div>
+          )}
+
+          {/* تفصيل العوامل المرجّحة */}
+          {factors.length > 0 && (
+            <div className="mb-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2">
+                {tr("factorsTitle")}
+              </p>
+              <div className="flex flex-col gap-2">
+                {factors.map((f) => {
+                  const fColor = f.score < 45 ? "from-red-500 to-rose-500" : f.score <= 70 ? "from-amber-500 to-orange-500" : "from-emerald-500 to-teal-500";
+                  return (
+                    <div key={f.id} className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[12px] font-black text-slate-800 dark:text-slate-100 truncate">
+                            {f.label[isRtl ? "ar" : "fr"]}
+                          </span>
+                          <span
+                            className={`text-[9px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${
+                              f.measured
+                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+                                : "bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300"
+                            }`}
+                          >
+                            {f.measured ? tr("measured") : tr("estimated")}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[11px] font-black text-slate-500 dark:text-slate-400">{Math.round(f.weight * 100)}%</span>
+                          <span className="text-[12px] font-black text-slate-900 dark:text-white w-7 text-end">{f.score}</span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full bg-gradient-to-r ${fColor} transition-all duration-700`}
+                          style={{ width: `${f.score}%` }}
+                        />
+                      </div>
+                      <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-1 truncate" dir="auto">
+                        {f.detail[isRtl ? "ar" : "fr"]}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Batterie + économies */}
           <div className="flex flex-col gap-2 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 mb-3">

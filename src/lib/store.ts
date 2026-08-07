@@ -1,6 +1,7 @@
 // @/lib/store.ts
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { DeviceSignals } from "@/lib/device";
 
 // 1. تعريف بنية المنتج (Product Interface)
 export interface Product {
@@ -51,7 +52,8 @@ interface AppState {
   deviceScore: number | null;
   deviceTier: DeviceTier | null;
   deviceDetectedAt: number | null;
-  setDeviceInfo: (score: number, tier: DeviceTier, detectedAt?: number) => void;
+  deviceDetail: DeviceSignals | null;
+  setDeviceInfo: (score: number, tier: DeviceTier, detail?: DeviceSignals | null, detectedAt?: number) => void;
 
   // --- مظهر وأداء إضافي ---
   backgroundEffects: boolean;
@@ -120,8 +122,9 @@ export const useAppStore = create<AppState>()(
       deviceScore: null,
       deviceTier: null,
       deviceDetectedAt: null,
-      setDeviceInfo: (deviceScore, deviceTier, deviceDetectedAt) =>
-        set({ deviceScore, deviceTier, deviceDetectedAt: deviceDetectedAt ?? Date.now() }),
+      deviceDetail: null,
+      setDeviceInfo: (deviceScore, deviceTier, deviceDetail, deviceDetectedAt) =>
+        set({ deviceScore, deviceTier, deviceDetail, deviceDetectedAt: deviceDetectedAt ?? Date.now() }),
 
       // --- مظهر وأداء إضافي ---
       backgroundEffects: true,

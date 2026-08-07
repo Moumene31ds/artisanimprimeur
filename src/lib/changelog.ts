@@ -4,7 +4,7 @@
 // CHANGELOG يعرض الميزات للعملاء بالعربية والفرنسية.
 // ---------------------------------------------------------------------------
 
-export const APP_VERSION = 'v6.3';
+export const APP_VERSION = 'v6.4';
 
 export interface ChangelogEntry {
   version: string;
@@ -12,6 +12,23 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'v6.4',
+    features: {
+      ar: [
+        '🚀 نظام كشف متقدم جداً: قياس حقيقي لسرعة المعالجة + سلاسة العرض + زمن الشبكة',
+        '📊 نقاط أداء موثقة عبر 6 عوامل مرجّحة مع تفصيل كامل لكل عامل',
+        '✅ مؤشر موثوقية التحليل (مقاس مباشرة / مُقدَّر)',
+        '⚡ نتائج معيارية مؤكدة بوسيط عينات متعددة',
+      ],
+      fr: [
+        '🚀 Détection ultra-avancée : mesure réelle du CPU, de la fluidité d\u2019affichage et de la latence',
+        '📊 Score documenté via 6 facteurs pondérés avec détail complet',
+        '✅ Indice de fiabilité de l\u2019analyse (mesuré / estimé)',
+        '⚡ Résultats de benchmark confirmés par la médiane de plusieurs échantillons',
+      ],
+    },
+  },
   {
     version: 'v6.3',
     features: {
