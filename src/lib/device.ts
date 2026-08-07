@@ -12,6 +12,8 @@ export interface DeviceSignals {
   dpr: number;
   isMobile: boolean;
   reducedMotion: boolean;
+  batteryLevel: number | null;
+  charging: boolean | null;
   score: number;
   tier: DeviceTier;
 }
@@ -90,6 +92,8 @@ function collectSignals(): Omit<DeviceSignals, "score" | "tier"> {
     dpr,
     isMobile: isMobileUA(),
     reducedMotion,
+    batteryLevel: null,
+    charging: null,
   };
 }
 
@@ -126,7 +130,7 @@ export function tierForScore(score: number): DeviceTier {
 /** فحص شامل للجهاز: إشارات + نقاط + تصنيف. */
 export async function detectDevice(): Promise<DeviceSignals> {
   const base = collectSignals();
-  const [rawSpeed] = await Promise.all([measureRawSpeed(), Promise.resolve()]);
+  const [rawSpeed, battery] = await Promise.all([measureRawSpeed(), getBatteryInfo()]);
 
   // نعدّل نقاط CPU حسب السرعة المقاسة (إشارة دقيقة لضعف المعالجة)
   const speedAdjustedCores = base.cores * (0.5 + rawSpeed * 0.5);
@@ -134,13 +138,19 @@ export async function detectDevice(): Promise<DeviceSignals> {
   const score = Math.max(0, Math.min(100, scoreRaw));
   const tier = tierForScore(score);
 
-  return { ...base, score, tier };
+  return {
+    ...base,
+    batteryLevel: battery?.level ?? null,
+    charging: battery?.charging ?? null,
+    score,
+    tier,
+  };
 }
 
 /** حقائق سريعة (متزامنة) لعرضها في واجهة الإعدادات. */
 export function getDeviceFacts(): Omit<DeviceSignals, "score" | "tier" | "reducedMotion"> {
-  const { cores, memory, network, saveData, dpr, isMobile } = collectSignals();
-  return { cores, memory, network, saveData, dpr, isMobile };
+  const { cores, memory, network, saveData, dpr, isMobile, batteryLevel, charging } = collectSignals();
+  return { cores, memory, network, saveData, dpr, isMobile, batteryLevel, charging };
 }
 
 /** وصف نصي قصير لكل فئة للعرض. */
@@ -162,4 +172,107 @@ export function describeDevice(tier: DeviceTier): { ar: string; fr: string } {
         fr: "Appareil puissant — toutes les options disponibles",
       };
   }
+}
+
+export interface BatteryInfo {
+  level: number;
+  charging: boolean;
+}
+
+/** قراءة حالة البطارية بأمان (قد تكون غير مدعومة). */
+export async function getBatteryInfo(): Promise<BatteryInfo | null> {
+  if (typeof navigator === "undefined" || !("getBattery" in navigator)) return null;
+  try {
+    const battery = await (navigator as any).getBattery();
+    return { level: battery?.level ?? null, charging: !!battery?.charging };
+  } catch {
+    return null;
+  }
+}
+
+export interface DeviceRecommendation {
+  id: string;
+  suggested: boolean;
+  ar: string;
+  fr: string;
+}
+
+/** توصيات تطبيقية مخصصة حسب فئة الجهاز. */
+export function getRecommendations(tier: DeviceTier): DeviceRecommendation[] {
+  switch (tier) {
+    case "weak":
+      return [
+        { id: "performance", suggested: true, ar: "تفعيل وضع الأداء", fr: "Activer le mode performance" },
+        { id: "animations", suggested: true, ar: "إيقاف الحركات والانتقالات", fr: "Désactiver les animations" },
+        { id: "effects", suggested: true, ar: "إيقاف التأثيرات الزخرفية والتمويه", fr: "Couper effets décoratifs & flou" },
+        { id: "haptics", suggested: true, ar: "إيقاف الاهتزازات لتوفير البطارية", fr: "Couper les vibrations (batterie)" },
+        { id: "fonts", suggested: false, ar: "حجم خط قياسي للوضوح", fr: "Taille de texte standard" },
+      ];
+    case "medium":
+      return [
+        { id: "blur", suggested: true, ar: "تقليل التمويه لسلاسة أفضل", fr: "Réduire le flou pour la fluidité" },
+        { id: "haptics", suggested: true, ar: "اهتزازات خفيفة (اقتصادية)", fr: "Vibrations légères (économes)" },
+        { id: "effects", suggested: false, ar: "التأثيرات الزخرفية متاحة", fr: "Effets décoratifs disponibles" },
+        { id: "performance", suggested: false, ar: "وضع الأداء اختياري", fr: "Mode performance optionnel" },
+      ];
+    default:
+      return [
+        { id: "quality", suggested: true, ar: "صور عالية الجودة", fr: "Images haute qualité" },
+        { id: "effects", suggested: true, ar: "كل التأثيرات الزخرفية متاحة", fr: "Tous les effets décoratifs" },
+        { id: "animations", suggested: true, ar: "حركات وانتقالات كاملة", fr: "Animations complètes" },
+      ];
+  }
+}
+
+/** تقدير توفير البطارية عند تطبيق التوصيات. */
+export function estimateBatterySavings(tier: DeviceTier): { ar: string; fr: string; pct: number } {
+  switch (tier) {
+    case "weak":
+      return { ar: "حتى ~25% توفير في البطارية بتطبيق التوصيات", fr: "jusqu'à ~25% de batterie économisée", pct: 25 };
+    case "medium":
+      return { ar: "حتى ~12% توفير في البطارية", fr: "jusqu'à ~12% de batterie économisée", pct: 12 };
+    default:
+      return { ar: "استهلاك بطارية متوازن", fr: "consommation de batterie équilibrée", pct: 5 };
+  }
+}
+
+/**
+ * مراقبة تغيّرات الجهاز ليتحسّن التصنيف تلقائياً:
+ * - تغيّر نوع الشبكة (3g → 4g …) عبر navigator.connection
+ * - اتصال/انقطاع الإنترنت (online / offline)
+ * - عودة التركيز على التبويب
+ * - إعادة فحص دورية كل 5 دقائق
+ * ترجع دالة تنظيف.
+ */
+export function watchDeviceChanges(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const conn = (navigator as any).connection;
+  const onNet = () => callback();
+  const onFocus = () => {
+    if (document.visibilityState === "visible") callback();
+  };
+  if (conn?.addEventListener) {
+    try {
+      conn.addEventListener("change", onNet);
+    } catch {
+      /* ignore */
+    }
+  }
+  window.addEventListener("online", onNet);
+  window.addEventListener("offline", onNet);
+  window.addEventListener("focus", onFocus);
+  const interval = window.setInterval(onNet, 5 * 60 * 1000);
+  return () => {
+    if (conn?.removeEventListener) {
+      try {
+        conn.removeEventListener("change", onNet);
+      } catch {
+        /* ignore */
+      }
+    }
+    window.removeEventListener("online", onNet);
+    window.removeEventListener("offline", onNet);
+    window.removeEventListener("focus", onFocus);
+    window.clearInterval(interval);
+  };
 }

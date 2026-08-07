@@ -1,9 +1,9 @@
-const CACHE_NAME = 'artisan-print-v5';
-const STATIC_CACHE = 'artisan-static-v5';
-const DYNAMIC_CACHE = 'artisan-dynamic-v5';
-const API_CACHE = 'artisan-api-v5';
-const IMAGE_CACHE = 'artisan-images-v5';
-const META_CACHE = 'artisan-meta-v5';
+const CACHE_NAME = 'artisan-print-v6';
+const STATIC_CACHE = 'artisan-static-v6';
+const DYNAMIC_CACHE = 'artisan-dynamic-v6';
+const API_CACHE = 'artisan-api-v6';
+const IMAGE_CACHE = 'artisan-images-v6';
+const META_CACHE = 'artisan-meta-v6';
 const OFFLINE_URL = '/offline';
 
 // إصدار البناء — يُحدَّث عند كل إصدار جديد ليتمكّن العملاء من التحقق منه.
@@ -38,7 +38,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((names) =>
       Promise.all(
         names
-          .filter((n) => n.startsWith('artisan-') && !n.endsWith('-v5'))
+          .filter((n) => n.startsWith('artisan-') && !n.endsWith('-v6'))
           .map((n) => caches.delete(n))
       )
     ).then(() => self.clients.claim())

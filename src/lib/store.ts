@@ -50,7 +50,8 @@ interface AppState {
   setNotificationsEnabled: (enabled: boolean) => void;
   deviceScore: number | null;
   deviceTier: DeviceTier | null;
-  setDeviceInfo: (score: number, tier: DeviceTier) => void;
+  deviceDetectedAt: number | null;
+  setDeviceInfo: (score: number, tier: DeviceTier, detectedAt?: number) => void;
 
   // --- مظهر وأداء إضافي ---
   backgroundEffects: boolean;
@@ -118,7 +119,9 @@ export const useAppStore = create<AppState>()(
       setNotificationsEnabled: (notificationsEnabled) => set({ notificationsEnabled }),
       deviceScore: null,
       deviceTier: null,
-      setDeviceInfo: (deviceScore, deviceTier) => set({ deviceScore, deviceTier }),
+      deviceDetectedAt: null,
+      setDeviceInfo: (deviceScore, deviceTier, deviceDetectedAt) =>
+        set({ deviceScore, deviceTier, deviceDetectedAt: deviceDetectedAt ?? Date.now() }),
 
       // --- مظهر وأداء إضافي ---
       backgroundEffects: true,

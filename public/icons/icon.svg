@@ -1,20 +1,3 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#2563eb"/>
-      <stop offset="100%" stop-color="#0f172a"/>
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <!-- طباعة (آلة طابعة) -->
-  <g fill="#ffffff">
-    <rect x="176" y="184" width="160" height="64" rx="12"/>
-    <path d="M176 248h160v32a16 16 0 0 1-16 16H192a16 16 0 0 1-16-16v-32z"/>
-    <rect x="176" y="296" width="160" height="12" rx="6"/>
-    <rect x="200" y="120" width="112" height="64" rx="10"/>
-  </g>
-  <!-- ورقة خارجة -->
-  <g fill="#ffffff" opacity="0.9">
-    <path d="M246 262h20v42l-10-10-10 10z"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" width="512" height="512">
+  <image href="./icon-512x512.png" width="512" height="512"/>
 </svg>

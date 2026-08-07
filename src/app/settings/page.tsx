@@ -8,13 +8,16 @@ import {
   Languages, Palette, Gauge, Type as TypeIcon, RotateCcw, Check, Sun, Moon,
   Monitor, Smartphone, Sparkles, ChevronRight, ArrowLeft, Zap, Cpu, MemoryStick,
   Wifi, RefreshCw, Rocket, Bell, Vibrate, Loader2, Activity, Droplets, Eye,
-  HardDrive, Trash2
+  HardDrive, Trash2, Battery, BatteryCharging, Clock
 } from "lucide-react";
 import { useAppStore, type ThemeMode, type FontSizeMode, type DeviceTier } from "@/lib/store";
 import { useTheme } from "next-themes";
 import { TRANSLATIONS, normalizeLanguage } from "@/lib/translations";
 import Reveal from "@/components/Reveal";
-import { detectDevice, getDeviceFacts, describeDevice, type DeviceSignals } from "@/lib/device";
+import {
+  detectDevice, getDeviceFacts, describeDevice, getBatteryInfo,
+  getRecommendations, estimateBatterySavings, type DeviceSignals, type BatteryInfo,
+} from "@/lib/device";
 import { checkForUpdates, getBuildInfo, applyServiceWorkerUpdate, requestNotificationPermission } from "@/lib/pwa";
 import { APP_VERSION, CHANGELOG } from "@/lib/changelog";
 
@@ -128,7 +131,7 @@ export default function SettingsPage() {
     autoOptimize, setAutoOptimize,
     hapticFeedback, setHapticFeedback,
     notificationsEnabled, setNotificationsEnabled,
-    deviceScore, deviceTier, setDeviceInfo,
+    deviceScore, deviceTier, deviceDetectedAt, setDeviceInfo,
     backgroundEffects, setBackgroundEffects,
     reduceBlur, setReduceBlur,
     keepAwake, setKeepAwake,
@@ -142,6 +145,7 @@ export default function SettingsPage() {
   const [updating, setUpdating] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [facts, setFacts] = useState<ReturnType<typeof getDeviceFacts> | null>(null);
+  const [battery, setBattery] = useState<BatteryInfo | null>(null);
   const [storage, setStorage] = useState<{ local: number; cache: number }>({ local: 0, cache: 0 });
 
   const fmtBytes = (b: number) => {
@@ -153,6 +157,7 @@ export default function SettingsPage() {
   useEffect(() => {
     setMounted(true);
     setFacts(getDeviceFacts());
+    getBatteryInfo().then(setBattery);
     (async () => {
       let localBytes = 0;
       try {
@@ -172,6 +177,11 @@ export default function SettingsPage() {
     })();
   }, []);
 
+  // تحديث حقائق الجهاز (الشبكة/الذاكرة) بعد كل إعادة فحص تلقائية
+  useEffect(() => {
+    if (deviceScore !== null) setFacts(getDeviceFacts());
+  }, [deviceScore]);
+
   if (!mounted) return null;
 
   const isRtl = language === "ar";
@@ -181,6 +191,17 @@ export default function SettingsPage() {
 
   const tierLabel = (tier: DeviceTier | null) =>
     tier === "weak" ? tr("tierWeak") : tier === "medium" ? tr("tierMedium") : tier === "powerful" ? tr("tierPowerful") : "—";
+
+  const fmtAgo = (ts: number | null) => {
+    if (!ts) return "—";
+    const seconds = Math.floor((Date.now() - ts) / 1000);
+    if (seconds < 60) return tr("justNow");
+    return tr("minutesAgo").replace("{n}", String(Math.floor(seconds / 60)));
+  };
+
+  const batterySavings = estimateBatterySavings(deviceTier ?? "medium");
+  const recommendations = getRecommendations(deviceTier ?? "medium");
+  const suggestPerformance = deviceTier === "weak" && !performanceMode;
 
   const reDetect = async () => {
     setAnalyzing(true);
@@ -456,7 +477,79 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+          {/* Batterie + économies */}
+          <div className="flex flex-col gap-2 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 mb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                {battery?.charging ? (
+                  <BatteryCharging size={18} className="text-emerald-500" />
+                ) : (
+                  <Battery size={18} className="text-slate-500 dark:text-slate-400" />
+                )}
+                <span className="font-black text-sm text-slate-800 dark:text-slate-100">
+                  {battery
+                    ? `${Math.round(battery.level * 100)}% · ${battery.charging ? tr("batteryCharging") : tr("batteryOn")}`
+                    : "—"}
+                </span>
+              </div>
+              <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400">
+                +{batterySavings.pct}% {tr("batterySaving")}
+              </span>
+            </div>
+            {battery && (
+              <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-700"
+                  style={{ width: `${Math.round(battery.level * 100)}%` }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Suggestion quand le mode performance aiderait */}
+          {suggestPerformance && (
+            <div className="flex items-center justify-between gap-3 p-4 rounded-2xl mb-3 border border-amber-300/70 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30">
+              <div className="flex items-start gap-2.5">
+                <Zap size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-xs font-bold text-amber-700 dark:text-amber-300 leading-relaxed">{tr("recommendationHint")}</p>
+              </div>
+              <button
+                onClick={applyRecommendation}
+                className="shrink-0 text-[11px] font-black px-3 py-2 rounded-xl bg-amber-500 text-white shadow-sm hover:brightness-110 active:scale-[0.97] transition-all"
+              >
+                {tr("applyRecommendation")}
+              </button>
+            </div>
+          )}
+
+          {/* Recommandations applicatives */}
+          <div className="mb-2">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2">
+              {tr("recommendationsTitle")}
+            </p>
+            <ul className="grid grid-cols-1 gap-1.5">
+              {recommendations.map((r) => (
+                <li
+                  key={r.id}
+                  className={`flex items-center gap-2.5 text-[12px] font-bold rounded-xl px-3 py-2 border ${
+                    r.suggested
+                      ? "bg-blue-50 dark:bg-blue-950/30 border-blue-100 dark:border-blue-800/60 text-blue-700 dark:text-blue-300"
+                      : "bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400"
+                  }`}
+                >
+                  <Check size={13} className={`shrink-0 ${r.suggested ? "text-blue-500" : "text-slate-400"}`} />
+                  {r[isRtl ? "ar" : "fr"]}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="flex items-center justify-center gap-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500">
+            <Clock size={12} />
+            {tr("lastDetected")}: {fmtAgo(deviceDetectedAt)}
+          </div>
+
+          <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 mt-4">
             <div className="flex items-start gap-3">
               <Sparkles size={20} className={`${autoOptimize ? "text-blue-500" : "text-slate-400"} shrink-0 mt-0.5`} />
               <div>

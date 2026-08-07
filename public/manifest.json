@@ -5,7 +5,7 @@
   "description": "Votre partenaire premium pour l'impression et le design en Algérie",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
+  "background_color": "#000000",
   "theme_color": "#2563eb",
   "orientation": "portrait-primary",
   "lang": "ar",

@@ -345,6 +345,14 @@ export const TRANSLATIONS = {
     autoOptimizeDesc: "Active automatiquement le mode performance lorsqu'un appareil modeste est détecté.",
     applyRecommendation: "Appliquer la recommandation",
     memoryNullHint: "estimation",
+    batterySaving: "de batterie",
+    batteryCharging: "en charge",
+    batteryOn: "sur batterie",
+    recommendationsTitle: "Recommandations",
+    recommendationHint: "Votre appareil est modeste — le mode performance améliorerait nettement la fluidité.",
+    lastDetected: "Dernière analyse",
+    justNow: "à l'instant",
+    minutesAgo: "il y a {n} min",
 
     // --- Sensations ---
     hapticFeedback: "Vibrations tactiles",
@@ -727,6 +735,14 @@ export const TRANSLATIONS = {
     autoOptimizeDesc: "تفعيل وضع الأداء تلقائياً عند اكتشاف جهاز محدود.",
     applyRecommendation: "تطبيق التوصية",
     memoryNullHint: "تقديري",
+    batterySaving: "من البطارية",
+    batteryCharging: "يتم الشحن",
+    batteryOn: "يعمل بالبطارية",
+    recommendationsTitle: "التوصيات",
+    recommendationHint: "جهازك محدود — تفعيل وضع الأداء يحسّن السلاسة بشكل ملحوظ.",
+    lastDetected: "آخر تحليل",
+    justNow: "الآن",
+    minutesAgo: "منذ {n} دقيقة",
 
     // --- الأحاسيس ---
     hapticFeedback: "الاهتزازات",

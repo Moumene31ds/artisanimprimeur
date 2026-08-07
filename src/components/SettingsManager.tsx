@@ -4,7 +4,7 @@
 import { useEffect } from "react";
 import { useTheme } from "next-themes";
 import { useAppStore } from "@/lib/store";
-import { detectDevice } from "@/lib/device";
+import { detectDevice, watchDeviceChanges } from "@/lib/device";
 import { setHapticsEnabled } from "@/lib/utils";
 
 /**
@@ -38,6 +38,7 @@ export default function SettingsManager() {
   const setPerformanceMode = useAppStore((s) => s.setPerformanceMode);
   const setAnimationsEnabled = useAppStore((s) => s.setAnimationsEnabled);
   const setDeviceInfo = useAppStore((s) => s.setDeviceInfo);
+  const setBackgroundEffects = useAppStore((s) => s.setBackgroundEffects);
 
   const { setTheme } = useTheme();
 
@@ -47,7 +48,6 @@ export default function SettingsManager() {
     (async () => {
       const signals = await detectDevice();
       setDeviceInfo(signals.score, signals.tier);
-      setSettingsConfigured(true);
 
       // احترام إعداد النظام "تقليل الحركة"
       if (signals.reducedMotion) {
@@ -58,6 +58,7 @@ export default function SettingsManager() {
         setPerformanceMode(true);
         setAnimationsEnabled(false);
       }
+      setSettingsConfigured(true);
     })();
   }, [
     settingsConfigured,
@@ -66,6 +67,35 @@ export default function SettingsManager() {
     setSettingsConfigured,
     setAnimationsEnabled,
     setPerformanceMode,
+  ]);
+
+  // إعادة الفحص التلقائي: عند تغيّر الشبكة/الإنترنت/العودة للتبويب + كل 5 دقائق
+  // يحدّث النقاط والتصنيف، ويفعّل وضع الأداء إذا تدهور الجهاز إلى "ضعيف".
+  useEffect(() => {
+    if (typeof window === "undefined" || !settingsConfigured) return;
+    let disposed = false;
+    const run = async () => {
+      const signals = await detectDevice();
+      if (disposed) return;
+      const prevTier = useAppStore.getState().deviceTier;
+      setDeviceInfo(signals.score, signals.tier);
+      // تدهور واضح → نفعّل وضع الأداء تلقائياً دون لمس إعدادات المستخدم عند التحسن
+      if (autoOptimize && signals.tier === "weak" && prevTier !== "weak") {
+        setPerformanceMode(true);
+        setAnimationsEnabled(false);
+        setBackgroundEffects(false);
+      }
+    };
+    return watchDeviceChanges(() => {
+      run();
+    });
+  }, [
+    settingsConfigured,
+    autoOptimize,
+    setDeviceInfo,
+    setPerformanceMode,
+    setAnimationsEnabled,
+    setBackgroundEffects,
   ]);
 
   // مزامنة الاهتزازات

@@ -4,7 +4,7 @@
 // CHANGELOG يعرض الميزات للعملاء بالعربية والفرنسية.
 // ---------------------------------------------------------------------------
 
-export const APP_VERSION = 'v6.2';
+export const APP_VERSION = 'v6.3';
 
 export interface ChangelogEntry {
   version: string;
@@ -12,6 +12,25 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'v6.3',
+    features: {
+      ar: [
+        '🎨 شعار رسمي جديد للتطبيق والأيقونات بجميع المقاسات',
+        '📊 إعادة الفحص التلقائي للجهاز عند تغيّر الشبكة وكل 5 دقائق',
+        '🔋 عرض حالة البطارية وتوفيرها مع توصيات مخصصة لجهازك',
+        '💡 اقتراح ذكي لتفعيل وضع الأداء عند الحاجة',
+        '⏱️ عرض آخر موعد لتحليل الجهاز',
+      ],
+      fr: [
+        '🎨 Nouveau logo officiel et icônes à toutes les tailles',
+        '📊 Re-détection automatique de l\u2019appareil au changement de réseau et toutes les 5 min',
+        '🔋 Affichage de la batterie et des économies avec recommandations personnalisées',
+        '💡 Suggestion intelligente pour activer le mode performance',
+        '⏱️ Horodatage de la dernière analyse de l\u2019appareil',
+      ],
+    },
+  },
   {
     version: 'v6.2',
     features: {
