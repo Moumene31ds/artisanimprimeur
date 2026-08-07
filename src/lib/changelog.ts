@@ -4,7 +4,7 @@
 // CHANGELOG يعرض الميزات للعملاء بالعربية والفرنسية.
 // ---------------------------------------------------------------------------
 
-export const APP_VERSION = 'v6.5.1';
+export const APP_VERSION = 'v6.6';
 
 export interface ChangelogEntry {
   version: string;
@@ -12,6 +12,21 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'v6.6',
+    features: {
+      ar: [
+        '📊 لوحة جهازك الجديدة على الصفحة الرئيسية: نقاط أداء حيّة، بطارية لحظية، سرعة الشبكة والذاكرة',
+        '⭕ مؤشر دائري متحرك مع فئة الجهاز وموثوقية التحليل وتحديث تلقائي لحالة الجهاز',
+        '🔄 زر « إعادة التحليل » لفحص كامل للجهاز في أي وقت',
+      ],
+      fr: [
+        '📊 Nouveau tableau de bord de l\u2019appareil sur l\u2019accueil : score de performance en direct, batterie, réseau et mémoire',
+        '⭕ Jauge circulaire animée avec la classe de l\u2019appareil et la fiabilité de l\u2019analyse, mise à jour automatique',
+        '🔄 Bouton « Analyser à nouveau » pour une analyse complète à tout moment',
+      ],
+    },
+  },
   {
     version: 'v6.5.1',
     features: {

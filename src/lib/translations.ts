@@ -357,6 +357,16 @@ export const TRANSLATIONS = {
     factorsTitle: "Détail du score (facteurs pondérés)",
     measured: "mesuré",
     estimated: "estimé",
+    deviceDashboardTitle: "Tableau de bord de l'appareil",
+    deviceDashboardDesc: "Les performances de votre appareil sur notre app, en direct.",
+    deviceLive: "EN DIRECT",
+    deviceClass: "Classe de l'appareil",
+    deviceMobile: "Mobile",
+    deviceTablet: "Tablette",
+    deviceDesktop: "Ordinateur",
+    deviceBattery: "Batterie",
+    deviceLatency: "Latence",
+    deviceSaveData: "économie de données",
 
     // --- Sensations ---
     hapticFeedback: "Vibrations tactiles",
@@ -764,6 +774,16 @@ export const TRANSLATIONS = {
     factorsTitle: "تفصيل النقاط (عوامل مرجّحة)",
     measured: "مقاس",
     estimated: "مُقدَّر",
+    deviceDashboardTitle: "لوحة جهازك",
+    deviceDashboardDesc: "أداء جهازك على تطبيقنا لحظة بلحظة.",
+    deviceLive: "مباشر",
+    deviceClass: "فئة الجهاز",
+    deviceMobile: "هاتف",
+    deviceTablet: "لوحي",
+    deviceDesktop: "حاسوب",
+    deviceBattery: "البطارية",
+    deviceLatency: "زمن الاستجابة",
+    deviceSaveData: "توفير البيانات",
 
     // --- الأحاسيس ---
     hapticFeedback: "الاهتزازات",

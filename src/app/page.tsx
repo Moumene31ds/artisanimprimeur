@@ -2,7 +2,8 @@
 
 import Hero from "@/components/Hero";
 import ProductCard from "@/components/ProductCard";
-import MagneticCard from "@/components/MagneticCard"; 
+import MagneticCard from "@/components/MagneticCard";
+import DeviceDashboardWidget from "@/components/DeviceDashboardWidget";
 import { useAppStore } from "@/lib/store";
 import { TRANSLATIONS } from "@/lib/translations";
 import { useEffect, useState, useMemo, useRef } from "react";
@@ -347,6 +348,8 @@ export default function Home() {
           </Link>
         </div>
       </motion.section>
+
+      <DeviceDashboardWidget />
 
       {/* --- Advanced 3D Customizer & Web-AR Showcase Section --- */}
       <motion.section 
