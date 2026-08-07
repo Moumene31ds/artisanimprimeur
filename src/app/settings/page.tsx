@@ -1110,7 +1110,7 @@ export default function SettingsPage() {
                 <Timer size={14} className="text-slate-400" />
                 <p className="text-xs font-black text-slate-700 dark:text-slate-300">{tr("lockModeTitle")}</p>
               </div>
-              <div className="grid grid-cols-4 gap-2 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
                 {([
                   { value: "off" as LockMode, label: tr("lockModeOff") },
                   { value: "launch" as LockMode, label: tr("lockModeLaunch") },
