@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import { AuthProvider } from "@/context/AuthContext"; // استيراد AuthProvider
 import SyncManager from "@/components/SyncManager";
 import PWALifecycle from "@/components/PWALifecycle";
+import NativeBootstrap from "@/components/NativeBootstrap";
 import { MotionConfig } from "framer-motion";
 import { useAppStore } from "@/lib/store";
 
@@ -43,6 +44,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
       {/* دورة حياة PWA: تسجيل السيرفس ووركر + تحديثات + حالة الاتصال */}
       <PWALifecycle />
+
+      {/* إقلاع التطبيق الأصلي (أندرويد/iOS): شاشة البداية، الإشعارات، قفل البصمة */}
+      <NativeBootstrap />
     </AuthProvider>
   );
 }

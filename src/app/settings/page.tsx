@@ -8,7 +8,8 @@ import {
   Languages, Palette, Gauge, Type as TypeIcon, RotateCcw, Check, Sun, Moon,
   Monitor, Smartphone, Sparkles, ChevronRight, ArrowLeft, Zap, Cpu, MemoryStick,
   Wifi, RefreshCw, Rocket, Bell, Vibrate, Loader2, Activity, Droplets, Eye,
-  HardDrive, Trash2, Battery, BatteryCharging, Clock, Download, CheckCircle2
+  HardDrive, Trash2, Battery, BatteryCharging, Clock, Download, CheckCircle2,
+  Share2, Fingerprint
 } from "lucide-react";
 import { useAppStore, type ThemeMode, type FontSizeMode, type DeviceTier } from "@/lib/store";
 import { useTheme } from "next-themes";
@@ -21,6 +22,8 @@ import {
 } from "@/lib/device";
 import { checkForUpdates, getBuildInfo, applyServiceWorkerUpdate, requestNotificationPermission, getLastSeenBuild, dispatchShowUpdate, promptInstall, isAppInstalled } from "@/lib/pwa";
 import { APP_VERSION, CHANGELOG } from "@/lib/changelog";
+import { isNative, getNativePlatform, getNativeAppInfo, nativeShare, isBiometricAvailable, authenticateWithBiometric } from "@/lib/native";
+import { isBiometricLockEnabled, setBiometricLockEnabled } from "@/components/NativeBootstrap";
 
 function Toggle({
   checked,
@@ -147,6 +150,10 @@ export default function SettingsPage() {
   const [clearing, setClearing] = useState(false);
   const [installingApp, setInstallingApp] = useState(false);
   const [appInstalled, setAppInstalled] = useState(false);
+  const [nativeInfo, setNativeInfo] = useState<{ version: string | null; build: string | null } | null>(null);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricLock, setBiometricLock] = useState(false);
+  const [sharingApp, setSharingApp] = useState(false);
   const [facts, setFacts] = useState<ReturnType<typeof getDeviceFacts> | null>(null);
   const [battery, setBattery] = useState<BatteryInfo | null>(null);
   const [storage, setStorage] = useState<{ local: number; cache: number }>({ local: 0, cache: 0 });
@@ -164,6 +171,11 @@ export default function SettingsPage() {
     window.addEventListener("appinstalled", onInstalled);
     setFacts(getDeviceFacts());
     getBatteryInfo().then(setBattery);
+    if (isNative()) {
+      getNativeAppInfo().then(setNativeInfo);
+      isBiometricAvailable().then(setBiometricAvailable);
+      setBiometricLock(isBiometricLockEnabled());
+    }
     (async () => {
       let localBytes = 0;
       try {
@@ -300,6 +312,32 @@ export default function SettingsPage() {
         { duration: 5000 }
       );
     }
+  };
+
+  const handleShareNativeApp = async () => {
+    if (sharingApp) return;
+    setSharingApp(true);
+    await nativeShare({
+      title: "L'Artisan Imprimeur | الحرفي للطباعة",
+      text: "الطباعة الاحترافية في الجزائر — Impressions pro en Algérie",
+      url: "https://artisanimprimeur.vercel.app",
+    });
+    setSharingApp(false);
+  };
+
+  const handleToggleBiometricLock = async (next: boolean) => {
+    if (next) {
+      const ok = await authenticateWithBiometric(isRtl ? "فعّل قفل بصمة الإصبع" : "Activez le déverrouillage biométrique");
+      if (!ok) {
+        toast.error(isRtl ? "تعذر التحقق — لم يُفعَّل القفل" : "Échec de vérification — verrouillage non activé");
+        return;
+      }
+    }
+    setBiometricLockEnabled(next);
+    setBiometricLock(next);
+    toast.success(next
+      ? (isRtl ? "تم تفعيل قفل البصمة ✓" : "Déverrouillage biométrique activé ✓")
+      : (isRtl ? "تم إيقاف قفل البصمة" : "Déverrouillage biométrique désactivé"));
   };
 
   const handleClearCache = async () => {
@@ -922,6 +960,59 @@ export default function SettingsPage() {
             </button>
           )}
         </SectionCard>
+
+        {/* Application native (Android / iOS) */}
+        {isNative() && (
+          <SectionCard
+            icon={Fingerprint}
+            title={tr("nativeAppTitle")}
+            desc={tr("nativeAppDesc")}
+            iconClass="bg-gradient-to-tr from-slate-800 to-indigo-800"
+          >
+            <div className="flex items-center justify-between gap-3 mb-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-md">
+                  <CheckCircle2 size={18} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{tr("nativePlatformLabel")}</p>
+                  <p className="font-black text-sm text-slate-900 dark:text-white uppercase">
+                    {getNativePlatform() === "ios" ? "iOS" : "Android"}
+                  </p>
+                </div>
+              </div>
+              {nativeInfo?.version && (
+                <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
+                  v{nativeInfo.version}
+                </span>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              {biometricAvailable && (
+                <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <Fingerprint size={18} className="text-accent shrink-0" />
+                    <div>
+                      <p className="text-xs font-black text-slate-800 dark:text-white">{tr("biometricLockTitle")}</p>
+                      <p className="text-[10px] font-bold text-slate-400">{tr("biometricLockDesc")}</p>
+                    </div>
+                  </div>
+                  <Toggle checked={biometricLock} onChange={handleToggleBiometricLock} />
+                </div>
+              )}
+
+              <button
+                onClick={handleShareNativeApp}
+                disabled={sharingApp}
+                className="w-full min-h-[48px] flex items-center justify-center gap-2 rounded-2xl bg-slate-900 dark:bg-accent text-white font-black text-sm shadow-lg hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-60"
+              >
+                {sharingApp ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
+                {tr("nativeShareApp")}
+              </button>
+            </div>
+          </SectionCard>
+        )}
 
         {/* Storage & data */}
         <SectionCard

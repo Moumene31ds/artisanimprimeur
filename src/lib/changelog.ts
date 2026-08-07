@@ -4,7 +4,7 @@
 // CHANGELOG يعرض الميزات للعملاء بالعربية والفرنسية.
 // ---------------------------------------------------------------------------
 
-export const APP_VERSION = 'v6.6';
+export const APP_VERSION = 'v6.7';
 
 export interface ChangelogEntry {
   version: string;
@@ -12,6 +12,27 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'v6.7',
+    features: {
+      ar: [
+        '🤖 التطبيق أصبح يعتمد على أندرويد و iOS عبر كاباسيتور — تطبيق أصلي قابل للتثبيت من المتجر',
+        '🔓 قفل بصمة الإصبع/الوجه لفتح التطبيق من الإعدادات',
+        '📤 مشاركة أصلية للمنتجات والتطبيق (ورقة المشاركة في الهاتف)',
+        '📷 المسح بالكاميرا الأصلية لرموز QR في لوحة المشرف',
+        '📣 الإشعارات الأصلية (FCM) مع تسجيل الجهاز وإعدادات جاهزة للربط بالخادم',
+        '⚡ اهتزازات أصلية عالية الجودة عند كل تفاعل',
+      ],
+      fr: [
+        '🤖 L\u2019application s\u2019appuie désormais sur Android & iOS via Capacitor — vraie app native installable depuis le store',
+        '🔓 Déverrouillage biométrique (empreinte / visage) pour ouvrir l\u2019application',
+        '📤 Partage natif des produits et de l\u2019application (feuille de partage du téléphone)',
+        '📷 Scan QR avec la caméra native dans le panneau d\u2019administration',
+        '📣 Notifications natives (FCM) avec enregistrement de l\u2019appareil et config prête pour le serveur',
+        '⚡ Vibrations natives de haute qualité à chaque interaction',
+      ],
+    },
+  },
   {
     version: 'v6.6',
     features: {

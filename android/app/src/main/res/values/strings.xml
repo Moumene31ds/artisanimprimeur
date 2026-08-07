@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">L\'Artisan Imprimeur</string>
+    <string name="title_activity_main">L\'Artisan Imprimeur</string>
+    <string name="package_name">dz.lartisan.imprimeur</string>
+    <string name="custom_url_scheme">dz.lartisan.imprimeur</string>
+</resources>

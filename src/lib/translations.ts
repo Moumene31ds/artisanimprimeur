@@ -398,6 +398,12 @@ export const TRANSLATIONS = {
     installBrowserHint: "Utilisez le menu du navigateur (⋮) puis « Installer l'application »",
     installLaunchHint: "Retrouvez l'icône de l'application sur votre écran d'accueil",
     installStatusLabel: "Statut",
+    nativeAppTitle: "Application native",
+    nativeAppDesc: "Votre appareil fonctionne en mode Android / iOS via Capacitor.",
+    nativePlatformLabel: "Plateforme",
+    nativeShareApp: "Partager l'application",
+    biometricLockTitle: "Déverrouillage biométrique",
+    biometricLockDesc: "Verrouillez l'application avec votre empreinte ou votre visage.",
 
     // --- Affichage & confort ---
     displayTitle: "Affichage & confort",
@@ -815,6 +821,12 @@ export const TRANSLATIONS = {
     installBrowserHint: "استخدم قائمة المتصفح (⋮) ثم « تثبيت التطبيق »",
     installLaunchHint: "ابحث عن أيقونة التطبيق في شاشتك الرئيسية",
     installStatusLabel: "الحالة",
+    nativeAppTitle: "التطبيق الأصلي",
+    nativeAppDesc: "جهازك يعمل حالياً بنظام أندرويد/أبل عبر كاباسيتور.",
+    nativePlatformLabel: "المنصة",
+    nativeShareApp: "مشاركة التطبيق",
+    biometricLockTitle: "قفل بصمة الإصبع",
+    biometricLockDesc: "أقفل التطبيق ببصمة إصبعك أو وجهك.",
 
     // --- العرض والراحة ---
     displayTitle: "العرض والراحة",

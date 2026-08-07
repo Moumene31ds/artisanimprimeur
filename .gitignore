@@ -14,3 +14,14 @@ yarn-error.log*
 dist/
 build/
 *.stray_backup
+
+# Capacitor native build artifacts (keep android/ and ios/ sources in git)
+android/.gradle/
+android/app/build/
+android/build/
+android/capacitor-cordova-android-plugins/build/
+ios/App/Pods/
+ios/App/Podfile.lock
+ios/App/build/
+ios/DerivedData/
+ios/App/App/Assets.xcassets/AppIcon.appiconset/*.png

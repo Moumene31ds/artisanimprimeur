@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-import { Camera, Loader2, RefreshCw, Zap } from "lucide-react";
+import { Camera, Loader2, RefreshCw, Zap, ScanLine, Smartphone } from "lucide-react";
+import { isNative, scanQrWithNativeCamera } from "@/lib/native";
 
 interface QRScannerProps {
   onScanSuccess: (decodedText: string) => void;
@@ -29,6 +30,8 @@ export default function QRScanner({ onScanSuccess }: QRScannerProps) {
   const [torchSupported, setTorchSupported] = useState(false);
   const [boxSize, setBoxSize] = useState(230);
   const [boxPct, setBoxPct] = useState(68);
+  const [scanningNative, setScanningNative] = useState(false);
+  const isNativeApp = isNative();
 
   const computeBox = useCallback((containerWidth: number) => {
     return Math.min(Math.max(containerWidth * BOX_RATIO, MIN_BOX), MAX_BOX);
@@ -195,6 +198,19 @@ export default function QRScanner({ onScanSuccess }: QRScannerProps) {
     await startScanner();
   };
 
+  const handleNativeScan = async () => {
+    if (scanningNative) return;
+    setScanningNative(true);
+    try {
+      const decoded = await scanQrWithNativeCamera();
+      if (decoded) {
+        onScanRef.current(decoded);
+      }
+    } finally {
+      setScanningNative(false);
+    }
+  };
+
   return (
     <div className="relative w-full mx-auto" dir="ltr">
       {/* حاوية الكاميرا بنسبة عرض: ارتفاع مربعة لتناسب جميع الشاشات */}
@@ -276,6 +292,23 @@ export default function QRScanner({ onScanSuccess }: QRScannerProps) {
           </div>
         )}
       </div>
+
+      {/* زر الكاميرا الأصلية (في التطبيق الأندرويد/أبل) */}
+      {isNativeApp && (
+        <button
+          onClick={handleNativeScan}
+          disabled={scanningNative}
+          className="mt-4 w-full flex items-center justify-center gap-2.5 px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl font-black text-sm shadow-lg shadow-blue-500/25 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer"
+        >
+          {scanningNative ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : (
+            <Smartphone size={18} />
+          )}
+          {scanningNative ? "جاري المسح بالكاميرا الأصلية..." : "المسح بالكاميرا الأصلية"}
+          <ScanLine size={18} className="opacity-70" />
+        </button>
+      )}
 
       <style jsx global>{`
         /* تنسيق الكاميرا الداخلية للمكتبة لتغطية الحاوية بالكامل */

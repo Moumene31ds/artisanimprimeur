@@ -15,6 +15,16 @@ export function setHapticsEnabled(enabled: boolean) {
  */
 export function triggerHapticFeedback(type: 'light' | 'medium' | 'heavy' = 'light') {
   if (!hapticsEnabled) return;
+  // في التطبيق الأصلي (كاباسيتور) نستعمل الاهتزاز الأصلي الفائق.
+  if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
+    import('@capacitor/haptics')
+      .then(({ Haptics, ImpactStyle }) => {
+        const style = type === 'heavy' ? ImpactStyle.Heavy : type === 'medium' ? ImpactStyle.Medium : ImpactStyle.Light;
+        return Haptics.impact({ style });
+      })
+      .catch(() => {});
+    return;
+  }
   if (typeof window !== 'undefined' && 'navigator' in window && 'vibrate' in navigator) {
     if (type === 'light') {
       navigator.vibrate(50); // اهتزاز خفيف (50 مللي ثانية)

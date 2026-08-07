@@ -2,13 +2,14 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { ShoppingCart, Heart, Eye, Check, Plus, Minus, Layers } from "lucide-react";
+import { ShoppingCart, Heart, Eye, Check, Plus, Minus, Layers, Share2 } from "lucide-react";
 import { useAppStore, Product } from "@/lib/store";
 import { TRANSLATIONS } from "@/lib/translations";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import BottomSheet from "@/components/BottomSheet";
 import { triggerHapticFeedback } from "@/lib/utils"; // افتراض أنك أنشأت هذه الدالة، وإلا يمكنك إزالتها
+import { nativeShare } from "@/lib/native";
 
 export default function ProductCard({ product }: { product: Product }) {
   const { language, addToCart, toggleFavorite, isFavorite } = useAppStore();
@@ -47,6 +48,26 @@ export default function ProductCard({ product }: { product: Product }) {
     setIsOptionsOpen(false);
   };
 
+  const handleShare = async () => {
+    try {
+      triggerHapticFeedback('light');
+    } catch (e) {}
+    const url = `https://artisanimprimeur.vercel.app/services?product=${encodeURIComponent(product.id)}`;
+    const ok = await nativeShare({
+      title: product.name,
+      text: product.name,
+      url,
+    });
+    if (!ok) {
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success(isRtl ? "تم نسخ رابط المنتج" : "Lien du produit copié");
+      } catch (e) {
+        toast.error(isRtl ? "تعذر المشاركة" : "Partage impossible");
+      }
+    }
+  };
+
   return (
     <>
       {/* --- بطاقة المنتج الرئيسية --- */}
@@ -80,6 +101,13 @@ export default function ProductCard({ product }: { product: Product }) {
             >
               <Eye size={22} />
             </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+              onClick={handleShare}
+              className="p-4 bg-white/90 text-slate-900 rounded-2xl shadow-xl flex items-center justify-center"
+            >
+              <Share2 size={22} />
+            </motion.button>
           </div>
 
           {/* زر إضافة سريع دائم على الموبايل (لا يوجد hover باللمس) */}
@@ -108,6 +136,16 @@ export default function ProductCard({ product }: { product: Product }) {
           >
             <Heart size={18} fill={favorite ? "currentColor" : "none"} className={favorite ? "animate-pulse" : ""} />
           </button>
+
+          {/* زر مشاركة المنتج (ورقة المشاركة الأصلية في التطبيق) */}
+          <motion.button
+            whileTap={{ scale: 0.85 }}
+            onClick={handleShare}
+            aria-label={isRtl ? "مشاركة المنتج" : "Partager"}
+            className={`absolute top-4 ${isRtl ? 'right-4' : 'left-4'} p-3 md:hidden rounded-2xl backdrop-blur-xl bg-white/20 text-white hover:bg-white/40 transition-all shadow-lg z-10 border border-white/10`}
+          >
+            <Share2 size={18} />
+          </motion.button>
         </div>
 
         <div className="p-6 flex-grow flex flex-col justify-between bg-white/40 dark:bg-transparent">
