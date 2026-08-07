@@ -363,6 +363,29 @@ export const TRANSLATIONS = {
     upToDate: "Vous êtes à jour ✓",
     updateAvailable: "Nouvelle version disponible — elle va s'afficher 🚀",
     applyUpdateNow: "Mettre à jour maintenant",
+
+    // --- Affichage & confort ---
+    displayTitle: "Affichage & confort",
+    displayDesc: "Effets visuels et confort d'utilisation",
+    backgroundEffects: "Effets d'arrière-plan",
+    backgroundEffectsDesc: "Lueurs décoratives et grain subtil derrière les pages.",
+    reduceBlur: "Réduire la transparence",
+    reduceBlurDesc: "Supprime l'effet de flou (verre) — plus léger pour les vieux téléphones.",
+    keepAwake: "Garder l'écran allumé",
+    keepAwakeDesc: "Empêche l'écran de s'éteindre pendant l'utilisation (téléphones compatibles).",
+    keepAwakeUnsupported: "Votre navigateur ne prend pas en charge cette fonction.",
+
+    // --- Stockage & données ---
+    storageTitle: "Stockage & données",
+    storageDesc: "Espace utilisé et gestion des données locales",
+    storageUsed: "Espace local utilisé",
+    cachedData: "Cache de l'application",
+    localData: "Données locales",
+    unknown: "inconnu",
+    clearCache: "Vider le cache",
+    clearingData: "Nettoyage en cours…",
+    clearCacheConfirm: "Vider les données locales et le cache ? Vos informations de connexion sont conservées.",
+    clearCacheDone: "Cache vidé avec succès ✓",
   },
   ar: {
     // --- عام ---
@@ -722,6 +745,29 @@ export const TRANSLATIONS = {
     upToDate: "أنت على أحدث إصدار ✓",
     updateAvailable: "نسخة جديدة متاحة — ستظهر لك الآن 🚀",
     applyUpdateNow: "تحديث الآن",
+
+    // --- العرض والراحة ---
+    displayTitle: "العرض والراحة",
+    displayDesc: "التأثيرات البصرية وراحة الاستخدام",
+    backgroundEffects: "تأثيرات الخلفية",
+    backgroundEffectsDesc: "التوهجات الزخرفية والحبيبات الخفيفة خلف الصفحات.",
+    reduceBlur: "تقليل الشفافية",
+    reduceBlurDesc: "يزيل تأثير الضبابية (الزجاج) — أخف على الهواتف القديمة.",
+    keepAwake: "إبقاء الشاشة مضاءة",
+    keepAwakeDesc: "يمنع إطفاء الشاشة أثناء الاستخدام (للهواتف الداعمة).",
+    keepAwakeUnsupported: "متصفحك لا يدعم هذه الميزة.",
+
+    // --- التخزين والبيانات ---
+    storageTitle: "التخزين والبيانات",
+    storageDesc: "المساحة المستخدمة وإدارة البيانات المحلية",
+    storageUsed: "المساحة المحلية المستخدمة",
+    cachedData: "ذاكرة التطبيق",
+    localData: "البيانات المحلية",
+    unknown: "غير معروف",
+    clearCache: "مسح الذاكرة المؤقتة",
+    clearingData: "جارٍ التنظيف…",
+    clearCacheConfirm: "مسح البيانات والذاكرة المؤقتة؟ ستبقى معلومات تسجيل الدخول محفوظة.",
+    clearCacheDone: "تم مسح الذاكرة المؤقتة بنجاح ✓",
   }
 } as const;
 

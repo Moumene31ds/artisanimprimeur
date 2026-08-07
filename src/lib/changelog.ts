@@ -4,7 +4,7 @@
 // CHANGELOG يعرض الميزات للعملاء بالعربية والفرنسية.
 // ---------------------------------------------------------------------------
 
-export const APP_VERSION = 'v6.1';
+export const APP_VERSION = 'v6.2';
 
 export interface ChangelogEntry {
   version: string;
@@ -12,6 +12,27 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'v6.2',
+    features: {
+      ar: [
+        '🎨 غلاف مشاركة فاخر (Open Graph) بتصميم زجاجي عند مشاركة الرابط',
+        '✨ إعدادات جديدة: إيقاف تأثيرات الخلفية الزخرفية',
+        '💠 تقليل الشفافية والتمويه للأجهزة القديمة',
+        '🌙 إبقاء الشاشة مضاءة أثناء الاستخدام',
+        '💾 قسم التخزين: حجم البيانات المستخدمة + مسح الذاكرة المؤقتة',
+        '⚡ تحسينات في الأداء والاستقرار',
+      ],
+      fr: [
+        '🎨 Couverture de partage premium (Open Graph) au design verre dépoli',
+        '✨ Nouveaux réglages : désactivation des effets d\u2019arrière-plan',
+        '💠 Réduction de la transparence et du flou pour les vieux téléphones',
+        '🌙 Garder l\u2019écran allumé pendant l\u2019utilisation',
+        '💾 Section Stockage : espace utilisé + vidage du cache',
+        '⚡ Améliorations de performance et de stabilité',
+      ],
+    },
+  },
   {
     version: 'v6.1',
     features: {

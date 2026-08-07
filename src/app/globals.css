@@ -304,12 +304,29 @@ section[id], [id^="section-"] {
 [data-perf="true"] .animate-blob {
   display: none !important;
 }
+[data-perf="true"] .noise-overlay {
+  display: none !important;
+}
 [data-perf="true"] .glass-spotlight::after,
 [data-perf="true"] .btn-shine::after,
 [data-perf="true"] .btn-shimmer::before,
 [data-perf="true"] .animated-border::after {
   animation: none !important;
   opacity: 0 !important;
+}
+
+/* 🎨 إيقاف التأثيرات الزخرفية (فقاعات الخلفية + الضجيج) من الإعدادات */
+[data-effects="off"] .decor-blob,
+[data-effects="off"] .noise-overlay {
+  display: none !important;
+}
+
+/* 💠 تقليل التمويه والشفافية (أخفّ على الأجهزة الضعيفة) */
+[data-blur="off"] *,
+[data-blur="off"] *::before,
+[data-blur="off"] *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 /* 🎬 إيقاف الحركات يدوياً من الإعدادات */

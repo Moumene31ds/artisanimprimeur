@@ -52,6 +52,14 @@ interface AppState {
   deviceTier: DeviceTier | null;
   setDeviceInfo: (score: number, tier: DeviceTier) => void;
 
+  // --- مظهر وأداء إضافي ---
+  backgroundEffects: boolean;
+  setBackgroundEffects: (enabled: boolean) => void;
+  reduceBlur: boolean;
+  setReduceBlur: (enabled: boolean) => void;
+  keepAwake: boolean;
+  setKeepAwake: (enabled: boolean) => void;
+
   // حالة سلة التسوق
   cart: Product[];
   addToCart: (product: Omit<Product, "quantity"> & { quantity?: number }) => void;
@@ -95,6 +103,9 @@ export const useAppStore = create<AppState>()(
         autoOptimize: true,
         hapticFeedback: true,
         notificationsEnabled: true,
+        backgroundEffects: true,
+        reduceBlur: false,
+        keepAwake: false,
         settingsConfigured: true,
       }),
 
@@ -108,6 +119,14 @@ export const useAppStore = create<AppState>()(
       deviceScore: null,
       deviceTier: null,
       setDeviceInfo: (deviceScore, deviceTier) => set({ deviceScore, deviceTier }),
+
+      // --- مظهر وأداء إضافي ---
+      backgroundEffects: true,
+      setBackgroundEffects: (backgroundEffects) => set({ backgroundEffects }),
+      reduceBlur: false,
+      setReduceBlur: (reduceBlur) => set({ reduceBlur }),
+      keepAwake: false,
+      setKeepAwake: (keepAwake) => set({ keepAwake }),
 
       // حالة وإجراءات سلة التسوق (Cart Actions)
       cart: [],

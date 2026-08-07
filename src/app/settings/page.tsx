@@ -7,7 +7,8 @@ import { toast } from "sonner";
 import {
   Languages, Palette, Gauge, Type as TypeIcon, RotateCcw, Check, Sun, Moon,
   Monitor, Smartphone, Sparkles, ChevronRight, ArrowLeft, Zap, Cpu, MemoryStick,
-  Wifi, RefreshCw, Rocket, Bell, Vibrate, Loader2, Activity
+  Wifi, RefreshCw, Rocket, Bell, Vibrate, Loader2, Activity, Droplets, Eye,
+  HardDrive, Trash2
 } from "lucide-react";
 import { useAppStore, type ThemeMode, type FontSizeMode, type DeviceTier } from "@/lib/store";
 import { useTheme } from "next-themes";
@@ -128,6 +129,10 @@ export default function SettingsPage() {
     hapticFeedback, setHapticFeedback,
     notificationsEnabled, setNotificationsEnabled,
     deviceScore, deviceTier, setDeviceInfo,
+    backgroundEffects, setBackgroundEffects,
+    reduceBlur, setReduceBlur,
+    keepAwake, setKeepAwake,
+    clearCart, clearFavorites,
     resetSettings,
   } = useAppStore();
   const { resolvedTheme } = useTheme();
@@ -135,11 +140,36 @@ export default function SettingsPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [facts, setFacts] = useState<ReturnType<typeof getDeviceFacts> | null>(null);
+  const [storage, setStorage] = useState<{ local: number; cache: number }>({ local: 0, cache: 0 });
+
+  const fmtBytes = (b: number) => {
+    if (b <= 0) return "0";
+    const mb = b / (1024 * 1024);
+    return mb >= 1 ? `${mb.toFixed(1)} Mo` : `${Math.max(1, Math.round(b / 1024))} Ko`;
+  };
 
   useEffect(() => {
     setMounted(true);
     setFacts(getDeviceFacts());
+    (async () => {
+      let localBytes = 0;
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)!;
+          localBytes += (key.length + (localStorage.getItem(key)?.length || 0)) * 2;
+        }
+      } catch { /* ignore */ }
+      let cacheBytes = 0;
+      try {
+        if (navigator.storage?.estimate) {
+          const est = await navigator.storage.estimate();
+          cacheBytes = est.usage ?? 0;
+        }
+      } catch { /* ignore */ }
+      setStorage({ local: localBytes, cache: cacheBytes });
+    })();
   }, []);
 
   if (!mounted) return null;
@@ -227,6 +257,30 @@ export default function SettingsPage() {
       await applyServiceWorkerUpdate();
     } catch { /* ignore */ }
     setTimeout(() => { window.location.reload(); }, 1200);
+  };
+
+  const handleClearCache = async () => {
+    if (!window.confirm(tr("clearCacheConfirm"))) return;
+    setClearing(true);
+    try {
+      if ("caches" in window) {
+        const names = await caches.keys();
+        await Promise.all(names.map((n) => caches.delete(n)));
+      }
+      clearCart();
+      clearFavorites();
+      try {
+        localStorage.removeItem("artisan-imprimeur-storage");
+        localStorage.removeItem("pwa-last-seen-build");
+      } catch { /* ignore */ }
+      setStorage({ local: 0, cache: 0 });
+      toast.success(tr("clearCacheDone"));
+      setTimeout(() => { window.location.reload(); }, 900);
+    } catch {
+      toast.error(isRtl ? "فشل مسح البيانات" : "Échec du nettoyage");
+    } finally {
+      setClearing(false);
+    }
   };
 
   const themes: { value: ThemeMode; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
@@ -463,6 +517,47 @@ export default function SettingsPage() {
           </div>
         </SectionCard>
 
+        {/* Display & comfort */}
+        <SectionCard
+          icon={Droplets}
+          title={tr("displayTitle")}
+          desc={tr("displayDesc")}
+          iconClass="bg-gradient-to-tr from-sky-500 to-cyan-600"
+        >
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-start gap-3">
+                <Sparkles size={20} className={`${backgroundEffects ? "text-sky-500" : "text-slate-400"} shrink-0 mt-0.5`} />
+                <div>
+                  <p className="font-black text-sm text-slate-800 dark:text-slate-100">{tr("backgroundEffects")}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{tr("backgroundEffectsDesc")}</p>
+                </div>
+              </div>
+              <Toggle checked={backgroundEffects} onChange={setBackgroundEffects} />
+            </div>
+            <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-start gap-3">
+                <Droplets size={20} className={`${reduceBlur ? "text-cyan-500" : "text-slate-400"} shrink-0 mt-0.5`} />
+                <div>
+                  <p className="font-black text-sm text-slate-800 dark:text-slate-100">{tr("reduceBlur")}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{tr("reduceBlurDesc")}</p>
+                </div>
+              </div>
+              <Toggle checked={reduceBlur} onChange={setReduceBlur} />
+            </div>
+            <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-start gap-3">
+                <Eye size={20} className={`${keepAwake ? "text-cyan-500" : "text-slate-400"} shrink-0 mt-0.5`} />
+                <div>
+                  <p className="font-black text-sm text-slate-800 dark:text-slate-100">{tr("keepAwake")}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{tr("keepAwakeDesc")}</p>
+                </div>
+              </div>
+              <Toggle checked={keepAwake} onChange={setKeepAwake} />
+            </div>
+          </div>
+        </SectionCard>
+
         {/* Sensations */}
         <SectionCard
           icon={Bell}
@@ -582,6 +677,42 @@ export default function SettingsPage() {
               {isRtl ? "جارٍ التحديث وإعادة التحميل…" : "Mise à jour et rechargement…"}
             </div>
           )}
+        </SectionCard>
+
+        {/* Storage & data */}
+        <SectionCard
+          icon={HardDrive}
+          title={tr("storageTitle")}
+          desc={tr("storageDesc")}
+          iconClass="bg-gradient-to-tr from-slate-600 to-slate-800"
+        >
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <HardDrive size={18} className="text-slate-500 shrink-0" />
+                <span className="font-bold text-sm text-slate-700 dark:text-slate-200">{tr("storageUsed")}</span>
+              </div>
+              <span className="font-black text-sm text-slate-900 dark:text-white">{fmtBytes(storage.local + storage.cache)}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">{tr("cachedData")}</p>
+                <p className="font-black text-sm text-slate-900 dark:text-white">{fmtBytes(storage.cache)}</p>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">{tr("localData")}</p>
+                <p className="font-black text-sm text-slate-900 dark:text-white">{fmtBytes(storage.local)}</p>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={handleClearCache}
+            disabled={clearing}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/60 text-red-600 dark:text-red-400 font-black text-sm hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors active:scale-[0.98] disabled:opacity-50"
+          >
+            {clearing ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+            {clearing ? tr("clearingData") : tr("clearCache")}
+          </button>
         </SectionCard>
 
         {/* Reset */}

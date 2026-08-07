@@ -31,6 +31,9 @@ export default function SettingsManager() {
   const settingsConfigured = useAppStore((s) => s.settingsConfigured);
   const autoOptimize = useAppStore((s) => s.autoOptimize);
   const hapticFeedback = useAppStore((s) => s.hapticFeedback);
+  const backgroundEffects = useAppStore((s) => s.backgroundEffects);
+  const reduceBlur = useAppStore((s) => s.reduceBlur);
+  const keepAwake = useAppStore((s) => s.keepAwake);
   const setSettingsConfigured = useAppStore((s) => s.setSettingsConfigured);
   const setPerformanceMode = useAppStore((s) => s.setPerformanceMode);
   const setAnimationsEnabled = useAppStore((s) => s.setAnimationsEnabled);
@@ -89,6 +92,40 @@ export default function SettingsManager() {
     root.setAttribute("data-animations", animationsEnabled ? "on" : "off");
     root.setAttribute("data-font-size", fontSize);
   }, [performanceMode, animationsEnabled, fontSize]);
+
+  // التأثيرات الزخرفية (فقاعات + ضجيج) وتقليل التمويه
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    root.setAttribute("data-effects", backgroundEffects ? "on" : "off");
+    root.setAttribute("data-blur", reduceBlur ? "off" : "on");
+  }, [backgroundEffects, reduceBlur]);
+
+  // إبقاء الشاشة مضاءة (Wake Lock)
+  useEffect(() => {
+    if (!keepAwake || typeof window === "undefined") return;
+    let sentinel: any = null;
+    let cancelled = false;
+    const request = async () => {
+      try {
+        const wl = (navigator as any).wakeLock;
+        if (!wl) return;
+        sentinel = await wl.request("screen");
+      } catch {
+        /* غير مدعوم أو رفض */
+      }
+    };
+    request();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") request();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      sentinel?.release?.().catch(() => {});
+    };
+  }, [keepAwake]);
 
   return null;
 }
