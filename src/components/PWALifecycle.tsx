@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CloudOff, Wifi, Sparkles, Rocket, X, Check, Zap } from "lucide-react";
 import { toast } from "sonner";
+import BottomSheet from "@/components/BottomSheet";
 import { useAppStore } from "@/lib/store";
 import {
   registerServiceWorker,
@@ -263,112 +264,93 @@ export default function PWALifecycle() {
         )}
       </AnimatePresence>
 
-      {/* لوحة "نسخة جديدة متاحة" — تظهر فقط عند وجود تحديث حقيقي */}
-      <AnimatePresence>
-        {updateInfo && !reloading && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[80] bg-slate-950/60 backdrop-blur-sm flex items-end md:items-center justify-center p-4"
-            onClick={dismissUpdate}
-          >
-            <motion.div
-              initial={{ y: 80, opacity: 0, scale: 0.94 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              exit={{ y: 80, opacity: 0, scale: 0.94 }}
-              transition={{ type: "spring", damping: 26, stiffness: 320 }}
-              className="relative w-full max-w-sm overflow-hidden rounded-[2rem] bg-white dark:bg-slate-900 shadow-2xl border border-white/40 dark:border-white/10"
-              onClick={(e) => e.stopPropagation()}
+      {/* لوحة "نسخة جديدة متاحة" — Bottom Sheet على الموبايل / Modale على الديسكتوب */}
+      <BottomSheet
+        open={!!updateInfo && !reloading}
+        onClose={dismissUpdate}
+        isRtl={isRtl}
+        maxWidth="max-w-md"
+        dismissible
+        hideClose
+        title={
+          <div className="relative w-full overflow-hidden rounded-[1.5rem] bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 text-white">
+            <div className="absolute inset-0 opacity-30 animate-pulse bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.6),transparent_50%)]" />
+            <button
+              onClick={dismissUpdate}
+              aria-label={isRtl ? "إغلاق" : "Fermer"}
+              className="absolute top-3 start-3 z-10 p-2 bg-white/15 hover:bg-white/25 backdrop-blur rounded-full transition-colors"
             >
-              {/* ترويسة متدرجة متحركة */}
-              <div className="relative h-28 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 overflow-hidden">
-                <div className="absolute inset-0 opacity-30 animate-pulse bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.6),transparent_50%)]" />
+              <X size={14} className="text-white" />
+            </button>
+            <div className="absolute top-3 end-3 flex items-center gap-1.5 bg-black/25 backdrop-blur px-2.5 py-1 rounded-full">
+              <Rocket size={11} className="text-cyan-300" />
+              <span className="text-[10px] font-black text-white">
+                v{updateInfo ? updateInfo.release : ""}
+              </span>
+            </div>
+            <div className="p-5 pt-12">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-200">
+                {isRtl ? "تحديث التطبيق" : "Mise à jour"}
+              </p>
+              <h3 className="text-lg font-black leading-tight">
+                {isRtl ? "نسخة جديدة محسّنة جاهزة 🚀" : "Une nouvelle version est prête 🚀"}
+              </h3>
+            </div>
+          </div>
+        }
+      >
+        {updateInfo && (
+          <div>
+            {/* الميزات الجديدة لهذا الإصدار */}
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-500 dark:text-blue-400 mb-2">
+              {isRtl ? "✨ الميزات الجديدة" : "✨ Nouveautés"}
+            </p>
+            <div className="space-y-2 mb-5 max-h-40 overflow-y-auto">
+              {(features.length
+                ? features
+                : [
+                    isRtl
+                      ? "أداء محسّن وميزات جديدة"
+                      : "Performances améliorées et nouveautés",
+                    isRtl
+                      ? "إصلاح الأخطاء وثبات أكبر"
+                      : "Corrections de bugs et stabilité",
+                  ]
+              ).map((f, i) => (
                 <motion.div
-                  initial={{ scale: 0, rotate: -30 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.15 }}
-                  className="absolute top-5 right-5 w-16 h-16 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center"
+                  key={i}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.15 + i * 0.06 }}
+                  className="flex items-center gap-3 text-[12px] font-bold text-slate-700 dark:text-slate-300"
                 >
-                  <Sparkles size={30} className="text-amber-300" />
-                </motion.div>
-                <div className="absolute bottom-4 left-5 right-5">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-200">
-                    {isRtl ? "تحديث التطبيق" : "Mise à jour"}
-                  </p>
-                  <h3 className="text-lg font-black text-white leading-tight">
-                    {isRtl ? "نسخة جديدة محسّنة جاهزة 🚀" : "Une nouvelle version est prête 🚀"}
-                  </h3>
-                </div>
-                <div className="absolute top-4 left-4 flex items-center gap-1.5 bg-black/25 backdrop-blur px-2.5 py-1 rounded-full">
-                  <Rocket size={11} className="text-cyan-300" />
-                  <span className="text-[10px] font-black text-white">
-                    v{updateInfo.release}
+                  <span className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                    {i === 0 ? <Zap size={15} /> : <Check size={15} />}
                   </span>
-                </div>
-              </div>
+                  {f}
+                </motion.div>
+              ))}
+            </div>
 
+            <div className="flex flex-col gap-2">
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={applyUpdate}
+                className="min-h-[52px] w-full flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-black text-sm shadow-lg shadow-blue-500/25 hover:shadow-xl hover:brightness-110 transition-all"
+              >
+                <Rocket size={16} />
+                {isRtl ? "تحديث الآن" : "Mettre à jour maintenant"}
+              </motion.button>
               <button
                 onClick={dismissUpdate}
-                className="absolute top-3 left-3 z-10 p-1.5 bg-white/15 hover:bg-white/25 backdrop-blur rounded-full transition-colors"
-                aria-label={isRtl ? "إغلاق" : "Fermer"}
+                className="min-h-[44px] w-full rounded-2xl text-[12px] font-bold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 active:scale-[0.98] transition-colors"
               >
-                <X size={14} className="text-white" />
+                {isRtl ? "لاحقاً" : "Plus tard"}
               </button>
-
-              <div className="p-5">
-                {/* الميزات الجديدة لهذا الإصدار */}
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-500 dark:text-blue-400 mb-2">
-                  {isRtl ? "✨ الميزات الجديدة" : "✨ Nouveautés"}
-                </p>
-                <div className="space-y-2 mb-5 max-h-40 overflow-y-auto">
-                  {(features.length
-                    ? features
-                    : [
-                        isRtl
-                          ? "أداء محسّن وميزات جديدة"
-                          : "Performances améliorées et nouveautés",
-                        isRtl
-                          ? "إصلاح الأخطاء وثبات أكبر"
-                          : "Corrections de bugs et stabilité",
-                      ]
-                  ).map((f, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.15 + i * 0.06 }}
-                      className="flex items-center gap-3 text-[12px] font-bold text-slate-700 dark:text-slate-300"
-                    >
-                      <span className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                        {i === 0 ? <Zap size={15} /> : <Check size={15} />}
-                      </span>
-                      {f}
-                    </motion.div>
-                  ))}
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <motion.button
-                    whileTap={{ scale: 0.97 }}
-                    onClick={applyUpdate}
-                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-black text-sm shadow-lg shadow-blue-500/25 hover:shadow-xl hover:brightness-110 transition-all flex items-center justify-center gap-2"
-                  >
-                    <Rocket size={16} />
-                    {isRtl ? "تحديث الآن" : "Mettre à jour maintenant"}
-                  </motion.button>
-                  <button
-                    onClick={dismissUpdate}
-                    className="w-full py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    {isRtl ? "لاحقاً" : "Plus tard"}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
+      </BottomSheet>
 
       {/* شاشة إعادة التحميل المتدرجة */}
       <AnimatePresence>

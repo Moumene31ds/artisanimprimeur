@@ -22,6 +22,8 @@ interface BottomSheetProps {
   maxWidth?: string;
   /** Fermeture par swipe vers le bas (mobile uniquement). */
   dismissible?: boolean;
+  /** Masquer le bouton de fermeture de l'en-tête (ex: header personnalisé). */
+  hideClose?: boolean;
 }
 
 export default function BottomSheet({
@@ -32,6 +34,7 @@ export default function BottomSheet({
   isRtl = false,
   maxWidth = "max-w-4xl",
   dismissible = true,
+  hideClose = false,
 }: BottomSheetProps) {
   const dragStartY = useRef(0);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -99,13 +102,15 @@ export default function BottomSheet({
                   <div className="text-lg font-black text-slate-900 dark:text-white truncate">{title}</div>
                 )}
               </div>
-              <button
-                onClick={onClose}
-                aria-label="Fermer"
-                className="shrink-0 p-2.5 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-90 transition-all cursor-pointer"
-              >
-                <X size={18} />
-              </button>
+              {!hideClose && (
+                <button
+                  onClick={onClose}
+                  aria-label="Fermer"
+                  className="shrink-0 p-2.5 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-90 transition-all cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              )}
             </div>
 
             {/* Contenu défilable + safe-area bas */}

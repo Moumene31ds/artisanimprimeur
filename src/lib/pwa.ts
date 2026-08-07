@@ -292,8 +292,54 @@ export function isPWAInstalled(): boolean {
   );
 }
 
+// ---------------------------------------------------------------------------
+// قبلinstallprompt (مشترك) — تُخزَّن المطالبة على مستوى الوحدة حتى تتمكن أي
+// صفحة (مثل الإعدادات) من استخدامها حتى لو أطلق المتصفح الحدث قبل فتحها.
+// ---------------------------------------------------------------------------
+let deferredInstallPrompt: any = null;
+
+/** التقاط حدث التثبيت من المتصفح (يُستدعى من PWAPrompt). */
+export function captureInstallPrompt(event: Event): void {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+}
+
+/** الحصول على المطالبة المحفوظة (قد تكون null إذا لم تتوفر أو استُهلكت). */
+export function getInstallPrompt(): any {
+  return deferredInstallPrompt;
+}
+
+/** مسح المطالبة المحفوظة بعد استخدامها. */
+export function clearInstallPrompt(): void {
+  deferredInstallPrompt = null;
+}
+
+/**
+ * تشغيل مطالبة التثبيت بشكل مباشر (مثلاً من الإعدادات).
+ * يُعيد "accepted" عند قبول المستخدم، و"dismissed" عند الإلغاء،
+ * و"unavailable" إذا لم تتوفر مطالبة (متصفح غير داعم أو سبق استهلاكها).
+ */
+export async function promptInstall(): Promise<'accepted' | 'dismissed' | 'unavailable'> {
+  const prompt = getInstallPrompt();
+  if (!prompt) return 'unavailable';
+  clearInstallPrompt();
+  try {
+    await prompt.prompt();
+    const { outcome } = await prompt.userChoice;
+    return outcome === 'accepted' ? 'accepted' : 'dismissed';
+  } catch {
+    return 'dismissed';
+  }
+}
+
+/** هل التطبيق مثبّت (وضع مستقل أو سُجّل سابقاً). */
 export function isAppInstalled(): boolean {
-  return isPWAInstalled();
+  if (typeof window === 'undefined') return false;
+  try {
+    return isPWAInstalled() || localStorage.getItem('pwa-installed') === 'true';
+  } catch {
+    return isPWAInstalled();
+  }
 }
 
 export function canInstallPWA(): boolean {

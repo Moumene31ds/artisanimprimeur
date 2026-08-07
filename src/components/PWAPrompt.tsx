@@ -11,6 +11,9 @@ import {
   subscribeToPushNotifications,
   unsubscribeFromPushNotifications,
   isPWAInstalled,
+  captureInstallPrompt,
+  getInstallPrompt,
+  promptInstall,
 } from "@/lib/pwa";
 import { triggerHapticFeedback } from "@/lib/utils";
 
@@ -29,7 +32,7 @@ export default function PWAPrompt() {
   const reduceMotion = useReducedMotion();
 
   const [state, setState] = useState<InstallState>("dismissed");
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [hasPrompt, setHasPrompt] = useState(false);
   const [pushStep, setPushStep] = useState<PushState>("idle");
 
   // هل يمكننا فعلاً تثبيت/توجيه؟ (iOS أو توفر قبلinstallprompt) — يمنع ظهور
@@ -38,8 +41,8 @@ export default function PWAPrompt() {
   const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    canShowRef.current = deferredPrompt !== null || isIOS();
-  }, [deferredPrompt]);
+    canShowRef.current = hasPrompt || isIOS();
+  }, [hasPrompt]);
 
   useEffect(() => {
     const dismissed = localStorage.getItem("pwa-prompt-dismissed");
@@ -61,8 +64,8 @@ export default function PWAPrompt() {
 
   useEffect(() => {
     const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
+      captureInstallPrompt(e);
+      setHasPrompt(true);
     };
 
     const onInstalled = () => {
@@ -85,30 +88,29 @@ export default function PWAPrompt() {
   }, []);
 
   const handleInstall = useCallback(async () => {
-    if (!deferredPrompt) return;
+    if (isIOS()) return;
+    if (!getInstallPrompt()) {
+      setState("dismissed");
+      return;
+    }
     triggerHapticFeedback("medium");
     setState("installing");
-    try {
-      await deferredPrompt.prompt();
-      const result = await deferredPrompt.userChoice;
-      setDeferredPrompt(null);
-      canShowRef.current = false;
-      if (result.outcome === "accepted") {
-        try {
-          localStorage.setItem("pwa-installed", "true");
-        } catch {
-          /* ignore */
-        }
-        triggerHapticFeedback("heavy");
-        setState("installed");
-        autoCloseTimer.current = setTimeout(() => setState("dismissed"), 2600);
-      } else {
-        setState("prompt");
+    const outcome = await promptInstall();
+    setHasPrompt(false);
+    if (outcome === "accepted") {
+      try {
+        localStorage.setItem("pwa-installed", "true");
+      } catch {
+        /* ignore */
       }
-    } catch {
-      setState("prompt");
+      triggerHapticFeedback("heavy");
+      setState("installed");
+      autoCloseTimer.current = setTimeout(() => setState("dismissed"), 2600);
+    } else {
+      // رفض أو استهلكت المطالبة في مكان آخر → أغلق اللوحة.
+      setState("dismissed");
     }
-  }, [deferredPrompt]);
+  }, []);
 
   const handleEnablePush = useCallback(async () => {
     setPushStep("requesting");

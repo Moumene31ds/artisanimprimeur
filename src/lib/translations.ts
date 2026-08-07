@@ -376,6 +376,19 @@ export const TRANSLATIONS = {
     updateAvailable: "Nouvelle version disponible — elle va s'afficher 🚀",
     applyUpdateNow: "Mettre à jour maintenant",
 
+    // --- Installation ---
+    installTitle: "Installation de l'application",
+    installDesc: "Installez l'application pour un accès rapide et des notifications",
+    installStatusInstalled: "Installée",
+    installStatusNotInstalled: "Non installée",
+    installButton: "Installer l'application",
+    installingApp: "Installation…",
+    installDone: "Application installée ✓",
+    installIOSHint: "Utilisez Partager puis « Ajouter à l'écran d'accueil »",
+    installBrowserHint: "Utilisez le menu du navigateur (⋮) puis « Installer l'application »",
+    installLaunchHint: "Retrouvez l'icône de l'application sur votre écran d'accueil",
+    installStatusLabel: "Statut",
+
     // --- Affichage & confort ---
     displayTitle: "Affichage & confort",
     displayDesc: "Effets visuels et confort d'utilisation",
@@ -769,6 +782,19 @@ export const TRANSLATIONS = {
     upToDate: "أنت على أحدث إصدار ✓",
     updateAvailable: "نسخة جديدة متاحة — ستظهر لك الآن 🚀",
     applyUpdateNow: "تحديث الآن",
+
+    // --- التثبيت ---
+    installTitle: "تثبيت التطبيق",
+    installDesc: "ثبّت التطبيق للوصول السريع والإشعارات اللحظية",
+    installStatusInstalled: "مثبّت",
+    installStatusNotInstalled: "غير مثبّت",
+    installButton: "تثبيت التطبيق",
+    installingApp: "جارٍ التثبيت…",
+    installDone: "تم تثبيت التطبيق ✓",
+    installIOSHint: "استخدم زر المشاركة ثم « إضافة إلى الشاشة الرئيسية »",
+    installBrowserHint: "استخدم قائمة المتصفح (⋮) ثم « تثبيت التطبيق »",
+    installLaunchHint: "ابحث عن أيقونة التطبيق في شاشتك الرئيسية",
+    installStatusLabel: "الحالة",
 
     // --- العرض والراحة ---
     displayTitle: "العرض والراحة",

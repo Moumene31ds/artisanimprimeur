@@ -4,7 +4,7 @@
 // CHANGELOG يعرض الميزات للعملاء بالعربية والفرنسية.
 // ---------------------------------------------------------------------------
 
-export const APP_VERSION = 'v6.5';
+export const APP_VERSION = 'v6.5.1';
 
 export interface ChangelogEntry {
   version: string;
@@ -12,6 +12,21 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'v6.5.1',
+    features: {
+      ar: [
+        '📲 شاشة « نسخة جديدة » أصبحت بنفس تصميم واجهة التثبيت (Bottom Sheet) وتتوافق مع جميع الهواتف',
+        '⬇️ زر « تثبيت التطبيق » في الإعدادات مع حالة التثبيت، ويعمل حتى بعد فوات حدث التثبيت',
+        '📱 توجيهات تثبيت يدوية حسب المتصفح عند عدم توفر زر التثبيت',
+      ],
+      fr: [
+        '📲 L\u2019écran « Nouvelle version » adopte le même design que l\u2019installation (bottom sheet)',
+        '⬇️ Bouton « Installer l\u2019application » dans les réglages avec statut, actif même après l\u2019événement d\u2019installation',
+        '📱 Instructions d\u2019installation manuelle selon le navigateur si le bouton est indisponible',
+      ],
+    },
+  },
   {
     version: 'v6.5',
     features: {

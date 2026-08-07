@@ -8,7 +8,7 @@ import {
   Languages, Palette, Gauge, Type as TypeIcon, RotateCcw, Check, Sun, Moon,
   Monitor, Smartphone, Sparkles, ChevronRight, ArrowLeft, Zap, Cpu, MemoryStick,
   Wifi, RefreshCw, Rocket, Bell, Vibrate, Loader2, Activity, Droplets, Eye,
-  HardDrive, Trash2, Battery, BatteryCharging, Clock
+  HardDrive, Trash2, Battery, BatteryCharging, Clock, Download, CheckCircle2
 } from "lucide-react";
 import { useAppStore, type ThemeMode, type FontSizeMode, type DeviceTier } from "@/lib/store";
 import { useTheme } from "next-themes";
@@ -19,7 +19,7 @@ import {
   getRecommendations, estimateBatterySavings, getConfidenceInfo,
   type DeviceSignals, type BatteryInfo,
 } from "@/lib/device";
-import { checkForUpdates, getBuildInfo, applyServiceWorkerUpdate, requestNotificationPermission, getLastSeenBuild, dispatchShowUpdate } from "@/lib/pwa";
+import { checkForUpdates, getBuildInfo, applyServiceWorkerUpdate, requestNotificationPermission, getLastSeenBuild, dispatchShowUpdate, promptInstall, isAppInstalled } from "@/lib/pwa";
 import { APP_VERSION, CHANGELOG } from "@/lib/changelog";
 
 function Toggle({
@@ -145,6 +145,8 @@ export default function SettingsPage() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [installingApp, setInstallingApp] = useState(false);
+  const [appInstalled, setAppInstalled] = useState(false);
   const [facts, setFacts] = useState<ReturnType<typeof getDeviceFacts> | null>(null);
   const [battery, setBattery] = useState<BatteryInfo | null>(null);
   const [storage, setStorage] = useState<{ local: number; cache: number }>({ local: 0, cache: 0 });
@@ -157,6 +159,9 @@ export default function SettingsPage() {
 
   useEffect(() => {
     setMounted(true);
+    setAppInstalled(isAppInstalled());
+    const onInstalled = () => setAppInstalled(true);
+    window.addEventListener("appinstalled", onInstalled);
     setFacts(getDeviceFacts());
     getBatteryInfo().then(setBattery);
     (async () => {
@@ -176,6 +181,7 @@ export default function SettingsPage() {
       } catch { /* ignore */ }
       setStorage({ local: localBytes, cache: cacheBytes });
     })();
+    return () => window.removeEventListener("appinstalled", onInstalled);
   }, []);
 
   // تحديث حقائق الجهاز (الشبكة/الذاكرة) بعد كل إعادة فحص تلقائية
@@ -277,6 +283,23 @@ export default function SettingsPage() {
       await applyServiceWorkerUpdate();
     } catch { /* ignore */ }
     setTimeout(() => { window.location.reload(); }, 1200);
+  };
+
+  const handleInstallApp = async () => {
+    if (appInstalled) return;
+    setInstallingApp(true);
+    const outcome = await promptInstall();
+    setInstallingApp(false);
+    if (outcome === "accepted") {
+      setAppInstalled(true);
+      toast.success(tr("installDone"));
+    } else if (outcome === "unavailable") {
+      // لا توجد مطالبة محفوظة → توجيه يدوي حسب النظام الأساسي.
+      toast.info(
+        /iPhone|iPad|iPod/.test(navigator.userAgent) ? tr("installIOSHint") : tr("installBrowserHint"),
+        { duration: 5000 }
+      );
+    }
   };
 
   const handleClearCache = async () => {
@@ -843,6 +866,60 @@ export default function SettingsPage() {
               <Loader2 size={14} className="animate-spin" />
               {isRtl ? "جارٍ التحديث وإعادة التحميل…" : "Mise à jour et rechargement…"}
             </div>
+          )}
+        </SectionCard>
+
+        {/* Installation */}
+        <SectionCard
+          icon={Smartphone}
+          title={tr("installTitle")}
+          desc={tr("installDesc")}
+          iconClass="bg-gradient-to-tr from-blue-500 to-cyan-500"
+        >
+          <div className="flex items-center justify-between gap-4 mb-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-md ${
+                  appInstalled
+                    ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400"
+                    : "bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400"
+                }`}
+              >
+                {appInstalled ? <CheckCircle2 size={18} /> : <Download size={18} />}
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{tr("installStatusLabel")}</p>
+                <p
+                  className={`font-black text-sm ${
+                    appInstalled
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-slate-900 dark:text-white"
+                  }`}
+                >
+                  {appInstalled ? tr("installStatusInstalled") : tr("installStatusNotInstalled")}
+                </p>
+              </div>
+            </div>
+            {appInstalled && <Check size={16} className="text-emerald-500 shrink-0" />}
+          </div>
+
+          {appInstalled ? (
+            <p className="text-[12px] font-bold text-slate-500 dark:text-slate-400 text-center">
+              {tr("installLaunchHint")}
+            </p>
+          ) : (
+            <button
+              onClick={handleInstallApp}
+              disabled={installingApp}
+              className="w-full min-h-[52px] flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-black text-sm shadow-lg shadow-blue-500/25 hover:shadow-xl hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-60 disabled:pointer-events-none"
+            >
+              {installingApp ? (
+                <Loader2 size={17} className="animate-spin" />
+              ) : (
+                <Download size={17} />
+              )}
+              {installingApp ? tr("installingApp") : tr("installButton")}
+            </button>
           )}
         </SectionCard>
 
