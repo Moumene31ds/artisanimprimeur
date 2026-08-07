@@ -9,7 +9,7 @@ import { useEffect, useState, useRef } from "react";
 import { 
   User, Mail, LogOut, ShieldCheck, Award, Crown, Loader2, Save, Gift, 
   ChevronRight, ArrowLeft, ShoppingBag, UserMinus, Camera, Copy, Check, Users, CheckCircle,
-  HandCoins, Send, Clock, XCircle, Trash2, QrCode
+  HandCoins, Send, Clock, XCircle, Trash2, QrCode, Settings
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -855,6 +855,14 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-3">
                    <div className="p-2.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-xl group-hover:scale-110 transition-transform"><ShoppingBag size={20}/></div>
                    <span className="font-bold text-slate-700 dark:text-slate-200">{isRtl ? "تتبع طلباتي" : "Mes Commandes"}</span>
+                </div>
+                <ChevronRight size={18} className={`text-slate-400 ${isRtl ? 'rotate-180' : ''}`}/>
+             </Link>
+
+             <Link href="/settings" className="flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-2xl transition-colors group">
+                <div className="flex items-center gap-3">
+                   <div className="p-2.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-xl group-hover:scale-110 transition-transform"><Settings size={20}/></div>
+                   <span className="font-bold text-slate-700 dark:text-slate-200">{isRtl ? "الإعدادات" : "Paramètres"}</span>
                 </div>
                 <ChevronRight size={18} className={`text-slate-400 ${isRtl ? 'rotate-180' : ''}`}/>
              </Link>

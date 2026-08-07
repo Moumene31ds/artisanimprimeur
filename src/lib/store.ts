@@ -17,11 +17,28 @@ export interface Product {
   };
 }
 
+// أنواع الإعدادات المتوفرة
+export type ThemeMode = "light" | "dark" | "system";
+export type FontSizeMode = "sm" | "md" | "lg" | "xl";
+
 // 2. تعريف بنية الحالة للمتجر (Store State Interface)
 interface AppState {
   // حالة اللغة
   language: "ar" | "fr";
   setLanguage: (lang: "ar" | "fr") => void;
+
+  // --- إعدادات التطبيق (Settings) ---
+  theme: ThemeMode;
+  setTheme: (theme: ThemeMode) => void;
+  performanceMode: boolean;
+  setPerformanceMode: (enabled: boolean) => void;
+  animationsEnabled: boolean;
+  setAnimationsEnabled: (enabled: boolean) => void;
+  fontSize: FontSizeMode;
+  setFontSize: (size: FontSizeMode) => void;
+  settingsConfigured: boolean;
+  setSettingsConfigured: (configured: boolean) => void;
+  resetSettings: () => void;
 
   // حالة سلة التسوق
   cart: Product[];
@@ -46,6 +63,25 @@ export const useAppStore = create<AppState>()(
       // حالة التحكم في اللغة
       language: "ar",
       setLanguage: (lang) => set({ language: lang }),
+
+      // --- إعدادات التطبيق ---
+      theme: "system",
+      setTheme: (theme) => set({ theme }),
+      performanceMode: false,
+      setPerformanceMode: (performanceMode) => set({ performanceMode }),
+      animationsEnabled: true,
+      setAnimationsEnabled: (animationsEnabled) => set({ animationsEnabled }),
+      fontSize: "md",
+      setFontSize: (fontSize) => set({ fontSize }),
+      settingsConfigured: false,
+      setSettingsConfigured: (settingsConfigured) => set({ settingsConfigured }),
+      resetSettings: () => set({
+        theme: "system",
+        performanceMode: false,
+        animationsEnabled: true,
+        fontSize: "md",
+        settingsConfigured: true,
+      }),
 
       // حالة وإجراءات سلة التسوق (Cart Actions)
       cart: [],

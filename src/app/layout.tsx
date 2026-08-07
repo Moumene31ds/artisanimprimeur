@@ -21,6 +21,8 @@ import PWAPrompt from "@/components/PWAPrompt";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
+import SettingsManager from "@/components/SettingsManager";
+
 const cairo = Cairo({ 
   subsets: ["latin", "arabic"], 
   variable: "--font-main",
@@ -83,6 +85,7 @@ export default function RootLayout({
         <Providers>
           <MaintenanceGuard>
             
+            <SettingsManager />
             <PWAPrompt />
             <AnnouncementBar /> 
             
@@ -105,9 +108,9 @@ export default function RootLayout({
         </Providers>
 
         <div className="fixed inset-0 -z-10 pointer-events-none overflow-hidden">
-          <div className="absolute top-[5%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 dark:bg-blue-700/10 rounded-full blur-[120px] animate-blob"></div>
-          <div className="absolute bottom-[10%] right-[-5%] w-[40%] h-[40%] bg-purple-500/10 dark:bg-purple-700/10 rounded-full blur-[120px] animate-blob animation-delay-2000"></div>
-          <div className="absolute top-[40%] right-[15%] w-[30%] h-[30%] bg-cyan-500/5 dark:bg-indigo-600/10 rounded-full blur-[140px] animate-blob animation-delay-1000"></div>
+          <div className="decor-blob absolute top-[5%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 dark:bg-blue-700/10 rounded-full blur-[120px] animate-blob"></div>
+          <div className="decor-blob absolute bottom-[10%] right-[-5%] w-[40%] h-[40%] bg-purple-500/10 dark:bg-purple-700/10 rounded-full blur-[120px] animate-blob animation-delay-2000"></div>
+          <div className="decor-blob absolute top-[40%] right-[15%] w-[30%] h-[30%] bg-cyan-500/5 dark:bg-indigo-600/10 rounded-full blur-[140px] animate-blob animation-delay-1000"></div>
         </div>
 
         <Analytics />

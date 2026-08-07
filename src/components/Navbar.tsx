@@ -4,7 +4,7 @@ import Link from "next/link";
 import { 
   ShoppingCart, Menu, User, Globe, 
   LogOut, ShieldCheck, X, ChevronDown, Bell, Sparkles,
-  Heart, Shield, FileCheck, Coins // الأيقونات الجديدة
+  Heart, Shield, FileCheck, Coins, Settings // الأيقونات الجديدة
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useEffect, useState } from "react";
@@ -286,6 +286,9 @@ export default function Navbar() {
                     <Link href="/payment-verify" onClick={() => setIsProfileDropdownOpen(false)} className="flex items-center gap-2 p-3 text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 rounded-xl transition-colors">
                       <FileCheck size={16} /> {isRtl ? "تأكيد دفع بريدي موب" : "Vérifier paiement"}
                     </Link>
+                    <Link href="/settings" onClick={() => setIsProfileDropdownOpen(false)} className="flex items-center gap-2 p-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 rounded-xl transition-colors">
+                      <Settings size={16} /> {isRtl ? "الإعدادات" : "Paramètres"}
+                    </Link>
                     {isAdmin && (
                       <Link href="/admin" onClick={() => setIsProfileDropdownOpen(false)} className="flex items-center gap-2 p-3 text-sm font-black text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950/20 rounded-xl transition-colors">
                         <ShieldCheck size={16} /> {isRtl ? "لوحة الإدارة" : "Administration"}
@@ -345,6 +348,9 @@ export default function Navbar() {
                <Link href="/privacy" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-slate-500 dark:text-slate-400 flex items-center gap-2 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors">
                  <Shield size={18} /> {isRtl ? 'سياسة الخصوصية' : 'Confidentialité'}
                </Link>
+               <Link href="/settings" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-slate-500 dark:text-slate-400 flex items-center gap-2 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors">
+                 <Settings size={18} /> {isRtl ? 'الإعدادات' : 'Paramètres'}
+               </Link>
                
                <Link href="/ai-studio" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-black text-purple-650 dark:text-purple-400 flex items-center gap-2 hover:bg-purple-50 dark:hover:bg-purple-950/20 rounded-xl transition-colors">
                  <Sparkles size={16} className="animate-pulse" />
@@ -359,6 +365,7 @@ export default function Navbar() {
                 <div className="border-t border-slate-200/50 dark:border-slate-700/50 pt-2 mt-2">
                   <Link href="/profile" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-slate-700 dark:text-slate-200 flex items-center gap-2 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors"><User size={16} /> {isRtl ? 'بروفيلي' : 'Mon Profil'}</Link>
                   <Link href="/payment-verify" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-emerald-650 dark:text-emerald-400 flex items-center gap-2 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors"><FileCheck size={16} /> {isRtl ? 'تأكيد الدفع بريدي موب' : 'Vérifier paiement'}</Link>
+                  <Link href="/settings" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-slate-700 dark:text-slate-200 flex items-center gap-2 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors"><Settings size={16} /> {isRtl ? 'الإعدادات' : 'Paramètres'}</Link>
                   {isAdmin && (
                     <Link href="/admin" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-black text-yellow-600 flex items-center gap-2 hover:bg-yellow-50/50 dark:hover:bg-yellow-900/20 transition-colors rounded-xl"><ShieldCheck size={16} /> {isRtl ? 'لوحة الإدارة' : 'Administration'}</Link>
                   )}

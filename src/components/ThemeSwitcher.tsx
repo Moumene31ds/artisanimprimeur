@@ -6,10 +6,12 @@ import { useTheme } from "next-themes";
 import { Sun, Moon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion"; // <-- إضافة Framer Motion
+import { useAppStore } from "@/lib/store";
 
 export function ThemeSwitcher() {
   const [mounted, setMounted] = useState(false);
   const { theme, setTheme } = useTheme();
+  const setStoreTheme = useAppStore((s) => s.setTheme);
   const isDark = theme === "dark";
 
   useEffect(() => { setMounted(true); }, []);
@@ -19,7 +21,11 @@ export function ThemeSwitcher() {
     <motion.button
       whileTap={{ scale: 0.85 }}
       whileHover={{ scale: 1.08 }}
-      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      onClick={() => {
+        const next = isDark ? "light" : "dark";
+        setTheme(next);
+        setStoreTheme(next);
+      }}
       className="p-2 rounded-full relative flex items-center justify-center
         bg-gradient-to-br from-amber-100 to-orange-200
         dark:from-slate-800 dark:to-indigo-950
