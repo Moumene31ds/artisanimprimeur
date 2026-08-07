@@ -11,7 +11,7 @@ import {
 import { 
   ShoppingBag, Settings, LayoutDashboard, Package, 
   ShieldCheck, Download, Tag, ScanLine, X, CheckCircle, Sparkles, Megaphone,
-  Printer, FileImage, BarChart3, HandCoins, Crown
+  Printer, FileImage, BarChart3, HandCoins, Crown, User, Loader2, Plus, Phone, Mail
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -81,6 +81,11 @@ export default function AdminPage() {
   // --- حالات الماسح الضوئي ---
   const [scannedOrder, setScannedOrder] = useState<any | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  // --- حالات مسح بطاقة العضوية (QR) ---
+  const [scannedMember, setScannedMember] = useState<any | null>(null);
+  const [memberLoading, setMemberLoading] = useState(false);
+  const [memberAwarding, setMemberAwarding] = useState(false);
 
   // --- حالات الإضافة ---
   const [newProduct, setNewProduct] = useState({ name: "", price: "", category: "Impression", image: "" });
@@ -285,6 +290,31 @@ export default function AdminPage() {
       const audio = new Audio('/beep.mp3');
       audio.play().catch(() => console.log("Audio play blocked"));
 
+      // إذا كان الرمز رمز عضوية (بطاقة L'Artisan الرقمية)
+      if (decodedText.startsWith("LARTISAN-MEMBER:")) {
+        const memberUid = decodedText.replace("LARTISAN-MEMBER:", "").trim();
+        setScannedMember(null);
+        setMemberLoading(true);
+        try {
+          const idToken = await user!.getIdToken();
+          const res = await fetch(`/api/loyalty/member-lookup?by=uid&q=${encodeURIComponent(memberUid)}`, {
+            headers: { Authorization: `Bearer ${idToken}` },
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            setScannedMember(data.member);
+            toast.success("Membre trouvé !");
+          } else {
+            toast.error(data.error || "Membre introuvable");
+          }
+        } catch (err) {
+          toast.error("Erreur de recherche du membre");
+        } finally {
+          setMemberLoading(false);
+        }
+        return;
+      }
+
       const orderRef = doc(db, "orders", decodedText);
       const orderSnap = await getDoc(orderRef);
       
@@ -311,6 +341,31 @@ export default function AdminPage() {
       toast.error("Erreur de mise à jour");
     } finally {
       setIsUpdatingStatus(false);
+    }
+  };
+
+  // منح نقاط ولاء فورية للعضو عند التواجد في المطبعة
+  const awardMemberBonus = async (points: number, reason: string) => {
+    if (!scannedMember || memberAwarding) return;
+    setMemberAwarding(true);
+    try {
+      const idToken = await user!.getIdToken();
+      const res = await fetch("/api/loyalty/adjust", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ userId: scannedMember.id, points, reason }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setScannedMember((prev: any) => ({ ...prev, points: data.newPoints }));
+        toast.success(`+${points} points accordés !`);
+      } else {
+        toast.error(data.error || "Erreur");
+      }
+    } catch (err) {
+      toast.error("Erreur d'attribution des points");
+    } finally {
+      setMemberAwarding(false);
     }
   };
 
@@ -420,7 +475,7 @@ export default function AdminPage() {
         ].map(t => (
           <button 
             key={t.id} 
-            onClick={() => { setTab(t.id); setScannedOrder(null); }} 
+            onClick={() => { setTab(t.id); setScannedOrder(null); setScannedMember(null); }} 
             className={`flex-1 min-w-[100px] py-4 rounded-[1.5rem] font-black text-xs flex items-center justify-center gap-2 transition-all ${
               tab === t.id ? 'bg-slate-900 dark:bg-accent text-white shadow-xl scale-105' : 'text-slate-500 hover:bg-white/50'
             }`}
@@ -446,18 +501,110 @@ export default function AdminPage() {
 
         {/* ==================== SCANNER TAB ==================== */}
         {tab === 'scanner' && (
-          <motion.div key="scanner" initial={{opacity:0, scale:0.95}} animate={{opacity:1, scale:1}} exit={{opacity:0, scale:0.95}} className="max-w-2xl mx-auto space-y-8">
+          <motion.div key="scanner" initial={{opacity:0, scale:0.95}} animate={{opacity:1, scale:1}} exit={{opacity:0, scale:0.95}} className="max-w-xl mx-auto space-y-8">
             <div className="text-center">
               <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-2">Scan Rapide</h2>
-              <p className="text-slate-500">Scannez le code QR sur la facture pour mettre à jour la commande.</p>
+              <p className="text-sm text-slate-500">Scannez le QR de la facture <span className="font-bold">(mise à jour)</span> ou la carte membre <span className="font-bold">(points de fidélité)</span>.</p>
             </div>
 
-            {!scannedOrder ? (
-              <div className="premium-glass p-8 rounded-[3rem] border border-white/60 dark:border-white/10 shadow-2xl">
+            {!scannedOrder && !scannedMember ? (
+              <div className="premium-glass p-4 sm:p-6 rounded-[2.5rem] border border-white/60 dark:border-white/10 shadow-2xl">
                 <QRScanner onScanSuccess={handleScanSuccess} />
               </div>
+            ) : scannedMember ? (
+              /* ====== لوحة العضو (بطاقة العضوية) ====== */
+              <motion.div initial={{opacity:0, y:40}} animate={{opacity:1, y:0}} className="premium-glass p-6 sm:p-8 rounded-[2.5rem] border border-emerald-300/40 dark:border-emerald-500/20 shadow-2xl shadow-emerald-500/10 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-400/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
+                <button
+                  onClick={() => setScannedMember(null)}
+                  className="absolute top-4 right-4 p-2 bg-slate-100 dark:bg-slate-800 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                  aria-label="Fermer"
+                >
+                  <X size={18} className="text-slate-600 dark:text-slate-300" />
+                </button>
+
+                <div className="flex items-center gap-4 mb-6 border-b border-slate-200 dark:border-slate-700 pb-6">
+                  {scannedMember.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={scannedMember.photoUrl}
+                      alt={scannedMember.displayName}
+                      className="w-16 h-16 rounded-2xl object-cover bg-slate-100 dark:bg-slate-800"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center">
+                      <User size={32} />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <h3 className="text-xl font-black text-slate-900 dark:text-white truncate">{scannedMember.displayName}</h3>
+                    <span className="inline-flex items-center gap-1.5 mt-1 text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30 px-2.5 py-1 rounded-full">
+                      <Crown size={12} /> {scannedMember.tier}
+                    </span>
+                  </div>
+                </div>
+
+                {memberLoading ? (
+                  <div className="py-10 flex items-center justify-center">
+                    <Loader2 size={28} className="animate-spin text-emerald-500" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-3 mb-6">
+                      <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+                        <p className="text-[10px] font-black uppercase text-slate-400">Points</p>
+                        <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{scannedMember.points}</p>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+                        <p className="text-[10px] font-black uppercase text-slate-400">Dépenses</p>
+                        <p className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">{Number(scannedMember.lifetimeSpending).toLocaleString("fr-FR")} DA</p>
+                      </div>
+                    </div>
+
+                    {(scannedMember.phone || scannedMember.email) && (
+                      <div className="space-y-2 mb-6 text-xs font-bold text-slate-600 dark:text-slate-300">
+                        {scannedMember.phone && (
+                          <p className="flex items-center gap-2"><Phone size={13} className="text-slate-400" /> {scannedMember.phone}</p>
+                        )}
+                        {scannedMember.email && (
+                          <p className="flex items-center gap-2 truncate"><Mail size={13} className="text-slate-400" /> {scannedMember.email}</p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">
+                        Bonus de présence en boutique
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          onClick={() => awardMemberBonus(10, "Bonus de présence en boutique")}
+                          disabled={memberAwarding}
+                          className="py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 cursor-pointer active:scale-95"
+                        >
+                          {memberAwarding ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} +10 Pts
+                        </button>
+                        <button
+                          onClick={() => awardMemberBonus(25, "Bonus fidélité en boutique")}
+                          disabled={memberAwarding}
+                          className="py-3.5 bg-teal-500 hover:bg-teal-600 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 cursor-pointer active:scale-95"
+                        >
+                          {memberAwarding ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} +25 Pts
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => setScannedMember(null)}
+                        className="w-full py-3.5 mt-1 bg-slate-900 dark:bg-slate-800 text-white rounded-2xl font-bold text-sm shadow-lg hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                      >
+                        Scanner un autre QR
+                      </button>
+                    </div>
+                  </>
+                )}
+              </motion.div>
             ) : (
-              <motion.div initial={{opacity:0, y:50}} animate={{opacity:1, y:0}} className="premium-glass p-8 rounded-[3rem] border border-accent/30 shadow-2xl shadow-accent/20 relative overflow-hidden">
+              /* ====== لوحة الطلب (الفاتورة) ====== */
+              <motion.div initial={{opacity:0, y:50}} animate={{opacity:1, y:0}} className="premium-glass p-6 sm:p-8 rounded-[2.5rem] border border-accent/30 shadow-2xl shadow-accent/20 relative overflow-hidden">
                 <button onClick={() => setScannedOrder(null)} className="absolute top-4 right-4 p-2 bg-slate-100 dark:bg-slate-800 rounded-full hover:bg-slate-200 transition-colors">
                   <X size={20} />
                 </button>
@@ -466,8 +613,8 @@ export default function AdminPage() {
                   <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-2xl flex items-center justify-center">
                     <ShoppingBag size={32} />
                   </div>
-                  <div>
-                    <h3 className="text-2xl font-black text-slate-900 dark:text-white">{scannedOrder.customerName}</h3>
+                  <div className="min-w-0">
+                    <h3 className="text-2xl font-black text-slate-900 dark:text-white truncate">{scannedOrder.customerName}</h3>
                     <p className="text-sm font-mono text-slate-500">#{scannedOrder.id}</p>
                   </div>
                 </div>

@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { db } from "@/lib/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "sonner";
+import Reveal from "@/components/Reveal";
 
 export default function LandingPage() {
   const { language, setLanguage } = useAppStore();
@@ -381,15 +382,17 @@ export default function LandingPage() {
         <div className="w-full bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl border border-slate-200 dark:border-slate-800 rounded-[2.5rem] p-8 z-10 mt-20">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {features.map((f, i) => (
-              <div key={i} className="flex items-start gap-4 p-4 rounded-2xl bg-white dark:bg-slate-950 border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-all">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border border-white/60 ${f.bg} ${f.color}`}>
-                  <f.icon size={22} />
+              <Reveal key={i} direction="up" delay={i * 0.08} className="h-full">
+                <div className="flex items-start gap-4 p-4 rounded-2xl bg-white dark:bg-slate-950 border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-all h-full">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border border-white/60 ${f.bg} ${f.color}`}>
+                    <f.icon size={22} />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-slate-900 dark:text-white text-sm">{f.title}</h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">{f.desc}</p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-black text-slate-900 dark:text-white text-sm">{f.title}</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">{f.desc}</p>
-                </div>
-              </div>
+              </Reveal>
             ))}
           </div>
         </div>

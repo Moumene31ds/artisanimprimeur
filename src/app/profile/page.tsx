@@ -9,15 +9,17 @@ import { useEffect, useState, useRef } from "react";
 import { 
   User, Mail, LogOut, ShieldCheck, Award, Crown, Loader2, Save, Gift, 
   ChevronRight, ArrowLeft, ShoppingBag, UserMinus, Camera, Copy, Check, Users, CheckCircle,
-  HandCoins, Send, Clock, XCircle
+  HandCoins, Send, Clock, XCircle, Trash2, QrCode
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useAppStore } from "@/lib/store";
 import Link from "next/link";
 import { GlobalLoader } from "@/components/GlobalLoader";
+import AvatarCropModal from "@/components/AvatarCropModal";
 import Image from "next/image";
 import confetti from "canvas-confetti";
+import { QRCodeSVG } from "qrcode.react";
 
 export default function ProfilePage() {
   const { user, loading, isAdmin } = useAuth();
@@ -44,6 +46,11 @@ export default function ProfilePage() {
   const [depositReason, setDepositReason] = useState("");
   const [depositSubmitting, setDepositSubmitting] = useState(false);
   
+  // Avatar states
+  const [photoURL, setPhotoURL] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [cropOpen, setCropOpen] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isRtl = language === 'ar';
@@ -55,6 +62,7 @@ export default function ProfilePage() {
       router.push("/login");
     } else if (user) {
       setNewName(user.displayName || "");
+      setPhotoURL(user.photoURL || null);
       fetchUserStats(user.uid);
       fetchUserReferral(user.uid);
 
@@ -258,6 +266,11 @@ export default function ProfilePage() {
     setSaving(true);
     try {
       await updateProfile(user, { displayName: newName.trim() });
+      // مزامنة الاسم مع وثيقة المستخدم في Firestore (تعتمد عليها لوحات الأدمن)
+      await setDoc(doc(db, "users", user.uid), {
+        displayName: newName.trim(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
       toast.success(isRtl ? "تم تحديث الاسم بنجاح!" : "Profil mis à jour !");
       setIsEditing(false);
     } catch (error) {
@@ -267,8 +280,8 @@ export default function ProfilePage() {
     }
   };
 
-  // ميزة رفع الصورة الشخصية إلى Cloudinary
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // فتح نافذة قص الصورة عند اختيار ملف
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
@@ -277,29 +290,69 @@ export default function ProfilePage() {
       toast.error(isRtl ? "حجم الصورة يجب أن يكون أقل من 5 ميجابايت" : "La taille de l'image doit être inférieure à 5 Mo");
       return;
     }
+    // أنواع مسموحة فقط
+    if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type)) {
+      toast.error(isRtl ? "يرجى اختيار صورة بصيغة JPG أو PNG" : "Choisissez une image JPG/PNG");
+      return;
+    }
 
+    setCropFile(file);
+    setCropOpen(true);
+    e.target.value = "";
+  };
+
+  // رفع الصورة المقصوصة إلى Cloudinary (عبر مسار الخادم الآمن) + تحديث الملف الشخصي
+  const confirmAvatarUpload = async (dataUrl: string, file: File) => {
+    if (!user) return;
     setUploadingImage(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    // تأكد من إنشاء Upload Preset غير موقع (Unsigned) في Cloudinary بهذا الاسم
-    formData.append("upload_preset", "artisan_profiles"); 
-
+    setCropOpen(false);
     try {
-      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+      const res = await fetch("/api/upload", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file: dataUrl }),
       });
-      
       const data = await res.json();
-      if (data.secure_url) {
-        await updateProfile(user, { photoURL: data.secure_url });
-        toast.success(isRtl ? "تم تحديث صورتك الشخصية بنجاح!" : "Photo de profil mise à jour !");
-      } else {
-        throw new Error("Upload failed");
-      }
+      if (!res.ok || !data.url) throw new Error(data.error || "Upload failed");
+
+      await updateProfile(user, { photoURL: data.url });
+      // حفظ رابط الصورة في Firestore حتى تظهر في لوحات الأدمن والتقارير
+      await setDoc(doc(db, "users", user.uid), {
+        photoUrl: data.url,
+        photoURL: data.url,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+
+      setPhotoURL(data.url);
+      toast.success(isRtl ? "تم تحديث صورتك الشخصية بنجاح!" : "Photo de profil mise à jour !");
+      confetti({ particleCount: 60, spread: 55, origin: { y: 0.6 } });
     } catch (error) {
-      toast.error(isRtl ? "فشل رفع الصورة" : "Échec du téléchargement de l'image");
+      console.error("Avatar upload error", error);
+      toast.error(isRtl ? "فشل رفع الصورة، حاول مجدداً" : "Échec du téléchargement de l'image");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  // إزالة الصورة الشخصية والعودة إلى الحرف الأول
+  const handleRemoveAvatar = async () => {
+    if (!user) return;
+    const confirmRemove = window.confirm(
+      isRtl ? "هل تريد إزالة صورتك الشخصية؟" : "Voulez-vous supprimer votre photo de profil ?"
+    );
+    if (!confirmRemove) return;
+    setUploadingImage(true);
+    try {
+      await updateProfile(user, { photoURL: "" });
+      await setDoc(doc(db, "users", user.uid), {
+        photoUrl: "",
+        photoURL: "",
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      setPhotoURL(null);
+      toast.success(isRtl ? "تمت إزالة الصورة" : "Photo supprimée");
+    } catch (error) {
+      toast.error(isRtl ? "فشلت إزالة الصورة" : "Échec de la suppression");
     } finally {
       setUploadingImage(false);
     }
@@ -356,28 +409,41 @@ export default function ProfilePage() {
             <div className="flex flex-col md:flex-row items-center gap-8 relative z-10">
               
               {/* قسم تعديل الصورة الشخصية التفاعلي */}
-              <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                <div className={`w-28 h-28 rounded-full overflow-hidden flex items-center justify-center text-4xl font-black shadow-2xl border-4 border-white dark:border-slate-800 transition-all ${user.photoURL ? 'bg-white' : 'bg-gradient-to-tr from-accent to-blue-400 text-white'}`}>
-                  {uploadingImage ? (
-                    <Loader2 size={32} className="animate-spin text-accent" />
-                  ) : user.photoURL ? (
-                    <Image src={user.photoURL} alt="Profile" width={112} height={112} className="w-full h-full object-cover" />
-                  ) : (
-                    user.displayName ? user.displayName.charAt(0).toUpperCase() : <User size={48} />
-                  )}
+              <div className="relative flex flex-col items-center gap-3">
+                <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                  <div className={`w-28 h-28 rounded-full overflow-hidden flex items-center justify-center text-4xl font-black shadow-2xl border-4 border-white dark:border-slate-800 transition-all ${photoURL ? 'bg-white' : 'bg-gradient-to-tr from-accent to-blue-400 text-white'}`}>
+                    {uploadingImage ? (
+                      <Loader2 size={32} className="animate-spin text-accent" />
+                    ) : photoURL ? (
+                      <Image src={photoURL} alt="Profile" width={112} height={112} className="w-full h-full object-cover" unoptimized />
+                    ) : (
+                      user.displayName ? user.displayName.charAt(0).toUpperCase() : <User size={48} />
+                    )}
+                  </div>
+                  
+                  {/* تأثير الظهور عند التمرير لتغيير الصورة */}
+                  <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Camera size={28} className="text-white drop-shadow-md" />
+                  </div>
                 </div>
-                
-                {/* تأثير الظهور عند التمرير لتغيير الصورة */}
-                <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Camera size={28} className="text-white drop-shadow-md" />
-                </div>
-                
+
+                {/* زر إزالة الصورة */}
+                {photoURL && !uploadingImage && (
+                  <button
+                    onClick={handleRemoveAvatar}
+                    className="flex items-center gap-1.5 text-[10px] font-bold text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
+                  >
+                    <Trash2 size={12} />
+                    {isRtl ? "إزالة الصورة" : "Supprimer"}
+                  </button>
+                )}
+
                 {/* إدخال الملف المخفي */}
                 <input 
                   type="file" 
                   ref={fileInputRef} 
-                  onChange={handleImageUpload} 
-                  accept="image/*" 
+                  onChange={handleImageSelect} 
+                  accept="image/jpeg,image/png,image/webp,image/gif" 
                   className="hidden" 
                 />
               </div>
@@ -416,6 +482,48 @@ export default function ProfilePage() {
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{isRtl ? "عدد الطلبات" : "Commandes"}</p>
                   <p className="text-3xl font-black text-slate-800 dark:text-white">{ordersCount}</p>
                </div>
+            </div>
+          </motion.div>
+
+          {/* --- بطاقة العضوية الرقمية (QR) --- */}
+          <motion.div
+            initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} transition={{delay: 0.08}}
+            className="premium-glass p-8 md:p-10 rounded-[3rem] border border-white/60 dark:border-white/5 shadow-xl relative overflow-hidden"
+          >
+            <div className="absolute top-0 left-0 w-40 h-40 bg-emerald-500/10 rounded-full blur-2xl -ml-12 -mt-12"></div>
+            <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
+              <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-xl border-4 border-slate-900 dark:border-accent relative shrink-0">
+                <QRCodeSVG
+                  value={`LARTISAN-MEMBER:${user.uid}`}
+                  size={150}
+                  level="M"
+                  bgColor="#ffffff"
+                  fgColor="#0f172a"
+                />
+                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-slate-900 dark:bg-accent text-white text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full whitespace-nowrap">
+                  L'Artisan ID
+                </div>
+              </div>
+
+              <div className="flex-1 text-center md:text-start space-y-3">
+                <div className="flex items-center justify-center md:justify-start gap-2">
+                  <div className="p-2 bg-emerald-50 dark:bg-emerald-900/30 rounded-xl">
+                    <QrCode size={22} className="text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <h3 className="font-black text-lg text-slate-900 dark:text-white">
+                    {isRtl ? "بطاقة العضوية الرقمية" : "Carte de membre digitale"}
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-bold leading-relaxed">
+                  {isRtl
+                    ? "اعرض هذا الرمز عند المطبعة وسجّل حضورك واحصل على نقاط الولاء الفورية دون الحاجة لفتح تطبيق آخر."
+                    : "Montrez ce code à l'atelier pour pointer et gagner des points de fidélité instantanément."}
+                </p>
+                <div className="inline-flex items-center gap-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 px-4 py-2 rounded-xl">
+                  <span className="text-[10px] font-black text-slate-400 uppercase">{isRtl ? "رقم العضوية" : "N° Membre"}</span>
+                  <span className="text-sm font-black font-mono text-slate-900 dark:text-white tracking-wider select-all">{myReferralCode}</span>
+                </div>
+              </div>
             </div>
           </motion.div>
 
@@ -773,6 +881,14 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* نافذة قص الصورة الشخصية */}
+      <AvatarCropModal
+        open={cropOpen}
+        file={cropFile}
+        onClose={() => setCropOpen(false)}
+        onConfirm={confirmAvatarUpload}
+      />
     </div>
   );
 }
