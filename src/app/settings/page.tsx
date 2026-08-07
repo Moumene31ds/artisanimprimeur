@@ -19,7 +19,7 @@ import {
   getRecommendations, estimateBatterySavings, getConfidenceInfo,
   type DeviceSignals, type BatteryInfo,
 } from "@/lib/device";
-import { checkForUpdates, getBuildInfo, applyServiceWorkerUpdate, requestNotificationPermission } from "@/lib/pwa";
+import { checkForUpdates, getBuildInfo, applyServiceWorkerUpdate, requestNotificationPermission, getLastSeenBuild, dispatchShowUpdate } from "@/lib/pwa";
 import { APP_VERSION, CHANGELOG } from "@/lib/changelog";
 
 function Toggle({
@@ -256,16 +256,11 @@ export default function SettingsPage() {
     setCheckingUpdate(true);
     try {
       await checkForUpdates();
-      await new Promise((r) => setTimeout(r, 1200));
       const info = await getBuildInfo();
-      let lastSeen: string | null = null;
-      try {
-        lastSeen = localStorage.getItem("pwa-last-seen-build");
-      } catch { /* ignore */ }
-      if (info && lastSeen === info.version) {
-        toast.success(tr("upToDate"));
-      } else if (info) {
-        toast.info(tr("updateAvailable"), { duration: 4000 });
+      const lastSeen = getLastSeenBuild();
+      if (info && lastSeen !== info.version) {
+        // نسخة جديدة حقيقية → إظهار واجهة التحديث فوراً.
+        dispatchShowUpdate(info);
       } else {
         toast.success(tr("upToDate"));
       }

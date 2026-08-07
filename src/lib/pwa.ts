@@ -128,12 +128,44 @@ export function pollForUpdates(intervalMs = 5 * 60 * 1000): () => void {
   };
 }
 
-/** الحصول على نسخة البناء من الخادم (بلا تخزين مؤقت). */
-export async function getBuildInfo(): Promise<{
+export interface BuildInfo {
   version: string;
   release?: string;
   features?: { ar: string[]; fr: string[] };
-} | null> {
+}
+
+/** مفتاح آخر نسخة شاهدها المستخدم (مخزّن محلياً). */
+export const LAST_SEEN_BUILD = "pwa-last-seen-build";
+
+/** اسم حدث إظهار واجهة التحديث فوراً (يستمع إليه PWALifecycle). */
+export const SHOW_UPDATE_EVENT = "app:show-update";
+
+/** آخر نسخة رآها/رفضها/طبّقها المستخدم. */
+export function getLastSeenBuild(): string | null {
+  try {
+    return localStorage.getItem(LAST_SEEN_BUILD);
+  } catch {
+    return null;
+  }
+}
+
+/** تعليم نسخة معيّنة على أنها شوهدت. */
+export function markBuildSeen(buildId: string): void {
+  try {
+    localStorage.setItem(LAST_SEEN_BUILD, buildId);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** بثّ حدث لإظهار واجهة التحديث فوراً (مثل التحقق اليدوي من صفحة الإعدادات). */
+export function dispatchShowUpdate(info: BuildInfo): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(SHOW_UPDATE_EVENT, { detail: info }));
+}
+
+/** الحصول على نسخة البناء من الخادم (بلا تخزين مؤقت). */
+export async function getBuildInfo(): Promise<BuildInfo | null> {
   try {
     const res = await fetch('/api/build-info', { cache: 'no-store' });
     if (!res.ok) return null;

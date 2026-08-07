@@ -4,7 +4,7 @@
 // CHANGELOG يعرض الميزات للعملاء بالعربية والفرنسية.
 // ---------------------------------------------------------------------------
 
-export const APP_VERSION = 'v6.4';
+export const APP_VERSION = 'v6.4.1';
 
 export interface ChangelogEntry {
   version: string;
@@ -12,6 +12,19 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'v6.4.1',
+    features: {
+      ar: [
+        '⚡ التحقق من التحديثات يعرض واجهة التحديث فوراً عند وجود نسخة جديدة',
+        '🛠️ إصلاحات وتحسينات عامة في الاستقرار',
+      ],
+      fr: [
+        '⚡ La vérification des mises à jour affiche immédiatement l\u2019écran de mise à jour',
+        '🛠️ Corrections et améliorations de stabilité',
+      ],
+    },
+  },
   {
     version: 'v6.4',
     features: {

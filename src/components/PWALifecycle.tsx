@@ -14,9 +14,13 @@ import {
   checkForUpdates,
   pollForUpdates,
   getBuildInfo,
+  getLastSeenBuild,
+  markBuildSeen,
   registerPeriodicSync,
   triggerSyncNow,
   isOnline,
+  SHOW_UPDATE_EVENT,
+  type BuildInfo,
 } from "@/lib/pwa";
 
 // -----------------------------------------------
@@ -34,7 +38,6 @@ import {
 
 const AUTO_UPDATE_AFTER_MS = 45 * 1000;
 const RELOADED_FLAG = "pwa-updated-reloaded";
-const LAST_SEEN_BUILD = "pwa-last-seen-build";
 
 interface UpdateInfo {
   buildId: string;
@@ -56,14 +59,6 @@ export default function PWALifecycle() {
   const dismissedRef = useRef(false);
   const requestedReloadRef = useRef(false);
   const reloadingRef = useRef(false);
-
-  const markBuildSeen = (buildId: string) => {
-    try {
-      localStorage.setItem(LAST_SEEN_BUILD, buildId);
-    } catch {
-      /* ignore */
-    }
-  };
 
   const applyUpdate = useCallback(() => {
     if (reloadingRef.current) return;
@@ -118,12 +113,7 @@ export default function PWALifecycle() {
     const handleUpdateDetected = async () => {
       const info = await getBuildInfo();
       if (!info?.version) return;
-      let lastSeen: string | null = null;
-      try {
-        lastSeen = localStorage.getItem(LAST_SEEN_BUILD);
-      } catch {
-        /* ignore */
-      }
+      const lastSeen = getLastSeenBuild();
       // نفس النسخة شوهدت/طبّقت/رُفضت سابقاً → لا إزعاج.
       if (lastSeen === info.version) return;
 
@@ -219,6 +209,26 @@ export default function PWALifecycle() {
     updateInfoRef.current = null;
     setUpdateInfo(null);
   };
+
+  // إظهار فوري لواجهة التحديث (من التحقق اليدوي في الإعدادات أو أي مصدر آخر).
+  useEffect(() => {
+    const onShow = (event: Event) => {
+      const detail = (event as CustomEvent).detail as BuildInfo | undefined;
+      if (!detail?.version) return;
+      if (updateInfoRef.current?.buildId === detail.version) return;
+      const next: UpdateInfo = {
+        buildId: detail.version,
+        release: detail.release || detail.version,
+        features: detail.features || { ar: [], fr: [] },
+      };
+      pendingSinceRef.current = Date.now();
+      dismissedRef.current = false;
+      updateInfoRef.current = next;
+      setUpdateInfo(next);
+    };
+    window.addEventListener(SHOW_UPDATE_EVENT, onShow);
+    return () => window.removeEventListener(SHOW_UPDATE_EVENT, onShow);
+  }, []);
 
   const features = updateInfo ? (isRtl ? updateInfo.features.ar : updateInfo.features.fr) : [];
 
