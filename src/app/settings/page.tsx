@@ -9,7 +9,8 @@ import {
   Monitor, Smartphone, Sparkles, ChevronRight, ArrowLeft, Zap, Cpu, MemoryStick,
   Wifi, RefreshCw, Rocket, Bell, Vibrate, Loader2, Activity, Droplets, Eye,
   HardDrive, Trash2, Battery, BatteryCharging, Clock, Download, CheckCircle2,
-  Share2, Fingerprint, ScanFace, ShieldCheck, Lock, KeyRound, Timer, EyeOff
+  Share2, Fingerprint, ScanFace, ShieldCheck, Lock, KeyRound, Timer, EyeOff,
+  Bot, Volume2, ArrowDown, MessageSquareCode
 } from "lucide-react";
 import { useAppStore, type ThemeMode, type FontSizeMode, type DeviceTier } from "@/lib/store";
 import { useTheme } from "next-themes";
@@ -27,6 +28,18 @@ import type { BiometryKind } from "@/lib/native";
 import { isBiometricLockEnabled, setBiometricLockEnabled } from "@/components/NativeBootstrap";
 import { useAppLock, type LockMode } from "@/lib/applock";
 import { PinSetupSheet, VerifyPinSheet } from "@/components/PinSheets";
+import {
+  getChatHistory, clearChatHistory, buildChatExportText, dispatchOpenChat,
+  CHAT_CLEARED_EVENT,
+} from "@/lib/chat-storage";
+
+interface AiMetaInfo {
+  available: boolean;
+  provider?: string;
+  model?: string;
+  label?: { fr: string; ar: string };
+  message?: string;
+}
 
 function Toggle({
   checked,
@@ -144,6 +157,11 @@ export default function SettingsPage() {
     keepAwake, setKeepAwake,
     clearCart, clearFavorites,
     resetSettings,
+    chatAutoRead, setChatAutoRead,
+    chatSoundOnMessage, setChatSoundOnMessage,
+    chatAutoScroll, setChatAutoScroll,
+    chatPersistHistory, setChatPersistHistory,
+    chatShowSuggestions, setChatShowSuggestions,
   } = useAppStore();
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -161,6 +179,9 @@ export default function SettingsPage() {
   const [facts, setFacts] = useState<ReturnType<typeof getDeviceFacts> | null>(null);
   const [battery, setBattery] = useState<BatteryInfo | null>(null);
   const [storage, setStorage] = useState<{ local: number; cache: number }>({ local: 0, cache: 0 });
+  const [aiMeta, setAiMeta] = useState<AiMetaInfo | null>(null);
+  const [aiMetaLoading, setAiMetaLoading] = useState(true);
+  const [chatStats, setChatStats] = useState<{ messages: number; bytes: number }>({ messages: 0, bytes: 0 });
 
   const lock = useAppLock();
   const [pinSetupOpen, setPinSetupOpen] = useState(false);
@@ -212,6 +233,51 @@ export default function SettingsPage() {
   useEffect(() => {
     if (deviceScore !== null) setFacts(getDeviceFacts());
   }, [deviceScore]);
+
+  const refreshChatStats = () => {
+    const info = getChatHistory();
+    setChatStats({ messages: info.messages.length, bytes: info.bytes });
+  };
+
+  // معلومات مزود الذكاء + إحصائيات سجل المحادثة
+  useEffect(() => {
+    setAiMetaLoading(true);
+    fetch("/api/chat/meta")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setAiMeta(d))
+      .catch(() => setAiMeta(null))
+      .finally(() => setAiMetaLoading(false));
+    refreshChatStats();
+    const onCleared = () => refreshChatStats();
+    window.addEventListener(CHAT_CLEARED_EVENT, onCleared);
+    return () => window.removeEventListener(CHAT_CLEARED_EVENT, onCleared);
+  }, []);
+
+  const handleClearChatHistory = () => {
+    if (!window.confirm(tr("aiClearHistoryConfirm"))) return;
+    clearChatHistory();
+    refreshChatStats();
+    toast.success(tr("aiHistoryCleared"));
+  };
+
+  const handleExportChat = () => {
+    const info = getChatHistory();
+    const text = buildChatExportText(info.messages, language);
+    if (!text) {
+      toast.error(isRtl ? "لا توجد رسائل لتصديرها" : "Aucun message à exporter");
+      return;
+    }
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `lartisan-chat-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast.success(tr("aiExportDone"));
+  };
 
   if (!mounted) return null;
 
@@ -917,6 +983,106 @@ export default function SettingsPage() {
               {isRtl ? "جارٍ التحديث وإعادة التحميل…" : "Mise à jour et rechargement…"}
             </div>
           )}
+        </SectionCard>
+
+        {/* L'Artisan AI */}
+        <SectionCard
+          icon={Bot}
+          title={tr("aiChatTitle")}
+          desc={tr("aiChatDesc")}
+          iconClass="bg-gradient-to-tr from-indigo-600 to-violet-600"
+        >
+          {/* حالة المزود والنموذج */}
+          <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-indigo-50 to-violet-50 dark:from-indigo-950/40 dark:to-violet-950/40 border border-indigo-100 dark:border-indigo-800/60 mb-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="relative w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center shadow-md shrink-0">
+                <Sparkles size={18} />
+                <span className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white dark:border-slate-950 ${aiMeta?.available ? 'bg-emerald-500' : 'bg-red-500'}`} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{tr("aiProvider")}</p>
+                <p className="font-black text-sm text-slate-900 dark:text-white truncate">
+                  {aiMetaLoading
+                    ? tr("aiProviderChecking")
+                    : aiMeta?.available
+                      ? (aiMeta.label?.[isRtl ? "ar" : "fr"] ?? (aiMeta.provider === 'ollama' ? 'Ollama' : 'OpenRouter'))
+                      : tr("aiProviderUnavailable")}
+                </p>
+              </div>
+            </div>
+            {aiMeta?.available && aiMeta.model && (
+              <span className="shrink-0 text-[10px] font-black px-2.5 py-1 rounded-full bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 truncate max-w-[45%]">
+                <Cpu size={10} className="inline -mt-0.5 mr-1" />
+                {aiMeta.model}
+              </span>
+            )}
+          </div>
+
+          {/* سجل المحادثة */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 mb-2">
+              <div className="flex items-center gap-3 min-w-0">
+                <HardDrive size={18} className="text-indigo-500 shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-black text-sm text-slate-800 dark:text-slate-100">{tr("aiHistoryTitle")}</p>
+                  <p className="text-[11px] font-bold text-slate-400">
+                    {chatStats.messages > 0
+                      ? `${chatStats.messages} ${tr("aiHistoryMessages")} · ${fmtBytes(chatStats.bytes)}`
+                      : tr("aiHistoryEmpty")}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                onClick={handleExportChat}
+                disabled={chatStats.messages === 0}
+                className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 text-xs font-black border border-indigo-100 dark:border-indigo-800/60 hover:bg-indigo-100 dark:hover:bg-indigo-950/70 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+              >
+                <Download size={15} />
+                {tr("aiExportHistory")}
+              </button>
+              <button
+                onClick={handleClearChatHistory}
+                disabled={chatStats.messages === 0}
+                className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 text-xs font-black border border-red-200 dark:border-red-800/60 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+              >
+                <Trash2 size={15} />
+                {tr("aiClearHistory")}
+              </button>
+            </div>
+          </div>
+
+          {/* خيارات الشات */}
+          <div className="flex flex-col gap-2.5">
+            {[
+              { icon: <Volume2 size={17} />, label: tr("aiAutoRead"), desc: tr("aiAutoReadDesc"), checked: chatAutoRead, onChange: setChatAutoRead, color: "text-indigo-500" },
+              { icon: <Bell size={17} />, label: tr("aiSound"), desc: tr("aiSoundDesc"), checked: chatSoundOnMessage, onChange: setChatSoundOnMessage, color: "text-rose-500" },
+              { icon: <ArrowDown size={17} />, label: tr("aiAutoScroll"), desc: tr("aiAutoScrollDesc"), checked: chatAutoScroll, onChange: setChatAutoScroll, color: "text-emerald-500" },
+              { icon: <HardDrive size={17} />, label: tr("aiPersistHistory"), desc: tr("aiPersistHistoryDesc"), checked: chatPersistHistory, onChange: setChatPersistHistory, color: "text-cyan-500" },
+              { icon: <Sparkles size={17} />, label: tr("aiShowSuggestions"), desc: tr("aiShowSuggestionsDesc"), checked: chatShowSuggestions, onChange: setChatShowSuggestions, color: "text-violet-500" },
+            ].map((item, i) => (
+              <div key={i} className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                <div className="flex items-start gap-3 min-w-0">
+                  <span className={`${item.color} shrink-0 mt-0.5`}>{item.icon}</span>
+                  <div className="min-w-0">
+                    <p className="font-black text-sm text-slate-800 dark:text-slate-100">{item.label}</p>
+                    <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">{item.desc}</p>
+                  </div>
+                </div>
+                <Toggle checked={item.checked} onChange={item.onChange} />
+              </div>
+            ))}
+          </div>
+
+          {/* فتح الشات */}
+          <button
+            onClick={dispatchOpenChat}
+            className="w-full min-h-[52px] mt-4 flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-black text-sm shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:brightness-110 active:scale-[0.98] transition-all"
+          >
+            <MessageSquareCode size={17} />
+            {tr("aiOpenChat")}
+          </button>
         </SectionCard>
 
         {/* Installation */}

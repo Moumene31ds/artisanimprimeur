@@ -63,6 +63,18 @@ interface AppState {
   keepAwake: boolean;
   setKeepAwake: (enabled: boolean) => void;
 
+  // --- إعدادات الشات (L'Artisan AI) ---
+  chatAutoRead: boolean;
+  setChatAutoRead: (enabled: boolean) => void;
+  chatSoundOnMessage: boolean;
+  setChatSoundOnMessage: (enabled: boolean) => void;
+  chatAutoScroll: boolean;
+  setChatAutoScroll: (enabled: boolean) => void;
+  chatPersistHistory: boolean;
+  setChatPersistHistory: (enabled: boolean) => void;
+  chatShowSuggestions: boolean;
+  setChatShowSuggestions: (enabled: boolean) => void;
+
   // حالة سلة التسوق
   cart: Product[];
   addToCart: (product: Omit<Product, "quantity"> & { quantity?: number }) => void;
@@ -109,6 +121,11 @@ export const useAppStore = create<AppState>()(
         backgroundEffects: true,
         reduceBlur: false,
         keepAwake: false,
+        chatAutoRead: false,
+        chatSoundOnMessage: true,
+        chatAutoScroll: true,
+        chatPersistHistory: true,
+        chatShowSuggestions: true,
         settingsConfigured: true,
       }),
 
@@ -133,6 +150,18 @@ export const useAppStore = create<AppState>()(
       setReduceBlur: (reduceBlur) => set({ reduceBlur }),
       keepAwake: false,
       setKeepAwake: (keepAwake) => set({ keepAwake }),
+
+      // --- إعدادات الشات ---
+      chatAutoRead: false,
+      setChatAutoRead: (chatAutoRead) => set({ chatAutoRead }),
+      chatSoundOnMessage: true,
+      setChatSoundOnMessage: (chatSoundOnMessage) => set({ chatSoundOnMessage }),
+      chatAutoScroll: true,
+      setChatAutoScroll: (chatAutoScroll) => set({ chatAutoScroll }),
+      chatPersistHistory: true,
+      setChatPersistHistory: (chatPersistHistory) => set({ chatPersistHistory }),
+      chatShowSuggestions: true,
+      setChatShowSuggestions: (chatShowSuggestions) => set({ chatShowSuggestions }),
 
       // حالة وإجراءات سلة التسوق (Cart Actions)
       cart: [],

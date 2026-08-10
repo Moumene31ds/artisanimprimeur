@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, KeyboardEvent, DragEvent } from "react";
+import { useState, useEffect, useRef, useMemo, KeyboardEvent, DragEvent } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { useAppStore } from "@/lib/store";
@@ -12,11 +12,10 @@ import {
   Trash2, ArrowLeftRight, Truck, HelpCircle,
   Square, Copy, Check, RefreshCw, WifiOff, ArrowDown, Mic, MicOff,
   Volume2, ThumbsUp, ThumbsDown, Paperclip, UploadCloud, ExternalLink,
-  ShoppingCart, Cpu, BadgePercent
+  ShoppingCart, Cpu, BadgePercent, Settings2, Search, Download, HardDrive
 } from "lucide-react";
 import { nativeHaptic, nativeHapticSuccess, nativeSpeechRecognize, isNative } from "@/lib/native";
-
-const CHAT_STORAGE_KEY = "lartisan_chat_history";
+import { CHAT_STORAGE_KEY, OPEN_CHAT_EVENT, CHAT_CLEARED_EVENT, buildChatExportText } from "@/lib/chat-storage";
 
 interface ProductResult {
   id: string;
@@ -34,9 +33,52 @@ interface MetaInfo {
   message?: string;
 }
 
+function MiniToggle({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative w-10 h-6 rounded-full transition-colors duration-300 shrink-0 ${
+        checked
+          ? "bg-gradient-to-r from-indigo-500 to-blue-500 shadow-[0_0_10px_rgba(99,102,241,0.4)]"
+          : "bg-slate-200 dark:bg-slate-700"
+      } disabled:opacity-50`}
+    >
+      <motion.span
+        layout
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-md ${
+          checked ? "right-1" : "left-1"
+        }`}
+      />
+    </button>
+  );
+}
+
 export default function AntigravityChat() {
   const language = useAppStore((state) => state.language);
   const addToCart = useAppStore((state) => state.addToCart);
+  const chatAutoRead = useAppStore((state) => state.chatAutoRead);
+  const setChatAutoRead = useAppStore((state) => state.setChatAutoRead);
+  const chatSoundOnMessage = useAppStore((state) => state.chatSoundOnMessage);
+  const setChatSoundOnMessage = useAppStore((state) => state.setChatSoundOnMessage);
+  const chatAutoScroll = useAppStore((state) => state.chatAutoScroll);
+  const setChatAutoScroll = useAppStore((state) => state.setChatAutoScroll);
+  const chatPersistHistory = useAppStore((state) => state.chatPersistHistory);
+  const setChatPersistHistory = useAppStore((state) => state.setChatPersistHistory);
+  const chatShowSuggestions = useAppStore((state) => state.chatShowSuggestions);
+  const setChatShowSuggestions = useAppStore((state) => state.setChatShowSuggestions);
   const pathname = usePathname();
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
@@ -54,6 +96,10 @@ export default function AntigravityChat() {
   const [isDragging, setIsDragging] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [meta, setMeta] = useState<MetaInfo | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -67,12 +113,12 @@ export default function AntigravityChat() {
     ? "مرحباً بك! أنا **L'Artisan AI**، مساعدك الذكي في مطبعة الحرفي. أعرف كل شيء عن أسعارنا وخدماتنا 🖨️، مثل **100 بطاقة زيارة = 2500 دج**. اسألني عن أي شيء! 🎨✨"
     : "Bonjour ! Je suis **L'Artisan AI**, votre assistant intelligent chez L'Artisan Imprimeur. Je connais nos prix et services 🖨️, par exemple **100 cartes de visite = 2500 DA**. Demandez-moi n'importe quoi ! 🎨✨";
 
-  const defaultWelcome: any = {
+  const defaultWelcome = useMemo<any>(() => ({
     id: "welcome",
     role: "assistant" as const,
     content: welcomeText,
     createdAt: new Date()
-  };
+  }), [welcomeText]);
 
   const getMessageTextContent = (msg: any): string => {
     if (!msg) return "";
@@ -95,7 +141,17 @@ export default function AntigravityChat() {
       transport: new DefaultChatTransport({ api: "/api/chat" }),
       messages: [defaultWelcome],
       onFinish: () => {
-        scrollToBottom("smooth");
+        if (chatAutoScroll) scrollToBottom("smooth");
+        if (chatSoundOnMessage) playMessageSound();
+        if (chatAutoRead) {
+          const last = messages[messages.length - 1];
+          if (last && last.role === "assistant" && last.id !== "welcome") {
+            const text = getMessageTextContent(last);
+            if (text) {
+              setTimeout(() => speakMessage(text, last.id), 350);
+            }
+          }
+        }
         if (!isOpenRef.current) setUnreadCount((c) => c + 1);
       }
     });
@@ -156,7 +212,7 @@ export default function AntigravityChat() {
   }, [setMessages]);
 
   useEffect(() => {
-    if (mounted && messages.length > 1) {
+    if (mounted && messages.length > 1 && chatPersistHistory) {
       const clean = messages.map((m: any) => ({
         id: m.id,
         role: m.role,
@@ -165,7 +221,31 @@ export default function AntigravityChat() {
       }));
       localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(clean));
     }
-  }, [messages, mounted]);
+  }, [messages, mounted, chatPersistHistory]);
+
+  // فتح الشات أو مسحه من خارج المكوّن (صفحة الإعدادات...)
+  useEffect(() => {
+    const openChat = () => {
+      setIsOpen(true);
+      setShowSettings(false);
+      setShowSearch(false);
+      setShowExport(false);
+    };
+    const onCleared = () => {
+      setMessages([defaultWelcome]);
+      setFeedback({});
+      setTextInput("");
+      setSearchQuery("");
+      setUnreadCount(0);
+      if (isLoading) stop();
+    };
+    window.addEventListener(OPEN_CHAT_EVENT, openChat);
+    window.addEventListener(CHAT_CLEARED_EVENT, onCleared);
+    return () => {
+      window.removeEventListener(OPEN_CHAT_EVENT, openChat);
+      window.removeEventListener(CHAT_CLEARED_EVENT, onCleared);
+    };
+  }, [setMessages, defaultWelcome, isLoading, stop]);
 
   // مراقبة أدوات التوجيه (Navigation Tools)
   useEffect(() => {
@@ -198,10 +278,10 @@ export default function AntigravityChat() {
   }, [isOpen]);
 
   useEffect(() => {
-    if (isLoading) {
+    if (isLoading && chatAutoScroll) {
       scrollToBottom("smooth");
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading, chatAutoScroll]);
 
   const handleScroll = () => {
     if (!chatContainerRef.current) return;
@@ -412,6 +492,72 @@ export default function AntigravityChat() {
 
     setPlayingId(id);
     window.speechSynthesis.speak(utterance);
+  };
+
+  // نغمة خفيفة عند وصول رسالة جديدة (Web Audio).
+  const playMessageSound = () => {
+    try {
+      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      const ctx: AudioContext = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.4);
+      osc.onended = () => ctx.close();
+    } catch { /* ignore */ }
+  };
+
+  const handleExportCopy = async () => {
+    const text = buildChatExportText(messages as any, language);
+    if (!text) {
+      toast.error(isRtl ? "لا توجد رسائل لتصديرها" : "Aucun message à exporter");
+      return;
+    }
+    await navigator.clipboard.writeText(text);
+    setShowExport(false);
+    toast.success(isRtl ? "تم نسخ المحادثة كاملة ✓" : "Discussion copiée intégralement ✓");
+  };
+
+  const handleExportDownload = () => {
+    const text = buildChatExportText(messages as any, language);
+    if (!text) {
+      toast.error(isRtl ? "لا توجد رسائل لتصديرها" : "Aucun message à exporter");
+      return;
+    }
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `lartisan-chat-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setShowExport(false);
+    nativeHapticSuccess();
+    toast.success(isRtl ? "تم تنزيل المحادثة ✓" : "Discussion téléchargée ✓");
+  };
+
+  // تسمية اليوم للفواصل الزمنية بين الرسائل.
+  const formatDayLabel = (ts?: string | number | Date): string | null => {
+    if (!ts) return null;
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return null;
+    const now = new Date();
+    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const diffDays = Math.round((startToday - startDay) / 86400000);
+    if (diffDays === 0) return isRtl ? "اليوم" : "Aujourd'hui";
+    if (diffDays === 1) return isRtl ? "الأمس" : "Hier";
+    return d.toLocaleDateString(isRtl ? "ar-DZ" : "fr-FR", { day: "numeric", month: "short" });
   };
 
   const handleQuickPromptClick = async (promptText: string) => {
@@ -743,7 +889,18 @@ export default function AntigravityChat() {
 
   const contextualPrompts = getContextualPrompts();
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant" && m.id !== "welcome");
-  const showContextual = !!lastAssistant && contextualPrompts.length > 0 && !isLoading;
+  const showContextual = !!lastAssistant && contextualPrompts.length > 0 && !isLoading && chatShowSuggestions;
+
+  // رسائل العرض: مع بحث، نعرض فقط المطابقات.
+  const trimmedQuery = searchQuery.trim().toLowerCase();
+  const displayMessages = trimmedQuery
+    ? messages.filter((m) => {
+        const text = getMessageTextContent(m).toLowerCase();
+        if (text.includes(trimmedQuery)) return true;
+        return m.parts?.some((p: any) => p.type === 'file' && (p.filename || '').toLowerCase().includes(trimmedQuery));
+      })
+    : messages;
+  const searchMatchCount = displayMessages.length;
 
   return (
     <div className={`fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] md:bottom-8 font-sans ${isRtl ? 'right-4 md:right-6' : 'left-4 md:left-6'} ${isOpen ? 'z-[100000]' : 'z-[999]'}`} dir={isRtl ? "rtl" : "ltr"}>
@@ -809,7 +966,28 @@ export default function AntigravityChat() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5">
+                <button
+                  onClick={() => setShowSettings(!showSettings)}
+                  className={`p-2 rounded-xl transition-colors cursor-pointer ${showSettings ? "text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 dark:text-indigo-400" : "text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
+                  title={isRtl ? "إعدادات الشات" : "Paramètres du chat"}
+                >
+                  <Settings2 size={16} />
+                </button>
+                <button
+                  onClick={() => { setShowSearch(!showSearch); setShowExport(false); setShowSettings(false); }}
+                  className={`p-2 rounded-xl transition-colors cursor-pointer ${showSearch ? "text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 dark:text-indigo-400" : "text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
+                  title={isRtl ? "بحث في المحادثة" : "Rechercher dans la discussion"}
+                >
+                  <Search size={16} />
+                </button>
+                <button
+                  onClick={() => { setShowExport(!showExport); setShowSearch(false); setShowSettings(false); }}
+                  className={`p-2 rounded-xl transition-colors cursor-pointer ${showExport ? "text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 dark:text-indigo-400" : "text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
+                  title={isRtl ? "تصدير المحادثة" : "Exporter la discussion"}
+                >
+                  <Download size={16} />
+                </button>
                 {messages.length > 1 && (
                   <button onClick={handleClearChat} className="p-2 text-slate-400 hover:text-red-500 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer" title={isRtl ? "مسح المحادثة" : "Effacer"}>
                     <Trash2 size={16} />
@@ -820,6 +998,104 @@ export default function AntigravityChat() {
                 </button>
               </div>
             </div>
+
+            <AnimatePresence>
+              {showSettings && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.22, ease: "easeOut" }}
+                  className="overflow-hidden border-b border-slate-100 dark:border-slate-800/60 bg-white/85 dark:bg-slate-950/85 backdrop-blur-md"
+                >
+                  <div className="px-4 py-3 space-y-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-2 flex items-center gap-1.5">
+                      <Settings2 size={11} />
+                      {isRtl ? "إعدادات الشات" : "Paramètres du chat"}
+                    </p>
+                    {[
+                      { icon: <Volume2 size={15} />, label: isRtl ? "قراءة الردود تلقائياً" : "Lire les réponses à voix haute", desc: isRtl ? "تشغيل النطق بعد كل رد" : "Lecture vocale après chaque réponse", checked: chatAutoRead, onChange: setChatAutoRead },
+                      { icon: <BadgePercent size={15} />, label: isRtl ? "صوت عند وصول الرد" : "Son à la réception", desc: isRtl ? "نغمة خفيفة لكل رسالة جديدة" : "Un son léger pour chaque nouveau message", checked: chatSoundOnMessage, onChange: setChatSoundOnMessage },
+                      { icon: <ArrowDown size={15} />, label: isRtl ? "التمرير التلقائي" : "Défilement automatique", desc: isRtl ? "النزول تلقائياً لأحدث رسالة" : "Descendre vers les nouveaux messages", checked: chatAutoScroll, onChange: setChatAutoScroll },
+                      { icon: <HardDrive size={15} />, label: isRtl ? "حفظ المحادثة" : "Enregistrer la discussion", desc: isRtl ? "استرجاع الرسائل عند إعادة الفتح" : "Retrouver vos messages à la réouverture", checked: chatPersistHistory, onChange: setChatPersistHistory },
+                      { icon: <Sparkles size={15} />, label: isRtl ? "اقتراحات سريعة" : "Suggestions rapides", desc: isRtl ? "أزرار اقتراحات تحت الرسائل" : "Boutons de suggestions sous les messages", checked: chatShowSuggestions, onChange: setChatShowSuggestions },
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-center justify-between gap-3 py-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="text-indigo-500 dark:text-indigo-400 shrink-0">{item.icon}</span>
+                          <div className="min-w-0">
+                            <p className="text-[12px] font-black text-slate-700 dark:text-slate-200 truncate">{item.label}</p>
+                            <p className="text-[10px] font-bold text-slate-400 truncate">{item.desc}</p>
+                          </div>
+                        </div>
+                        <MiniToggle checked={item.checked} onChange={item.onChange} />
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {showSearch && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  className="overflow-hidden border-b border-slate-100 dark:border-slate-800/60 bg-white/85 dark:bg-slate-950/85 backdrop-blur-md"
+                >
+                  <div className="px-4 py-2.5 flex items-center gap-2">
+                    <div className="flex-1 flex items-center gap-2 bg-slate-50 dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
+                      <Search size={14} className="text-slate-400 shrink-0" />
+                      <input
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={isRtl ? "ابحث في الرسائل..." : "Rechercher dans les messages..."}
+                        className="flex-1 bg-transparent text-[12px] font-medium outline-none text-slate-800 dark:text-slate-100 placeholder-slate-400"
+                      />
+                      {searchQuery && (
+                        <button onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-red-500 cursor-pointer">
+                          <X size={13} />
+                        </button>
+                      )}
+                      {searchQuery.trim() && (
+                        <span className="shrink-0 text-[10px] font-black text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.5 rounded-md">
+                          {searchMatchCount}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {showExport && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18 }}
+                  className="absolute top-[76px] right-4 z-[1001] w-[210px] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_15px_40px_-10px_rgba(0,0,0,0.3)] p-1.5"
+                >
+                  <button
+                    onClick={handleExportCopy}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-black text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                  >
+                    <Copy size={14} />
+                    {isRtl ? "نسخ المحادثة كاملة" : "Copier la discussion"}
+                  </button>
+                  <button
+                    onClick={handleExportDownload}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-black text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                  >
+                    <Download size={14} />
+                    {isRtl ? "تنزيل كملف نصي" : "Télécharger (.txt)"}
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {!isOnline && (
               <div className="bg-red-500 text-white text-[11px] font-bold py-1.5 px-4 flex items-center justify-center gap-2 animate-fade-in shadow-inner">
@@ -840,14 +1116,33 @@ export default function AntigravityChat() {
             )}
 
             <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 md:p-5 space-y-6 scrollbar-none bg-slate-50/50 dark:bg-slate-950/50 relative">
-              {messages.map((message, index) => {
+              {trimmedQuery && displayMessages.length === 0 && (
+                <div className="flex flex-col items-center justify-center text-center py-10 text-slate-400">
+                  <Search size={28} className="mb-2 opacity-60" />
+                  <p className="text-xs font-bold">{isRtl ? "لا توجد رسائل مطابقة" : "Aucun message correspondant"}</p>
+                </div>
+              )}
+
+              {displayMessages.map((message, index) => {
                 const isAssistant = message.role === "assistant";
-                const isLast = index === messages.length - 1;
+                const isLast = index === displayMessages.length - 1;
                 const messageText = getMessageTextContent(message);
+                const prev = index > 0 ? displayMessages[index - 1] : null;
+                const dayLabel = formatDayLabel((message as any).createdAt);
+                const prevDayLabel = prev ? formatDayLabel((prev as any).createdAt) : null;
+                const showDaySeparator = dayLabel !== null && dayLabel !== prevDayLabel;
 
                 if (message.role === "user" && cleanMessageContext(messageText) === "" && !message.parts?.some((p: any) => p.type === 'file')) return null;
 
                 return (
+                  <div key={message.id || index} className="flex flex-col">
+                    {showDaySeparator && (
+                      <div className="flex items-center justify-center mb-5 -mt-1">
+                        <span className="px-3 py-1 rounded-full bg-slate-200/70 dark:bg-slate-800/70 text-[10px] font-black text-slate-500 dark:text-slate-400 backdrop-blur-sm">
+                          {dayLabel}
+                        </span>
+                      </div>
+                    )}
                   <motion.div
                     initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 15, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -914,6 +1209,7 @@ export default function AntigravityChat() {
                       )}
                     </div>
                   </motion.div>
+                  </div>
                 );
               })}
 
@@ -962,7 +1258,7 @@ export default function AntigravityChat() {
               </AnimatePresence>
             </div>
 
-            {messages.length === 1 && !isLoading && (
+            {messages.length === 1 && !isLoading && chatShowSuggestions && !trimmedQuery && (
               <div className="px-4 py-3 flex flex-col gap-2 border-t border-slate-100 dark:border-slate-800/60 bg-white/50 dark:bg-slate-900/50">
                 <p className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wider">
                   {isRtl ? "اقتراحات شائعة :" : "Suggestions communes :"}
