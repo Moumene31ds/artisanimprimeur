@@ -10,6 +10,9 @@ import {
 } from '@/lib/ai';
 import {
   buildChatSystemPrompt,
+  buildConversationSummary,
+  parseUserContext,
+  stripUserContext,
   computePrice,
   lookupPromo,
 } from '@/lib/chat-knowledge';
@@ -21,15 +24,50 @@ const PRODUCT_KEYS = ['cartes', 'flyers', 'stickers', 'affiches', 'invitations']
 
 export async function POST(req: Request) {
   let messages: any[];
+  let lang: 'ar' | 'fr' | undefined;
+  let page: string | undefined;
   try {
     const body = await req.json();
     messages = body.messages;
+    lang = body.lang === 'ar' || body.lang === 'fr' ? body.lang : undefined;
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: 'Messages array is empty or invalid.' }, { status: 400 });
+    }
+    // حماية: حد أقصى لعدد الرسائل ولطول المحادثة (يمنع إغراق النموذج بمحتوى ضخم).
+    if (messages.length > 40) {
+      return NextResponse.json({ error: 'Conversation too long. Please start a new chat.' }, { status: 400 });
+    }
+    let totalChars = 0;
+    for (const m of messages) {
+      const text = typeof m?.content === 'string' ? m.content : m?.parts?.[0]?.text ?? '';
+      totalChars += String(text).length;
+      if (String(text).length > 20_000) {
+        return NextResponse.json({ error: 'Message is too long.' }, { status: 400 });
+      }
+    }
+    if (totalChars > 80_000) {
+      return NextResponse.json({ error: 'Conversation is too large.' }, { status: 400 });
     }
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
   }
+
+  // لغة الصفحة المفضّلة إن لم يرسلها العميل → نستخرجها من بادئة السياق
+  // في أول رسالة مستخدم (قد تكون الرسالة الأولى رسالة ترحيب من المساعد).
+  const firstUserMsg = messages.find((m: any) => m.role === 'user');
+  const firstContent =
+    typeof firstUserMsg?.content === 'string'
+      ? firstUserMsg.content
+      : firstUserMsg?.parts?.[0]?.text;
+  const ctx = parseUserContext(firstContent);
+  if (!lang) lang = ctx.lang;
+  if (!page) page = ctx.page;
+
+  // تنظيف رسائل المستخدم من بادئة السياق الداخلية قبل إرسالها للنموذج.
+  const cleanedMessages = messages.map((m: any) => {
+    const text = typeof m.content === 'string' ? m.content : m.parts?.[0]?.text ?? '';
+    return { role: m.role, content: stripUserContext(text) };
+  });
 
   try {
     const toolsDef = {
@@ -144,14 +182,14 @@ export async function POST(req: Request) {
     // Pick the healthiest provider (Ollama locally, OpenRouter free in the cloud).
     const { model, providerName, modelId } = await resolveModel();
 
+    const summary = buildConversationSummary(messages) ?? undefined;
+    const system = buildChatSystemPrompt({ languageHint: lang, page, summary });
+
     const result = streamText({
       model,
-      messages: messages.map((m: any) => ({
-        role: m.role,
-        content: m.content || (m.parts?.[0]?.text ?? ''),
-      })),
-      system: buildChatSystemPrompt(),
-      temperature: 0.6,
+      messages: cleanedMessages,
+      system,
+      temperature: 0.4,
       tools: toolsDef,
       stopWhen: stepCountIs(3),
       maxRetries: 2,

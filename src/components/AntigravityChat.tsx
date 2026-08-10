@@ -287,7 +287,7 @@ export default function AntigravityChat() {
 
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
-    const contextPrefix = messages.length <= 1 ? `[Context: Page ${pathname}]. ` : "";
+    const contextPrefix = messages.length <= 1 ? `[Context: Page ${pathname}, Lang ${language}]. ` : "";
 
     try {
       if (fileToUpload) {
@@ -416,7 +416,7 @@ export default function AntigravityChat() {
 
   const handleQuickPromptClick = async (promptText: string) => {
     if (!isOnline || isLoading) return;
-    const contextPrefix = messages.length <= 1 ? `[Context: Page ${pathname}]. ` : "";
+    const contextPrefix = messages.length <= 1 ? `[Context: Page ${pathname}, Lang ${language}]. ` : "";
     await sendMessage({ text: contextPrefix + promptText });
   };
 

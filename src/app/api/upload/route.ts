@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
+import { base64ToBuffer, isValidUploadType } from '@/lib/file-validate';
+import { getClientIp } from '@/lib/security';
+import { uploadLimiter } from '@/lib/rate-limit';
+import { logSecurityEvent } from '@/lib/audit';
 
 // ✅ Fixed: Use CLOUDINARY_CLOUD_NAME (server-side) — works in API routes
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -22,7 +27,7 @@ cloudinary.config({
   secure: true,
 });
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   // Guard: Validate Cloudinary credentials at request time
   if (!cloudName || !apiKey || !apiSecret) {
     return NextResponse.json(
@@ -38,11 +43,21 @@ export async function POST(request: Request) {
     );
   }
 
+  // Security: rate limit per IP (يحفظ حصة Cloudinary من الاستغلال).
+  const rl = uploadLimiter.allow(`ip:${getClientIp(request)}`);
+  if (!rl.allowed) {
+    const retryAfter = Math.ceil(rl.retryAfterMs / 1000);
+    return NextResponse.json(
+      { error: 'Trop d\'uploads. Réessayez plus tard.', retryAfterSeconds: retryAfter },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+    );
+  }
+
   try {
     const body = await request.json();
     const { file } = body;
 
-    if (!file) {
+    if (!file || typeof file !== 'string') {
       return NextResponse.json(
         { error: 'No file data received. Please provide a base64 string or Data URL.' },
         { status: 400 }
@@ -58,22 +73,44 @@ export async function POST(request: Request) {
       );
     }
 
-    // Security: Validate MIME type for data URIs
-    if (file.startsWith('data:')) {
-      const mimeMatch = file.match(/^data:([^;]+);base64,/);
-      if (mimeMatch) {
-        const mimeType = mimeMatch[1];
-        const allowedMimeTypes = [
-          'image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif',
-          'application/pdf', 'application/postscript', 'image/vnd.adobe.photoshop',
-        ];
-        if (!allowedMimeTypes.includes(mimeType)) {
-          return NextResponse.json(
-            { error: 'File type not allowed. Please upload PDFs or high-resolution images.' },
-            { status: 415 }
-          );
-        }
-      }
+    // Security: فحص المحتوى الحقيقي (Magic Bytes) وليس التصريح فقط —
+    // يمنع رفع SVG خبيث أو ملفات متنكرة بصيغة صورة.
+    const buffer = base64ToBuffer(file);
+    if (!buffer || buffer.length === 0) {
+      return NextResponse.json(
+        { error: 'Invalid file encoding. Please provide a valid base64 file.' },
+        { status: 400 }
+      );
+    }
+
+    const { valid, type } = isValidUploadType(buffer);
+    if (!valid) {
+      // سجل تدقيق أمني: محاولة رفع نوع ملف غير مسموح (مؤشر أتمتة أو هجوم).
+      logSecurityEvent({
+        type: 'upload:invalid-type',
+        ip: getClientIp(request),
+        details: `Rejected upload with detected type: ${type}`,
+        metadata: { bytes: buffer.length },
+      });
+      return NextResponse.json(
+        {
+          error:
+            'File type not allowed. Please upload PNG, JPEG, WebP, GIF, PDF, EPS/AI or PSD files only.',
+          detected: type,
+        },
+        { status: 415 }
+      );
+    }
+
+    // رفض صريح لملفات SVG (ناقل XSS) حتى لو ادعت صيغة أخرى.
+    const mimeDeclared = file.startsWith('data:')
+      ? file.slice(0, file.indexOf(';')).replace('data:', '').toLowerCase()
+      : '';
+    if (mimeDeclared === 'image/svg+xml' || /\.svg$/i.test(file.split(',')[0] || '')) {
+      return NextResponse.json(
+        { error: 'SVG files are not allowed for security reasons.' },
+        { status: 415 }
+      );
     }
 
     // Upload to Cloudinary

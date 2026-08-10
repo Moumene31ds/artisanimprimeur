@@ -33,11 +33,13 @@ import {
 //      (localStorage) — إن كانت نفسها نمرّر ولا نزعج المستخدم.
 //   3) اعرض اللوحة مع الميزات الجديدة لهذا الإصدار (عربية/فرنسية).
 //   4) "تحديث الآن" → تطبيق فوري + شاشة إعادة تحميل متدرجة.
-//   5) "لاحقاً" → نُخزّن الإصدار ولا نعاود العرض لنفس الإصدار،
-//      مع تحديث تلقائي صامت عند العودة للتطبيق (إن لم يُرفض صراحة).
+//   5) "لاحقاً" → تُخفى اللوحة فقط ولا تمنع التحديث.
+// **التحديث التلقائي**: بعد مهلة قصيرة يُطبَّق التحديث في الخلفية
+//    (SKIP_WAITING) ويُعاد تحميل التطبيق تلقائياً — فيرى المستخدم
+//    دائماً أحدث نسخة وتعديلاتك فور نشرها، حتى لو أغلق اللوحة.
 // -----------------------------------------------
 
-const AUTO_UPDATE_AFTER_MS = 45 * 1000;
+const AUTO_UPDATE_AFTER_MS = 15 * 1000;
 const RELOADED_FLAG = "pwa-updated-reloaded";
 
 interface UpdateInfo {
@@ -57,7 +59,6 @@ export default function PWALifecycle() {
 
   const updateInfoRef = useRef<UpdateInfo | null>(null);
   const pendingSinceRef = useRef(0);
-  const dismissedRef = useRef(false);
   const requestedReloadRef = useRef(false);
   const reloadingRef = useRef(false);
 
@@ -124,9 +125,15 @@ export default function PWALifecycle() {
         features: info.features || { ar: [], fr: [] },
       };
       pendingSinceRef.current = Date.now();
-      dismissedRef.current = false;
       updateInfoRef.current = next;
       setUpdateInfo(next);
+
+      // **تحديث تلقائي**: يُطبَّق النسخة الجديدة في الخلفية بعد مهلة قصيرة
+      // حتى يراها المستخدم فوراً، بغضّ النظر عن إغلاقه للوحة الإشعار.
+      window.setTimeout(() => {
+        if (reloadingRef.current || requestedReloadRef.current) return;
+        applyUpdateRef.current();
+      }, AUTO_UPDATE_AFTER_MS);
     };
 
     const unsubUpdate = onServiceWorkerUpdate(() => {
@@ -163,15 +170,20 @@ export default function PWALifecycle() {
     const stopPoll = pollForUpdates(5 * 60 * 1000);
 
     const onVisibility = () => {
-      if (document.visibilityState !== "visible") return;
-      checkForUpdates().catch(() => {});
-      // تحديث تلقائي صامت بعد مهلة — فقط إن لم يرفضه المستخدم صراحةً.
+      // عند إرجاع التطبيق للواجهة → افحص عن تحديث جديد.
+      if (document.visibilityState === "visible") {
+        checkForUpdates().catch(() => {});
+        return;
+      }
+      // عند إخفاء التبويب (المستخدم في تطبيق آخر) → تحديث صامت فوري:
+      // تُطبَّق النسخة الجديدة ويُعاد التحميل دون إزعاج المستخدم.
       const pending = updateInfoRef.current;
       if (
         pending &&
-        !dismissedRef.current &&
         pendingSinceRef.current > 0 &&
-        Date.now() - pendingSinceRef.current > AUTO_UPDATE_AFTER_MS
+        Date.now() - pendingSinceRef.current > 1500 &&
+        !reloadingRef.current &&
+        !requestedReloadRef.current
       ) {
         applyUpdateRef.current();
       }
@@ -205,7 +217,7 @@ export default function PWALifecycle() {
   }, []);
 
   const dismissUpdate = () => {
-    dismissedRef.current = true;
+    // إخفاء اللوحة فقط — لا يمنع التحديث التلقائي المقرر.
     if (updateInfoRef.current) markBuildSeen(updateInfoRef.current.buildId);
     updateInfoRef.current = null;
     setUpdateInfo(null);
@@ -223,9 +235,14 @@ export default function PWALifecycle() {
         features: detail.features || { ar: [], fr: [] },
       };
       pendingSinceRef.current = Date.now();
-      dismissedRef.current = false;
       updateInfoRef.current = next;
       setUpdateInfo(next);
+
+      // تطبيق تلقائي أيضاً للتحقق اليدوي من الإعدادات بعد المهلة.
+      window.setTimeout(() => {
+        if (reloadingRef.current || requestedReloadRef.current) return;
+        applyUpdateRef.current();
+      }, AUTO_UPDATE_AFTER_MS);
     };
     window.addEventListener(SHOW_UPDATE_EVENT, onShow);
     return () => window.removeEventListener(SHOW_UPDATE_EVENT, onShow);
@@ -347,6 +364,11 @@ export default function PWALifecycle() {
               >
                 {isRtl ? "لاحقاً" : "Plus tard"}
               </button>
+              <p className="text-center text-[10px] font-bold text-slate-400 dark:text-slate-500 -mt-1">
+                {isRtl
+                  ? "⚡ سيُطبَّق التحديث تلقائياً في الخلفية خلال ثوانٍ"
+                  : "⚡ La mise à jour s'appliquera automatiquement dans quelques secondes"}
+              </p>
             </div>
           </div>
         )}

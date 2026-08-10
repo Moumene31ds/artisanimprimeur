@@ -162,13 +162,49 @@ const COMPANY = {
 // System prompt builder (bilingual — the assistant answers in the user's language)
 // ---------------------------------------------------------------------------
 
-export function buildChatSystemPrompt(): string {
+export interface ChatPromptOptions {
+  /** Preferred reply language from the app UI. */
+  languageHint?: 'ar' | 'fr';
+  /** Current page path (e.g. "/cart") so the AI can offer contextual help. */
+  page?: string;
+  /** Compact auto-summary of earlier turns (long-conversation memory). */
+  summary?: string;
+}
+
+export function buildChatSystemPrompt(options: ChatPromptOptions = {}): string {
   const products = CHAT_PRODUCTS.map(
     (p) => `- ${p.nameFr} / ${p.nameAr} : ${p.packPriceDZD} DA pour ${p.packSize} unités (${p.unitPriceDZD} DA/unité)`
   ).join('\n');
 
+  const langRule =
+    options.languageHint === 'ar'
+      ? 'Reply in ARABIC (Modern Standard, friendly and natural). Keep French terms in parentheses when useful.'
+      : options.languageHint === 'fr'
+        ? 'Reply in FRENCH. Keep Arabic terms in parentheses when useful.'
+        : 'Reply in the SAME language the user writes in (Arabic or French).';
+
+  const pageContext = options.page
+    ? `\nThe user is currently browsing the page "${options.page}". Use this to give contextual help (e.g. on /cart talk about the cart, on /orders about their orders).`
+    : '';
+
+  const summarySection = options.summary
+    ? `\n===== CONVERSATION SUMMARY (earlier turns, keep it consistent) =====\n${options.summary}`
+    : '';
+
   return `You are L'Artisan AI, the smart, bilingual (Arabic + French) premium print consultant for "${COMPANY.name}" in Oran, Algeria.
-Reply in the SAME language the user writes in. Be friendly, concise, professional, and helpful. Use markdown lists (**bold**) for prices and options. Never invent prices or facts that are not listed below.
+${langRule}
+
+===== STRICT RULES (NEVER break these) =====
+1. NEVER invent or guess prices, discounts, delivery fees, production times, or company facts. Only use the data below and the tool results. If you are not sure, say so honestly and give the WhatsApp number ${COMPANY.phone}.
+2. For ANY price question (e.g. "combien", "كلفة", "سعر", "prix") you MUST call the calculatePrice tool with the real product, quantity and finish — never calculate from memory.
+3. If a product is not in the list below, call searchProducts to find its real catalog price before answering.
+4. Promo codes: only validate with checkPromoCode. Never invent codes or discounts.
+5. Do NOT promise home delivery or quote delivery prices/times to other wilayas — it does not exist yet.
+6. Do NOT claim online card payment is available — it is not.
+7. Keep answers concise and scannable: short lines, **bold** for prices/quantities, bullet lists, no long paragraphs.
+8. When the user wants to order, collect step by step (name → phone → product → quantity), then confirm with createOrder.
+9. When the user says something like "خذني إلى..." or "amène-moi à...", use navigateToPage.
+${pageContext}
 
 ===== COMPANY =====
 - Name: ${COMPANY.name} — ${COMPANY.sloganFr} / ${COMPANY.sloganAr}
@@ -183,6 +219,8 @@ ${products}
   Quantity discounts (per product): 200+ units → -10%, 500+ → -15%, 1000+ → -20%.
 Finishes: Standard, Premium (+50%), Luxe (x2).
 IMPORTANT EXAMPLE THE USER OFTEN ASKS: 100 cartes de visite = 2500 DA (standard finish).
+COMMON COMBOS the user may ask about: "200 cartes de visite standard" = 5000 DA (10% off); "500 flyers A5" = 19125 DA (15% off, i.e. 45 DA x 500 x 0.85). Always prefer calculatePrice for the exact number.
+${summarySection}
 
 ===== DELIVERY (BIENTÔT DISPONIBLE) =====
 - Home delivery is NOT available yet — it will launch very soon.
@@ -212,6 +250,72 @@ Also a daily "Wheel of Fortune" on the home page can generate a random welcome c
 
 ===== TOOLS =====
 Use calculatePrice to give exact prices, searchProducts to find a product, checkPromoCode to validate a code, navigateToPage to move the user to a page, and createOrder to register an order after collecting name, phone, product and quantity.`;
+}
+
+// ---------------------------------------------------------------------------
+// Conversation context helpers
+// ---------------------------------------------------------------------------
+
+/** Parse the "[Context: Page ..., Lang ...]" prefix the client prepends. */
+export function parseUserContext(
+  content: string | undefined
+): { page?: string; lang?: 'ar' | 'fr' } {
+  if (!content || typeof content !== 'string') return {};
+  const m = content.match(/\[Context:([^\]]*)\]/);
+  if (!m) return {};
+  const raw = m[1] || '';
+  const page = raw.match(/Page\s*([^,]+)/i)?.[1]?.trim() || undefined;
+  const langMatch = raw.match(/Lang\s*(ar|fr)/i);
+  const lang = langMatch ? (langMatch[1].toLowerCase() as 'ar' | 'fr') : undefined;
+  return { page, lang };
+}
+
+/** Strip the internal "[Context: ...]" marker from user text. */
+export function stripUserContext(content: string): string {
+  return (content || '').replace(/\[Context:[^\]]*\]\.?\s*/g, '').trim();
+}
+
+function getMessagePlainText(m: any): string {
+  if (!m) return '';
+  if (typeof m.content === 'string' && m.content) return m.content;
+  if (Array.isArray(m.parts)) {
+    const text = m.parts
+      .filter((p: any) => p.type === 'text')
+      .map((p: any) => p.text)
+      .join(' ')
+      .trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+/**
+ * Build a compact summary of the early turns of a long conversation so the
+ * model keeps facts (products, quantities, prices, decisions) across many
+ * messages without blowing up the prompt. The most recent KEEP_LAST messages
+ * are passed verbatim by the client anyway, so we only compress the older ones.
+ */
+export function buildConversationSummary(messages: any[], keepLast = 6): string | null {
+  if (!Array.isArray(messages) || messages.length <= keepLast + 2) return null;
+  const older = messages.slice(0, messages.length - keepLast);
+  const lines: string[] = [];
+
+  for (const m of older) {
+    const text = getMessagePlainText(m);
+    const roleLabel = m.role === 'user' ? 'Client' : 'Assistant';
+    // Include calculated prices so later answers stay consistent.
+    let toolInfo = '';
+    if (m.role === 'assistant' && Array.isArray(m.parts)) {
+      const price = m.parts.find(
+        (p: any) => p.toolName === 'calculatePrice' && p.state === 'output-available'
+      );
+      if (price?.output?.totalDZD != null) {
+        toolInfo = ` [prix: ${price.output.totalDZD} DA pour ${price.output.quantity} ${price.output.productKey}]`;
+      }
+    }
+    if (text) lines.push(`${roleLabel}: ${stripUserContext(text).slice(0, 140)}${toolInfo}`);
+  }
+  return lines.length ? lines.join('\n') : null;
 }
 
 export const COMPANY_INFO = COMPANY;
