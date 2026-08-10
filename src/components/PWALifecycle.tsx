@@ -22,6 +22,7 @@ import {
   isOnline,
   SHOW_UPDATE_EVENT,
   type BuildInfo,
+  type BuildFeatureSet,
 } from "@/lib/pwa";
 
 // -----------------------------------------------
@@ -31,21 +32,42 @@ import {
 //   1) اكتشف السيرفس ووركر نسخة جديدة (updatefound/installed).
 //   2) قارن نسخة الخادم (build-info) مع آخر نسخة شاهدها المستخدم
 //      (localStorage) — إن كانت نفسها نمرّر ولا نزعج المستخدم.
-//   3) اعرض اللوحة مع الميزات الجديدة لهذا الإصدار (عربية/فرنسية).
+//   3) اعرض اللوحة مع **الميزات التراكمية لكل الإصدارات الأحدث**
+//      (build-info?since=) — يراهم المستخدم كل ما فاته منذ آخر نسخة شاهدها.
 //   4) "تحديث الآن" → تطبيق فوري + شاشة إعادة تحميل متدرجة.
 //   5) "لاحقاً" → تُخفى اللوحة فقط ولا تمنع التحديث.
 // **التحديث التلقائي**: بعد مهلة قصيرة يُطبَّق التحديث في الخلفية
-//    (SKIP_WAITING) ويُعاد تحميل التطبيق تلقائياً — فيرى المستخدم
-//    دائماً أحدث نسخة وتعديلاتك فور نشرها، حتى لو أغلق اللوحة.
+//    (SKIP_WAITING) ويُعاد تحميل التطبيق تلقائياً.
+// **التحديث الإلزامي (critical)**: تُخفى "لاحقاً"، لا تُغلق اللوحة،
+//    ويُطبَّق التحديث خلال ثوانٍ قصيرة دون أي خيار تأجيل.
 // -----------------------------------------------
 
 const AUTO_UPDATE_AFTER_MS = 15 * 1000;
+const CRITICAL_UPDATE_AFTER_MS = 4 * 1000;
 const RELOADED_FLAG = "pwa-updated-reloaded";
 
 interface UpdateInfo {
   buildId: string;
   release: string;
+  releaseDate?: string | null;
+  kind: "normal" | "critical";
   features: { ar: string[]; fr: string[] };
+  changelogSince?: BuildFeatureSet[];
+}
+
+/** تحويل استجابة build-info إلى حالة الواجهة (مع توحيد kind/changelog). */
+function toUpdateInfo(info: BuildInfo): UpdateInfo {
+  return {
+    buildId: info.version,
+    release: info.release || info.version,
+    releaseDate: info.releaseDate ?? null,
+    kind: info.kind === "critical" ? "critical" : "normal",
+    features: info.features || { ar: [], fr: [] },
+    changelogSince:
+      info.changelogSince && info.changelogSince.length > 0
+        ? info.changelogSince
+        : undefined,
+  };
 }
 
 export default function PWALifecycle() {
@@ -113,27 +135,25 @@ export default function PWALifecycle() {
 
     // 2) كشف تحديث حقيقي: قارن نسخة الخادم مع آخر نسخة شوهدت.
     const handleUpdateDetected = async () => {
-      const info = await getBuildInfo();
+      // منذ آخر نسخة شاهدها المستخدم → الخادم يعيد كل الميزات التراكمية.
+      const info = await getBuildInfo(getLastSeenBuild());
       if (!info?.version) return;
       const lastSeen = getLastSeenBuild();
       // نفس النسخة شوهدت/طبّقت/رُفضت سابقاً → لا إزعاج.
       if (lastSeen === info.version) return;
 
-      const next: UpdateInfo = {
-        buildId: info.version,
-        release: info.release || info.version,
-        features: info.features || { ar: [], fr: [] },
-      };
+      const next = toUpdateInfo(info);
       pendingSinceRef.current = Date.now();
       updateInfoRef.current = next;
       setUpdateInfo(next);
 
       // **تحديث تلقائي**: يُطبَّق النسخة الجديدة في الخلفية بعد مهلة قصيرة
-      // حتى يراها المستخدم فوراً، بغضّ النظر عن إغلاقه للوحة الإشعار.
+      // (أقصر بكثير للتحديث الإلزامي) حتى يراها المستخدم فوراً، بغضّ النظر
+      // عن إغلاقه للوحة الإشعار.
       window.setTimeout(() => {
         if (reloadingRef.current || requestedReloadRef.current) return;
         applyUpdateRef.current();
-      }, AUTO_UPDATE_AFTER_MS);
+      }, next.kind === "critical" ? CRITICAL_UPDATE_AFTER_MS : AUTO_UPDATE_AFTER_MS);
     };
 
     const unsubUpdate = onServiceWorkerUpdate(() => {
@@ -217,6 +237,8 @@ export default function PWALifecycle() {
   }, []);
 
   const dismissUpdate = () => {
+    // التحديث الإلزامي لا يمكن تأجيله ولا إغلاقه — يبقى حتى يُطبَّق.
+    if (updateInfoRef.current?.kind === "critical") return;
     // إخفاء اللوحة فقط — لا يمنع التحديث التلقائي المقرر.
     if (updateInfoRef.current) markBuildSeen(updateInfoRef.current.buildId);
     updateInfoRef.current = null;
@@ -229,11 +251,7 @@ export default function PWALifecycle() {
       const detail = (event as CustomEvent).detail as BuildInfo | undefined;
       if (!detail?.version) return;
       if (updateInfoRef.current?.buildId === detail.version) return;
-      const next: UpdateInfo = {
-        buildId: detail.version,
-        release: detail.release || detail.version,
-        features: detail.features || { ar: [], fr: [] },
-      };
+      const next = toUpdateInfo(detail);
       pendingSinceRef.current = Date.now();
       updateInfoRef.current = next;
       setUpdateInfo(next);
@@ -242,13 +260,38 @@ export default function PWALifecycle() {
       window.setTimeout(() => {
         if (reloadingRef.current || requestedReloadRef.current) return;
         applyUpdateRef.current();
-      }, AUTO_UPDATE_AFTER_MS);
+      }, next.kind === "critical" ? CRITICAL_UPDATE_AFTER_MS : AUTO_UPDATE_AFTER_MS);
     };
     window.addEventListener(SHOW_UPDATE_EVENT, onShow);
     return () => window.removeEventListener(SHOW_UPDATE_EVENT, onShow);
   }, []);
 
-  const features = updateInfo ? (isRtl ? updateInfo.features.ar : updateInfo.features.fr) : [];
+  // مجموعات الميزات: من changelogSince نعرض كل إصدار فات المستخدم مع ميزاته
+  // (تراكمي). إن لم يُرسل الخادم تغريداً نعرض إصداراً واحداً (الميزات الحالية).
+  const featureGroups: BuildFeatureSet[] = updateInfo?.changelogSince?.length
+    ? updateInfo.changelogSince
+    : updateInfo
+      ? [
+          {
+            version: updateInfo.release,
+            date: updateInfo.releaseDate,
+            kind: updateInfo.kind,
+            features: updateInfo.features,
+          },
+        ]
+      : [];
+
+  const formatDate = (iso?: string | null) => {
+    if (!iso) return "";
+    try {
+      return new Date(iso).toLocaleDateString(
+        language === "ar" ? "ar-DZ" : "fr-FR",
+        { year: "numeric", month: "long", day: "numeric" }
+      );
+    } catch {
+      return "";
+    }
+  };
 
   // تقدم شريط إعادة التحميل (محاكاة مراحل سلسة).
   useEffect(() => {
@@ -287,7 +330,7 @@ export default function PWALifecycle() {
         onClose={dismissUpdate}
         isRtl={isRtl}
         maxWidth="max-w-md"
-        dismissible
+        dismissible={updateInfo?.kind !== "critical"}
         hideClose
         title={
           <div className="relative w-full overflow-hidden rounded-[1.5rem] bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 text-white">
@@ -299,11 +342,23 @@ export default function PWALifecycle() {
             >
               <X size={14} className="text-white" />
             </button>
-            <div className="absolute top-3 end-3 flex items-center gap-1.5 bg-black/25 backdrop-blur px-2.5 py-1 rounded-full">
-              <Rocket size={11} className="text-cyan-300" />
-              <span className="text-[10px] font-black text-white">
-                v{updateInfo ? updateInfo.release : ""}
-              </span>
+            <div className="absolute top-3 end-3 flex flex-col items-end gap-1">
+              <div className="flex items-center gap-1.5 bg-black/25 backdrop-blur px-2.5 py-1 rounded-full">
+                <Rocket size={11} className="text-cyan-300" />
+                <span className="text-[10px] font-black text-white">
+                  v{updateInfo ? updateInfo.release : ""}
+                </span>
+              </div>
+              {updateInfo?.releaseDate && (
+                <span className="text-[9px] font-bold text-blue-100/80 px-1">
+                  {formatDate(updateInfo.releaseDate)}
+                </span>
+              )}
+              {updateInfo?.kind === "critical" && (
+                <span className="text-[9px] font-black uppercase tracking-wide text-red-200 bg-red-500/25 backdrop-blur px-2 py-0.5 rounded-full">
+                  {isRtl ? "تحديث إلزامي" : "Mise à jour obligatoire"}
+                </span>
+              )}
             </div>
             <div className="p-5 pt-12">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-200">
@@ -318,35 +373,68 @@ export default function PWALifecycle() {
       >
         {updateInfo && (
           <div>
-            {/* الميزات الجديدة لهذا الإصدار */}
+            {/* الميزات الجديدة — مجمّعة حسب كل إصدار (تراكمي) */}
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-500 dark:text-blue-400 mb-2">
-              {isRtl ? "✨ الميزات الجديدة" : "✨ Nouveautés"}
+              {isRtl
+                ? featureGroups.length > 1
+                  ? "✨ كل ما هو جديد منذ آخر زيارة"
+                  : "✨ الميزات الجديدة"
+                : featureGroups.length > 1
+                  ? "✨ Tout ce qui est nouveau depuis votre dernière visite"
+                  : "✨ Nouveautés"}
             </p>
-            <div className="space-y-2 mb-5 max-h-40 overflow-y-auto">
-              {(features.length
-                ? features
-                : [
-                    isRtl
-                      ? "أداء محسّن وميزات جديدة"
-                      : "Performances améliorées et nouveautés",
-                    isRtl
-                      ? "إصلاح الأخطاء وثبات أكبر"
-                      : "Corrections de bugs et stabilité",
-                  ]
-              ).map((f, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.15 + i * 0.06 }}
-                  className="flex items-center gap-3 text-[12px] font-bold text-slate-700 dark:text-slate-300"
-                >
-                  <span className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                    {i === 0 ? <Zap size={15} /> : <Check size={15} />}
-                  </span>
-                  {f}
-                </motion.div>
-              ))}
+            <div className="space-y-3 mb-5 max-h-44 overflow-y-auto pr-1">
+              {featureGroups.map((group, gIdx) => {
+                const list = (isRtl ? group.features.ar : group.features.fr) || [];
+                const fallback =
+                  list.length > 0
+                    ? list
+                    : [
+                        isRtl
+                          ? "أداء محسّن وميزات جديدة"
+                          : "Performances améliorées et nouveautés",
+                        isRtl
+                          ? "إصلاح الأخطاء وثبات أكبر"
+                          : "Corrections de bugs et stabilité",
+                      ];
+                return (
+                  <div key={gIdx}>
+                    {featureGroups.length > 1 && (
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300 text-[10px] font-black">
+                          v{group.version}
+                        </span>
+                        {group.date && (
+                          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500">
+                            {formatDate(group.date)}
+                          </span>
+                        )}
+                        {group.kind === "critical" && (
+                          <span className="px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950/60 text-red-500 dark:text-red-300 text-[9px] font-black">
+                            {isRtl ? "إلزامي" : "Obligatoire"}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      {fallback.map((f, i) => (
+                        <motion.div
+                          key={i}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.15 + gIdx * 0.1 + i * 0.06 }}
+                          className="flex items-center gap-3 text-[12px] font-bold text-slate-700 dark:text-slate-300"
+                        >
+                          <span className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                            {gIdx === 0 && i === 0 ? <Zap size={15} /> : <Check size={15} />}
+                          </span>
+                          {f}
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="flex flex-col gap-2">
@@ -358,16 +446,22 @@ export default function PWALifecycle() {
                 <Rocket size={16} />
                 {isRtl ? "تحديث الآن" : "Mettre à jour maintenant"}
               </motion.button>
-              <button
-                onClick={dismissUpdate}
-                className="min-h-[44px] w-full rounded-2xl text-[12px] font-bold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 active:scale-[0.98] transition-colors"
-              >
-                {isRtl ? "لاحقاً" : "Plus tard"}
-              </button>
+              {updateInfo?.kind !== "critical" && (
+                <button
+                  onClick={dismissUpdate}
+                  className="min-h-[44px] w-full rounded-2xl text-[12px] font-bold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 active:scale-[0.98] transition-colors"
+                >
+                  {isRtl ? "لاحقاً" : "Plus tard"}
+                </button>
+              )}
               <p className="text-center text-[10px] font-bold text-slate-400 dark:text-slate-500 -mt-1">
-                {isRtl
-                  ? "⚡ سيُطبَّق التحديث تلقائياً في الخلفية خلال ثوانٍ"
-                  : "⚡ La mise à jour s'appliquera automatiquement dans quelques secondes"}
+                {updateInfo?.kind === "critical"
+                  ? isRtl
+                    ? "🔒 تحديث إلزامي — سيُطبَّق تلقائياً خلال ثوانٍ"
+                    : "🔒 Mise à jour obligatoire — application automatique dans quelques secondes"
+                  : isRtl
+                    ? "⚡ سيُطبَّق التحديث تلقائياً في الخلفية خلال ثوانٍ"
+                    : "⚡ La mise à jour s'appliquera automatiquement dans quelques secondes"}
               </p>
             </div>
           </div>

@@ -352,7 +352,7 @@ export default function SettingsPage() {
     setCheckingUpdate(true);
     try {
       await checkForUpdates();
-      const info = await getBuildInfo();
+      const info = await getBuildInfo(getLastSeenBuild());
       const lastSeen = getLastSeenBuild();
       if (info && lastSeen !== info.version) {
         // نسخة جديدة حقيقية → إظهار واجهة التحديث فوراً.

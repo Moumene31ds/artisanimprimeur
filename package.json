@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "tsx --test src/lib/security/security.test.ts",
+    "test:all": "tsx --test src/lib/*.test.ts src/lib/security/security.test.ts",
     "capacitor:sync": "cap sync",
     "capacitor:sync:android": "cap sync android",
     "capacitor:sync:ios": "cap sync ios",

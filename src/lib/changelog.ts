@@ -2,18 +2,49 @@
 // changelog.ts — الإصدار البشري + ميزات كل إصدار (تُعرض في شاشة التحديث).
 // ارفع APP_VERSION مع كل إصدار يحمل ميزات جديدة، وأضف سطراً جديداً في
 // CHANGELOG يعرض الميزات للعملاء بالعربية والفرنسية.
+//
+// حقول متقدمة:
+//   - date: تاريخ الإصدار (تُعرض في سجل الإصدارات).
+//   - kind: 'normal' (افتراضي) أو 'critical' (تحديث إلزامي — تُفرض الواجهة
+//     ولا يُتاح "لاحقاً"، ويُطبَّق تلقائياً خلال ثوانٍ).
 // ---------------------------------------------------------------------------
 
-export const APP_VERSION = 'v6.8';
+export const APP_VERSION = 'v6.9';
 
 export interface ChangelogEntry {
   version: string;
+  date?: string;
+  kind?: 'normal' | 'critical';
   features: { ar: string[]; fr: string[] };
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'v6.9',
+    date: '2026-08-10',
+    kind: 'normal',
+    features: {
+      ar: [
+        '🛡️ منظومة حماية متقدمة: حجب الهجمات (حقن/XSS/ماسحات) + تقييد المعدل الذكي',
+        '🔐 حماية CSRF: رفض أي طلب قادم من نطاق خارجي على العمليات الحساسة',
+        '🔒 رؤوس أمان صارمة: CSP + HSTS + حماية النقرات (Clickjacking)',
+        '🚀 نظام تحديثات متطور: ميزات جميع النسخ المتراكمة + تحديثات إلزامية',
+        '📜 سجل إصدارات كامل في الإعدادات مع تواريخ الإصدار',
+        '⚡ تخزين مؤقت أذكى (Service Worker) مع تنظيف تلقائي للمساحة',
+      ],
+      fr: [
+        '🛡️ Protection avancée : blocage des attaques (injection/XSS/scanners) + limite de débit intelligente',
+        '🔐 Anti-CSRF : rejet des requêtes cross-origin sur les opérations sensibles',
+        '🔒 En-têtes de sécurité stricts : CSP + HSTS + anti-clickjacking',
+        '🚀 Système de mises à jour évolué : nouveautés cumulées + mises à jour obligatoires',
+        '📜 Historique complet des versions dans les réglages avec dates',
+        '⚡ Cache intelligent (Service Worker) avec nettoyage automatique',
+      ],
+    },
+  },
+  {
     version: 'v6.8',
+    date: '2026-07-28',
     features: {
       ar: [
         '🔐 قفل التطبيق المتقدم: رمز PIN (6 أرقام) + بصمة/وجه + أوضاع قفل (عند الفتح، الخلفية، بعد الخمول)',
@@ -35,6 +66,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: 'v6.7',
+    date: '2026-07-15',
     features: {
       ar: [
         '🤖 التطبيق أصبح يعتمد على أندرويد و iOS عبر كاباسيتور — تطبيق أصلي قابل للتثبيت من المتجر',
@@ -56,6 +88,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: 'v6.6',
+    date: '2026-07-05',
     features: {
       ar: [
         '📊 لوحة جهازك الجديدة على الصفحة الرئيسية: نقاط أداء حيّة، بطارية لحظية، سرعة الشبكة والذاكرة',
@@ -71,6 +104,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: 'v6.5.1',
+    date: '2026-06-28',
     features: {
       ar: [
         '📲 شاشة « نسخة جديدة » أصبحت بنفس تصميم واجهة التثبيت (Bottom Sheet) وتتوافق مع جميع الهواتف',
@@ -86,6 +120,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: 'v6.5',
+    date: '2026-06-15',
     features: {
       ar: [
         '📲 واجهة تثبيت التطبيق أصبحت شاشة سفلية أنيقة تتلاءم تماماً مع جميع الهواتف',
@@ -105,6 +140,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: 'v6.4.1',
+    date: '2026-06-01',
     features: {
       ar: [
         '⚡ التحقق من التحديثات يعرض واجهة التحديث فوراً عند وجود نسخة جديدة',
@@ -118,6 +154,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: 'v6.4',
+    date: '2026-05-20',
     features: {
       ar: [
         '🚀 نظام كشف متقدم جداً: قياس حقيقي لسرعة المعالجة + سلاسة العرض + زمن الشبكة',
@@ -135,6 +172,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: 'v6.3',
+    date: '2026-05-01',
     features: {
       ar: [
         '🎨 شعار رسمي جديد للتطبيق والأيقونات بجميع المقاسات',
@@ -154,6 +192,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: 'v6.2',
+    date: '2026-04-10',
     features: {
       ar: [
         '🎨 غلاف مشاركة فاخر (Open Graph) بتصميم زجاجي عند مشاركة الرابط',
@@ -175,6 +214,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: 'v6.1',
+    date: '2026-03-20',
     features: {
       ar: [
         '⚙️ صفحة الإعدادات الشاملة: اللغة، المظهر، الأداء وحجم النص',
@@ -198,6 +238,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: 'v6.0',
+    date: '2026-03-01',
     features: {
       ar: [
         '🎖️ برنامج الولاء والنقاط: اربح نقاطاً مع كل طلب مكتمل',
@@ -225,6 +266,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: 'v5.1',
+    date: '2026-02-15',
     features: {
       ar: [
         'شاشة تحديث ذكية تظهر فقط عند وجود تحديث حقيقي',
@@ -242,6 +284,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: 'v5.0',
+    date: '2026-02-01',
     features: {
       ar: [
         'تجربة شراء أسرع وأفضل',
@@ -256,6 +299,46 @@ export const CHANGELOG: ChangelogEntry[] = [
     },
   },
 ];
+
+// ---------------------------------------------------------------------------
+// أدوات المقارنة والجمع
+// ---------------------------------------------------------------------------
+
+/** تحويل "v6.9" أو "6.10.2" إلى مصفوفة أرقام للمقارنة الدلالية. */
+export function parseVersion(version: string): number[] {
+  return version
+    .replace(/^v/i, '')
+    .split('.')
+    .map((p) => parseInt(p, 10) || 0);
+}
+
+/** مقارنة دلالية: هل candidate أحدث من base؟ (v6.10 > v6.9، v6.8.1 > v6.8) */
+export function isVersionNewer(candidate: string, base: string): boolean {
+  const a = parseVersion(candidate);
+  const b = parseVersion(base);
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const av = a[i] ?? 0;
+    const bv = b[i] ?? 0;
+    if (av !== bv) return av > bv;
+  }
+  return false;
+}
+
+/** الإدخال الأحدث في السجل (أول عنصر — السجل مرتب تنازلياً). */
+export function getLatestChangelogEntry(): ChangelogEntry | null {
+  return CHANGELOG[0] ?? null;
+}
+
+/**
+ * الإدخالات الأحدث من نسخة معيّنة (يرى المستخدم كل ما فاته، لا آخر إصدار فقط).
+ * - بدون lastSeen يعيد الإصدارات الـ limit الأولى.
+ * - limit يمنع شاشة ضخمة جداً.
+ */
+export function getChangelogSince(lastSeen?: string | null, limit = 5): ChangelogEntry[] {
+  if (!lastSeen) return CHANGELOG.slice(0, limit);
+  return CHANGELOG.filter((e) => isVersionNewer(e.version, lastSeen)).slice(0, limit);
+}
 
 export function getChangelog(version?: string | null): { ar: string[]; fr: string[] } {
   const entry = CHANGELOG.find((e) => e.version === version);

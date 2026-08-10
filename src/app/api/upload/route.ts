@@ -5,6 +5,7 @@ import { base64ToBuffer, isValidUploadType } from '@/lib/file-validate';
 import { getClientIp } from '@/lib/security';
 import { uploadLimiter } from '@/lib/rate-limit';
 import { logSecurityEvent } from '@/lib/audit';
+import { ok, fail, ApiError } from '@/lib/security';
 
 // ✅ Fixed: Use CLOUDINARY_CLOUD_NAME (server-side) — works in API routes
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -53,24 +54,25 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Security: رفض الجثث الضخمة قبل قراءتها — يمنع استنزاف الذاكرة (DoS).
+  const MAX_REQUEST_BYTES = 21 * 1024 * 1024; // ~20 MB
+  const contentLength = Number(request.headers.get('content-length') || 0);
+  if (contentLength > MAX_REQUEST_BYTES) {
+    return fail(new ApiError(413, 'Request body too large.'));
+  }
+
   try {
     const body = await request.json();
     const { file } = body;
 
     if (!file || typeof file !== 'string') {
-      return NextResponse.json(
-        { error: 'No file data received. Please provide a base64 string or Data URL.' },
-        { status: 400 }
-      );
+      return fail(new ApiError(400, 'No file data received. Please provide a base64 string or Data URL.'));
     }
 
     // Security: Limit payload size to ~15MB
     const MAX_BASE64_LENGTH = 20 * 1024 * 1024;
     if (file.length > MAX_BASE64_LENGTH) {
-      return NextResponse.json(
-        { error: 'File exceeds the maximum allowed size (15MB).' },
-        { status: 413 }
-      );
+      return fail(new ApiError(413, 'File exceeds the maximum allowed size (15MB).'));
     }
 
     // Security: فحص المحتوى الحقيقي (Magic Bytes) وليس التصريح فقط —

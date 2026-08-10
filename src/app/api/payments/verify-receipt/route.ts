@@ -8,6 +8,8 @@ import {
 import { bearerToken, verifyIdToken } from '@/lib/auth-verify';
 import { verifyReceiptLimiter } from '@/lib/rate-limit';
 import { fsGet, fsPatch, fsCreate } from '@/lib/firestore-rest';
+import { ok, fail, ApiError } from '@/lib/security';
+import { receiptSchema } from '@/lib/security';
 
 export const maxDuration = 60; // Allow ample time for AI processing and database checks
 
@@ -42,15 +44,22 @@ export async function POST(req: Request) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
+    return fail(new ApiError(400, 'Invalid JSON body.'));
   }
 
   const { image, orderId, txId, ripSender, paymentProofUrl } = body;
 
+  // 0ب. تحقق صارم من المخطط قبل أي منطق — يمنع حقن معرفات/رموز خبيثة.
+  const receipt = receiptSchema.safeParse({ orderId, txId, ripSender, paymentProofUrl });
+  if (!receipt.success) {
+    return fail(receipt.error);
+  }
+  const cleanTx = receipt.data.txId;
+
   // 1. Authentication — a valid Firebase ID token is required
   const user = await verifyIdToken(bearerToken(req.headers.get('authorization')));
   if (!user) {
-    return NextResponse.json({ error: 'Authentication required. Please log in and retry.' }, { status: 401 });
+    return fail(new ApiError(401, 'Authentication required. Please log in and retry.'));
   }
   const token = bearerToken(req.headers.get('authorization')) as string;
 
@@ -66,18 +75,10 @@ export async function POST(req: Request) {
 
   // 3. Input validation
   if (!image || typeof image !== 'string') {
-    return NextResponse.json({ error: 'Missing receipt image' }, { status: 400 });
-  }
-  if (!orderId || typeof orderId !== 'string') {
-    return NextResponse.json({ error: 'Missing order ID' }, { status: 400 });
+    return fail(new ApiError(400, 'Missing receipt image'));
   }
   if (image.length > MAX_IMAGE_BASE64) {
-    return NextResponse.json({ error: 'Image trop volumineuse (max ~9 MB). Compressez-la et réessayez.' }, { status: 413 });
-  }
-
-  const cleanTx = sanitizeTxId(txId);
-  if (cleanTx.length < 5) {
-    return NextResponse.json({ error: 'Missing valid transaction ID' }, { status: 400 });
+    return fail(new ApiError(413, 'Image trop volumineuse (max ~9 MB). Compressez-la et réessayez.'));
   }
 
   // 4. Ownership + server-side truth (never trust client-sent totals)

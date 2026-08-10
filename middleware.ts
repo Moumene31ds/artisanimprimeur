@@ -10,6 +10,10 @@ import {
   isInternalServerPath,
   isSuspiciousRequest,
   addRateLimitHeaders,
+  verifyRequestOrigin,
+  verifyCsrfToken,
+  ensureCsrfCookie,
+  getAllowedOrigins,
 } from './src/lib/security';
 
 // المسارات التي يجب حمايتها من الطلبات عديمة وكيل المستخدم (أتمتة).
@@ -23,27 +27,37 @@ const SENSITIVE_API_PREFIXES = [
   '/api/marketing/',
 ];
 
+// تفعيل فرض رمز CSRF (Double-Submit) الصارم — يتطلب أن يرسل العميل رأس
+// x-csrf-token مع كل طلب يغيّر الحالة. الافتراضي: التحقق من المصدر فقط
+// (Origin/Sec-Fetch-Site) لأنه شفاف ولا يكسر التطبيق. شغّل هذه القيمة بعد
+// إضافة الرأس في عميل التطبيق (انظر SECURITY.md).
+const ENFORCE_CSRF_TOKEN = process.env.ENFORCE_CSRF_TOKEN === 'true';
+
 export function middleware(request: NextRequest) {
   const isMaintenanceMode = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
-  const bypassKey = request.nextUrl.searchParams.get('bypass');
-  const expectedBypassKey = process.env.NEXT_PUBLIC_BYPASS_KEY || 'artisan-secret-2024';
-  const hasBypassCookie = request.cookies.get('maintenance_bypass_token')?.value === expectedBypassKey;
+  // لا يوجد مفتاح تجاوز افتراضي/مشفّر داخل الكود إطلاقاً — إذا لم يُضبط
+  // NEXT_PUBLIC_BYPASS_KEY لا يعمل أي تجاوز.
+  const expectedBypassKey = process.env.NEXT_PUBLIC_BYPASS_KEY || '';
+  const hasBypassCookie = Boolean(
+    expectedBypassKey &&
+      request.cookies.get('maintenance_bypass_token')?.value === expectedBypassKey
+  );
 
   const pathname = request.nextUrl.pathname;
   const isAdminPath = pathname.startsWith('/admin');
   const isApiPath = pathname.startsWith('/api');
 
-  // 1) مفتاح تجاوز نمط الصيانة → يضع كعكة آمنة ويمرّر.
-  if (bypassKey === expectedBypassKey) {
+  // 1) مفتاح تجاوز نمط الصيانة → كعكة آمنة (HttpOnly + Secure + SameSite=Lax) ويمرّر.
+  if (expectedBypassKey && request.nextUrl.searchParams.get('bypass') === expectedBypassKey) {
     const response = NextResponse.next();
-    response.cookies.set('maintenance_bypass_token', bypassKey, {
+    response.cookies.set('maintenance_bypass_token', expectedBypassKey, {
       path: '/',
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24,
     });
-    return applySecurityHeaders(response);
+    return applySecurityHeaders(ensureCsrfCookie(response, request));
   }
 
   // 2) حجب الطلبات المشبوهة (حقن / ماسحات / روبوتات خبيثة).
@@ -63,7 +77,24 @@ export function middleware(request: NextRequest) {
     return applySecurityHeaders(applyNoStoreHeaders(response));
   }
 
-  // 4) تقييد المعدل — حدود مخصصة لكل مسار حساس، وإلا حد عام.
+  // 4) حماية CSRF: رفض الطلبات المتغيّرة للحالة القادمة من نطاق خارجي
+  //    (Sec-Fetch-Site / Origin) — الدفاع الأساسي ضد CSRF الشفاف للعميل.
+  const originCheck = verifyRequestOrigin(request, getAllowedOrigins());
+  if (!originCheck.allowed) {
+    const response = new NextResponse('Cross-origin request rejected', { status: 403 });
+    return applySecurityHeaders(applyNoStoreHeaders(response));
+  }
+
+  // 4ب) رمز CSRF المزدوج (Double-Submit): يُفرض كلياً عند التفعيل الصارم،
+  //     وأي رمز خاطئ يُرفض دائماً حتى في الوضع الافتراضي.
+  const csrf = verifyCsrfToken(request);
+  const csrfBlocked = ENFORCE_CSRF_TOKEN ? !csrf.valid : csrf.enforced && !csrf.valid;
+  if (csrfBlocked) {
+    const response = new NextResponse('Invalid CSRF token', { status: 403 });
+    return applySecurityHeaders(applyNoStoreHeaders(response));
+  }
+
+  // 5) تقييد المعدل — حدود مخصصة لكل مسار حساس، وإلا حد عام.
   const routeRule = isApiPath ? getRouteRateLimit(pathname) : null;
   const limit = routeRule?.limit ?? (isApiPath ? 60 : 180);
   const windowMs = routeRule?.windowMs ?? 60_000;
@@ -75,12 +106,12 @@ export function middleware(request: NextRequest) {
     return applySecurityHeaders(applyNoStoreHeaders(addRateLimitHeaders(response, rateLimit)));
   }
 
-  // 5) نمط الصيانة.
+  // 6) نمط الصيانة.
   if (isMaintenanceMode && !hasBypassCookie && !isAdminPath) {
     if (pathname !== '/maintenance') {
       request.nextUrl.pathname = '/maintenance';
       const response = NextResponse.rewrite(request.nextUrl);
-      return applySecurityHeaders(response);
+      return applySecurityHeaders(ensureCsrfCookie(response, request));
     }
   }
 
@@ -88,7 +119,7 @@ export function middleware(request: NextRequest) {
   response.headers.set('x-client-ip', getClientIp(request));
   // لا تخزين مؤقت للوحة الإدارة وواجهات API الحساسة.
   if (isAdminPath || isApiPath) applyNoStoreHeaders(response);
-  return applySecurityHeaders(addRateLimitHeaders(response, rateLimit));
+  return applySecurityHeaders(addRateLimitHeaders(ensureCsrfCookie(response, request), rateLimit));
 }
 
 export const config = {

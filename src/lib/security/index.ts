@@ -1,8 +1,17 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+// إعادة تصدير وحدات الأمان المتخصصة (تُستورد أيضاً مباشرة عند الحاجة).
+export * from './csrf';
+export * from './cors';
+export * from './api-error';
+export * from './redis-rate-limit';
+export * from './schemas';
+// ملاحظة: ./passwords يعتمد على node:crypto — لا يُصدَّر هنا كي يبقى هذا الملف
+// edge-safe (middleware). يُستورد مباشرة من "@/lib/security/passwords" في API Routes فقط.
+
 // ---------------------------------------------------------------------------
-// security.ts — الطبقة الدفاعية المتقدمة للتطبيق (edge-safe، تعمل في middleware)
+// security/index.ts — الطبقة الدفاعية المتقدمة للتطبيق (edge-safe middleware)
 // ---------------------------------------------------------------------------
 // 1) كشف الطلبات المشبوهة: ثغرات SQLi / XSS / مسار / حقن / روبوتات فحص.
 // 2) تقييد معدل الطلبات لكل مسار (rate limiting) مع تنظيف الذاكرة ومنع تسربها.
@@ -146,7 +155,17 @@ export function isInternalServerPath(pathname: string): boolean {
 export function isSuspiciousRequest(request: NextRequest) {
   const path = `${request.nextUrl.pathname}${request.nextUrl.search}`;
   const userAgent = request.headers.get('user-agent') || '';
-  const combined = `${path}\n${userAgent}`;
+
+  // نسخة مفكوكة الترميز للالتفاف على فلاتر الترميز المزدوج
+  // (URL-encoded payloads: %20OR%201=1 → OR 1=1، %3cscript%3e → <script>).
+  let decoded = '';
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    decoded = path.replace(/%[0-9a-fA-F]{2}/g, '');
+  }
+
+  const combined = `${path}\n${decoded}\n${userAgent}`;
 
   return (
     suspiciousPatterns.some((pattern) => pattern.test(combined)) ||
@@ -244,6 +263,57 @@ export function sanitizePhone(value: unknown): string {
   return digits.slice(0, 16);
 }
 
+/** تطبيع بريد إلكتروني: يزيل الفراغات/المحارف الخبيثة ويحوّل إلى حروف صغيرة. */
+export function sanitizeEmail(value: unknown, maxLength = 254): string {
+  if (typeof value !== 'string') return '';
+  return value
+    .replace(/[\u0000-\u001f\u007f<>]/g, '')
+    .trim()
+    .toLowerCase()
+    .slice(0, maxLength);
+}
+
+/**
+ * تعقيم عميق لكائن كامل (قبل تخزينه في قاعدة البيانات):
+ *  - يعبُر كل الحقول نصوصاً وأرقاماً ومصفوفات وكائنات.
+ *  - ينظّف النصوص بحد أقصى معيّن ويحذف المفاتيح التي تبدأ بـ "$" أو تحتوي "." (حماية NoSQLi).
+ *  - يرفض الكائنات غير المحدودة الأعماق (حماية العمق العميق).
+ */
+export function sanitizeObject(
+  value: unknown,
+  opts: { maxDepth?: number; maxStringLength?: number } = {}
+): unknown {
+  const { maxDepth = 10, maxStringLength = 2000 } = opts;
+  return deepSanitize(value, 0, maxDepth, maxStringLength);
+}
+
+function deepSanitize(value: unknown, depth: number, maxDepth: number, maxStringLength: number): unknown {
+  if (depth > maxDepth) return null;
+
+  if (typeof value === 'string') {
+    return sanitizeTextInput(value, maxStringLength);
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (typeof value === 'boolean' || value === null || value === undefined) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => deepSanitize(item, depth + 1, maxDepth, maxStringLength));
+  }
+  if (typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      // مفاتيح Firestore المحجوزة أو المتلاعب بها (حقن NoSQL) — رفض فوري.
+      if (key.startsWith('$') || key.includes('.') || key.startsWith('__')) continue;
+      out[key] = deepSanitize(val, depth + 1, maxDepth, maxStringLength);
+    }
+    return out;
+  }
+  return null;
+}
+
 /** تنظيم عدد صحيح موجب ضمن مدى معين. */
 export function sanitizeQuantity(value: unknown, max = 100000): number {
   const n = Number(value);
@@ -255,33 +325,95 @@ export function sanitizeQuantity(value: unknown, max = 100000): number {
 // رؤوس الأمان
 // ---------------------------------------------------------------------------
 
+export type CspDirectives = Record<string, string[]>;
+
+/**
+ * بناء سياسة CSP من كائن توجيهات — يسمح بتخصيص صارم لكل بيئة (أو عند نشر
+ * الموقع على نطاق نهائي) دون المساس بالافتراضي القابل للتشغيل.
+ */
+export function buildCsp(directives: CspDirectives): string {
+  return Object.entries(directives)
+    .map(([key, values]) => `${key} ${values.join(' ')}`)
+    .join('; ');
+}
+
+/**
+ * CSP قياسي للبيئة الحالية. يُبنى من التوجيهات الافتراضية مع السماح بتجاوزها
+ * كلياً عبر متغير البيئة CSP_POLICY (سلسلة CSP كاملة). لتحقيق صرامة قصوى:
+ * أزل 'unsafe-inline' بعد التخلص من الـ inline scripts وفعّل nonces — انظر SECURITY.md.
+ */
+export function defaultCsp(): string {
+  const override = process.env.CSP_POLICY;
+  if (override) return override;
+
+  return buildCsp({
+    "default-src": ["'self'"],
+    // 'unsafe-inline'/'unsafe-eval' مطلوبان لـ Next.js/React في الحالة الراهنة؛
+    // الخطوة التالية الموصى بها: CSP بالنوانس (nonces) — انظر توثيق الحزمة.
+    "script-src": [
+      "'self'",
+      "'unsafe-inline'",
+      "'unsafe-eval'",
+      "https://apis.google.com",
+      "https://accounts.google.com",
+      "https://*.google.com",
+      "https://*.googleapis.com",
+      "https://*.gstatic.com",
+      "https://*.firebaseapp.com",
+      "https://cdn.jsdelivr.net",
+    ],
+    "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+    "img-src": [
+      "'self'",
+      "data:",
+      "blob:",
+      "https:",
+      "https://res.cloudinary.com",
+      "https://lh3.googleusercontent.com",
+      "https://images.unsplash.com",
+    ],
+    "font-src": ["'self'", "https://fonts.gstatic.com", "data:"],
+    "connect-src": [
+      "'self'",
+      "https:",
+      "wss:",
+      "https://*.googleapis.com",
+      "https://*.firebaseapp.com",
+      "https://*.google.com",
+      "https://identitytoolkit.googleapis.com",
+      "https://securetoken.googleapis.com",
+    ],
+    "frame-src": [
+      "'self'",
+      "https://apis.google.com",
+      "https://accounts.google.com",
+      "https://*.firebaseapp.com",
+      "https://*.google.com",
+    ],
+    "frame-ancestors": ["'self'"],
+    "object-src": ["'none'"],
+    "base-uri": ["'self'"],
+    "form-action": ["'self'"],
+    "upgrade-insecure-requests": [],
+  });
+}
+
+/** هل طلب غير تصفحي (API / أتمتة)؟ نستخدمها لتجاوز رؤوس المتصفح عند اللزوم. */
+export function isApiRequest(request: NextRequest): boolean {
+  return request.nextUrl.pathname.startsWith('/api/');
+}
+
 export function applySecurityHeaders(response: NextResponse) {
-  response.headers.set('X-Frame-Options', 'SAMEORIGIN');
+  response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  response.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
+  response.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), payment=()');
   response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
   response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
   response.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
-  response.headers.set('X-DNS-Prefetch-Control', 'on');
+  response.headers.set('X-DNS-Prefetch-Control', 'off');
   response.headers.set('X-Permitted-Cross-Domain-Policies', 'none');
-  response.headers.set(
-    'Content-Security-Policy',
-    [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://accounts.google.com https://*.google.com https://*.googleapis.com https://*.gstatic.com https://*.firebaseapp.com https://cdn.jsdelivr.net",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "img-src 'self' data: blob: https: https://res.cloudinary.com https://lh3.googleusercontent.com https://images.unsplash.com",
-      "font-src 'self' https://fonts.gstatic.com data:",
-      "connect-src 'self' https: wss: https://*.googleapis.com https://*.firebaseapp.com https://*.google.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com",
-      "frame-src 'self' https://apis.google.com https://accounts.google.com https://*.firebaseapp.com https://*.google.com",
-      "frame-ancestors 'self'",
-      "object-src 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-      "upgrade-insecure-requests",
-    ].join('; ')
-  );
+  response.headers.set('Content-Security-Policy', defaultCsp());
   return response;
 }
 

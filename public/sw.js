@@ -1,13 +1,14 @@
-const CACHE_NAME = 'artisan-print-v7';
-const STATIC_CACHE = 'artisan-static-v7';
-const DYNAMIC_CACHE = 'artisan-dynamic-v7';
-const API_CACHE = 'artisan-api-v7';
-const IMAGE_CACHE = 'artisan-images-v7';
-const META_CACHE = 'artisan-meta-v7';
+const CACHE_VERSION = 'v8';
+const CACHE_NAME = `artisan-print-${CACHE_VERSION}`;
+const STATIC_CACHE = `artisan-static-${CACHE_VERSION}`;
+const DYNAMIC_CACHE = `artisan-dynamic-${CACHE_VERSION}`;
+const API_CACHE = `artisan-api-${CACHE_VERSION}`;
+const IMAGE_CACHE = `artisan-images-${CACHE_VERSION}`;
+const META_CACHE = `artisan-meta-${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline';
 
 // إصدار البناء — يُحدَّث عند كل إصدار جديد ليتمكّن العملاء من التحقق منه.
-const BUILD_ID = 'v6';
+const BUILD_ID = 'v8';
 
 const STATIC_ASSETS = [
   '/offline',
@@ -20,6 +21,8 @@ const STATIC_ASSETS = [
 
 const API_CACHE_DURATION = 5 * 60 * 1000;
 const IMAGE_MAX_ENTRIES = 300;
+const DYNAMIC_MAX_ENTRIES = 150;
+const API_MAX_ENTRIES = 100;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -35,10 +38,11 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
+    // تنظيف كل ذاكرات الإصدارات القديمة (بدون تمييز الـ v8).
     caches.keys().then((names) =>
       Promise.all(
         names
-          .filter((n) => n.startsWith('artisan-') && !n.endsWith('-v7'))
+          .filter((n) => n.startsWith('artisan-') && !n.endsWith(`-${CACHE_VERSION}`))
           .map((n) => caches.delete(n))
       )
     ).then(() => self.clients.claim())
@@ -109,14 +113,42 @@ self.addEventListener('fetch', (event) => {
 
 /* ---------- استراتيجيات التخزين المؤقت ---------- */
 
+/**
+ * كتابة آمنة في الذاكرة المؤقتة:
+ *  - تحدّ العدد الأقصى للإدخالات (منع امتلاء التخزين).
+ *  - تلتقط أخطاء الحصة (QuotaExceeded) وتحذف الأقدم عند الضرورة.
+ */
+async function safePut(cacheName, request, response, maxEntries) {
+  try {
+    const cache = await caches.open(cacheName);
+    await cache.put(request, response.clone());
+    if (maxEntries && maxEntries > 0) {
+      const keys = await cache.keys();
+      if (keys.length > maxEntries) {
+        // إزالة الأقدم أولاً (مفاتيح Cache API مرتبة بترتيب الإدراج).
+        const excess = keys.length - maxEntries;
+        for (let i = 0; i < excess; i++) await cache.delete(keys[i]);
+      }
+    }
+  } catch (e) {
+    // QuotaExceeded أو خطأ كتابة → نحاول تنظيف ثم نتجاهل (لا نفشل الطلب).
+    try {
+      const cache = await caches.open(cacheName);
+      const keys = await cache.keys();
+      if (keys.length > 0) await cache.delete(keys[0]);
+    } catch (e2) {
+      /* ignore */
+    }
+  }
+}
+
 async function cacheFirst(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
   try {
     const response = await fetch(request);
     if (response.ok) {
-      const cache = await caches.open(DYNAMIC_CACHE);
-      cache.put(request, response.clone());
+      await safePut(DYNAMIC_CACHE, request, response, DYNAMIC_MAX_ENTRIES);
     }
     return response;
   } catch (e) {
@@ -128,8 +160,7 @@ async function networkFirst(request) {
   try {
     const response = await fetch(request);
     if (response.ok) {
-      const cache = await caches.open(DYNAMIC_CACHE);
-      cache.put(request, response.clone());
+      await safePut(DYNAMIC_CACHE, request, response, DYNAMIC_MAX_ENTRIES);
     }
     return response;
   } catch (e) {
@@ -143,8 +174,7 @@ async function networkFirstWithFallback(request, fallbackUrl) {
   try {
     const response = await fetch(request);
     if (response.ok) {
-      const cache = await caches.open(DYNAMIC_CACHE);
-      cache.put(request, response.clone());
+      await safePut(DYNAMIC_CACHE, request, response, DYNAMIC_MAX_ENTRIES);
       return response;
     }
     throw new Error('Response not OK');
@@ -173,7 +203,7 @@ async function staleWhileRevalidate(request, cacheName, maxAge) {
     try {
       const response = await fetch(request);
       if (response.ok) {
-        cache.put(request, response.clone());
+        await safePut(cacheName, request, response, API_MAX_ENTRIES);
         await setMeta(cacheName, request.url, now);
       }
       return response;
@@ -200,12 +230,7 @@ async function imageCacheFirst(request) {
   try {
     const response = await fetch(request);
     if (response.ok) {
-      // حد أقصى لعدد الصور المخزنة لتجنب امتلاء التخزين.
-      const keys = await cache.keys();
-      if (keys.length >= IMAGE_MAX_ENTRIES) {
-        await cache.delete(keys[0]);
-      }
-      cache.put(request, response.clone());
+      await safePut(IMAGE_CACHE, request, response, IMAGE_MAX_ENTRIES);
     }
     return response;
   } catch (e) {
@@ -354,7 +379,8 @@ async function syncHomeData() {
       const url = new URL(path, self.location.origin);
       const res = await fetch(url);
       if (res.ok) {
-        const cache = await caches.open(url.pathname.startsWith('/api/') ? API_CACHE : DYNAMIC_CACHE);
+        const cacheName = url.pathname.startsWith('/api/') ? API_CACHE : DYNAMIC_CACHE;
+        const cache = await caches.open(cacheName);
         await cache.put(url, res.clone());
         await setMeta(API_CACHE, url.toString(), Date.now());
       }

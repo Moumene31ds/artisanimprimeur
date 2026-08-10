@@ -128,10 +128,21 @@ export function pollForUpdates(intervalMs = 5 * 60 * 1000): () => void {
   };
 }
 
+export interface BuildFeatureSet {
+  version: string;
+  date?: string | null;
+  kind?: 'normal' | 'critical';
+  features: { ar: string[]; fr: string[] };
+}
+
 export interface BuildInfo {
   version: string;
   release?: string;
+  releaseDate?: string | null;
+  kind?: 'normal' | 'critical';
   features?: { ar: string[]; fr: string[] };
+  /** الميزات التراكمية لكل الإصدارات الأحدث من نسخة المستخدم (عند تمرير ?since=). */
+  changelogSince?: BuildFeatureSet[];
 }
 
 /** مفتاح آخر نسخة شاهدها المستخدم (مخزّن محلياً). */
@@ -164,12 +175,20 @@ export function dispatchShowUpdate(info: BuildInfo): void {
   window.dispatchEvent(new CustomEvent(SHOW_UPDATE_EVENT, { detail: info }));
 }
 
-/** الحصول على نسخة البناء من الخادم (بلا تخزين مؤقت). */
-export async function getBuildInfo(): Promise<BuildInfo | null> {
+/**
+ * الحصول على نسخة البناء من الخادم (بلا تخزين مؤقت).
+ * - `since`: آخر نسخة شاهدها المستخدم، ليعيد الخادم الميزات التراكمية.
+ * - مهلة قصيرة (AbortSignal) كي لا تبقى واجهة التحقق معلّقة على شبكة بطيئة.
+ */
+export async function getBuildInfo(since?: string | null): Promise<BuildInfo | null> {
   try {
-    const res = await fetch('/api/build-info', { cache: 'no-store' });
+    const query = since ? `?since=${encodeURIComponent(since)}` : '';
+    const res = await fetch(`/api/build-info${query}`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(8_000),
+    });
     if (!res.ok) return null;
-    return await res.json();
+    return (await res.json()) as BuildInfo;
   } catch {
     return null;
   }
