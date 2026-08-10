@@ -10,7 +10,7 @@ import {
   Wifi, RefreshCw, Rocket, Bell, Vibrate, Loader2, Activity, Droplets, Eye,
   HardDrive, Trash2, Battery, BatteryCharging, Clock, Download, CheckCircle2,
   Share2, Fingerprint, ScanFace, ShieldCheck, Lock, KeyRound, Timer, EyeOff,
-  Bot, Volume2, ArrowDown, MessageSquareCode
+  Bot, Volume2, ArrowDown, MessageSquareCode, User
 } from "lucide-react";
 import { useAppStore, type ThemeMode, type FontSizeMode, type DeviceTier } from "@/lib/store";
 import { useTheme } from "next-themes";
@@ -32,6 +32,7 @@ import {
   getChatHistory, clearChatHistory, buildChatExportText, dispatchOpenChat,
   CHAT_CLEARED_EVENT,
 } from "@/lib/chat-storage";
+import { getChatUser, onUserChange } from "@/lib/auth-session";
 
 interface AiMetaInfo {
   available: boolean;
@@ -182,6 +183,7 @@ export default function SettingsPage() {
   const [aiMeta, setAiMeta] = useState<AiMetaInfo | null>(null);
   const [aiMetaLoading, setAiMetaLoading] = useState(true);
   const [chatStats, setChatStats] = useState<{ messages: number; bytes: number }>({ messages: 0, bytes: 0 });
+  const [chatAccountLabel, setChatAccountLabel] = useState("");
 
   const lock = useAppLock();
   const [pinSetupOpen, setPinSetupOpen] = useState(false);
@@ -237,6 +239,16 @@ export default function SettingsPage() {
   const refreshChatStats = () => {
     const info = getChatHistory();
     setChatStats({ messages: info.messages.length, bytes: info.bytes });
+    const u = getChatUser();
+    setChatAccountLabel(
+      !u
+        ? ""
+        : u.isGuest
+          ? isRtl
+            ? "حساب الضيف (غير محفوظ)"
+            : "Compte invité (non sauvegardé)"
+          : u.displayName || u.email || u.key
+    );
   };
 
   // معلومات مزود الذكاء + إحصائيات سجل المحادثة
@@ -249,8 +261,12 @@ export default function SettingsPage() {
       .finally(() => setAiMetaLoading(false));
     refreshChatStats();
     const onCleared = () => refreshChatStats();
+    const unsubscribeUser = onUserChange(() => refreshChatStats());
     window.addEventListener(CHAT_CLEARED_EVENT, onCleared);
-    return () => window.removeEventListener(CHAT_CLEARED_EVENT, onCleared);
+    return () => {
+      window.removeEventListener(CHAT_CLEARED_EVENT, onCleared);
+      unsubscribeUser();
+    };
   }, []);
 
   const handleClearChatHistory = () => {
@@ -271,7 +287,9 @@ export default function SettingsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `lartisan-chat-${new Date().toISOString().slice(0, 10)}.txt`;
+    const accountKey = getChatUser()?.key;
+    const accountSuffix = accountKey ? `-${accountKey.slice(0, 8)}` : "";
+    a.download = `lartisan-chat${accountSuffix}-${new Date().toISOString().slice(0, 10)}.txt`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1030,6 +1048,12 @@ export default function SettingsPage() {
                       ? `${chatStats.messages} ${tr("aiHistoryMessages")} · ${fmtBytes(chatStats.bytes)}`
                       : tr("aiHistoryEmpty")}
                   </p>
+                  {chatAccountLabel && (
+                    <p className="text-[10px] font-bold text-slate-400/90 flex items-center gap-1 mt-0.5">
+                      <User size={10} className="shrink-0" />
+                      <span className="truncate">{chatAccountLabel}</span>
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

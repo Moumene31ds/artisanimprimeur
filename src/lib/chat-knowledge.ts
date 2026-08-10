@@ -169,6 +169,14 @@ export interface ChatPromptOptions {
   page?: string;
   /** Compact auto-summary of earlier turns (long-conversation memory). */
   summary?: string;
+  /** هوية المستخدم الحالي (يُمرِّرها عميل الشات) لتخصيص الرد باسمه. */
+  user?: {
+    key?: string;
+    uid?: string;
+    displayName?: string | null;
+    email?: string | null;
+    isGuest?: boolean;
+  } | null;
 }
 
 export function buildChatSystemPrompt(options: ChatPromptOptions = {}): string {
@@ -185,6 +193,18 @@ export function buildChatSystemPrompt(options: ChatPromptOptions = {}): string {
 
   const pageContext = options.page
     ? `\nThe user is currently browsing the page "${options.page}". Use this to give contextual help (e.g. on /cart talk about the cart, on /orders about their orders).`
+    : '';
+
+  const userContext = options.user
+    ? [
+        '\n===== USER =====',
+        `- Display name: ${options.user.displayName || (options.user.isGuest ? 'Guest' : 'A client')}`,
+        `- Status: ${options.user.isGuest ? 'Guest (not signed in yet)' : 'Signed-in customer'}`,
+        options.user.email ? `- Email: ${options.user.email}` : '',
+        'Address them by their display name in a friendly way. If they are a guest, gently mention (once, not repeatedly) that signing in lets them keep this conversation. Do NOT ask for or confirm any email address.',
+      ]
+        .filter(Boolean)
+        .join('\n')
     : '';
 
   const summarySection = options.summary
@@ -205,6 +225,7 @@ ${langRule}
 8. When the user wants to order, collect step by step (name → phone → product → quantity), then confirm with createOrder.
 9. When the user says something like "خذني إلى..." or "amène-moi à...", use navigateToPage.
 ${pageContext}
+${userContext}
 
 ===== COMPANY =====
 - Name: ${COMPANY.name} — ${COMPANY.sloganFr} / ${COMPANY.sloganAr}

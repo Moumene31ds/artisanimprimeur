@@ -1,10 +1,30 @@
 // src/lib/chat-storage.ts
-// مشاركة بيانات الشات بين مكوّن الشات وصفحة الإعدادات: مفتاح التخزين،
+// مشاركة بيانات الشات بين مكوّن الشات وصفحة الإعدادات: مفاتيح التخزين،
 // أحداث الفتح/المسح، وقراءة/تصدير سجل المحادثة.
+//
+// منذ v6.9.3 أصبحت المحادثة **خاصة بكل حساب**: كل مستخدم مسجّل يملك محادثة
+// مستقلة (مفتاح `lartisan_chat_history_<uid>`)، والزائر/الضيف له مفتاح عام
+// مشترك. عند تسجيل الدخول يجد المستخدم محادثته القديمة سليمة دون اختلاطها
+// بمحادثات الآخرين.
 
+import { getChatUserKey } from "@/lib/auth-session";
+
+/** مفتاح محادثة الضيف/الزوار (متوافق مع الإصدارات السابقة). */
 export const CHAT_STORAGE_KEY = "lartisan_chat_history";
+
 export const OPEN_CHAT_EVENT = "lartisan:open-chat";
 export const CHAT_CLEARED_EVENT = "lartisan:chat-cleared";
+
+/**
+ * مفتاح التخزين الموحّد لمحادثة معيّنة.
+ * - بدون `userKey`: مفتاح المستخدم الحالي (من الجلسة).
+ * - `userKey="guest"` أو أي زائر غير مسجّل → المفتاح العام القديم.
+ */
+export function buildChatStorageKey(userKey?: string): string {
+  const key = userKey || getChatUserKey();
+  if (!key || key === "guest") return CHAT_STORAGE_KEY;
+  return `${CHAT_STORAGE_KEY}_${key}`;
+}
 
 /** فتح الشات من أي مكان (صفحة الإعدادات...). */
 export function dispatchOpenChat(): void {
@@ -31,11 +51,13 @@ export interface ChatHistoryInfo {
   bytes: number;
 }
 
-/** قراءة سجل المحادثة المحفوظ محلياً مع حجمه بالبايت. */
-export function getChatHistory(): ChatHistoryInfo {
+/**
+ * قراءة سجل محادثة المستخدم الحالي (أو `userKey` صريح) مع حجمه بالبايت.
+ */
+export function getChatHistory(userKey?: string): ChatHistoryInfo {
   if (typeof window === "undefined") return { messages: [], bytes: 0 };
   try {
-    const raw = localStorage.getItem(CHAT_STORAGE_KEY);
+    const raw = localStorage.getItem(buildChatStorageKey(userKey));
     if (!raw) return { messages: [], bytes: 0 };
     const parsed = JSON.parse(raw);
     return { messages: Array.isArray(parsed) ? parsed : [], bytes: raw.length * 2 };
@@ -44,10 +66,24 @@ export function getChatHistory(): ChatHistoryInfo {
   }
 }
 
-/** مسح سجل المحادثة بالكامل مع إعلام الشات. */
-export function clearChatHistory(): void {
+/**
+ * حفظ سجل محادثة المستخدم الحالي (أو `userKey` صريح) محلياً.
+ */
+export function saveChatHistory(messages: StoredChatMessage[], userKey?: string): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(CHAT_STORAGE_KEY);
+  try {
+    localStorage.setItem(buildChatStorageKey(userKey), JSON.stringify(messages));
+  } catch {
+    /* ignore (ممتلئ التخزين أو وضع خاص) */
+  }
+}
+
+/**
+ * مسح سجل محادثة المستخدم الحالي (أو `userKey` صريح) بالكامل مع إعلام الشات.
+ */
+export function clearChatHistory(userKey?: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(buildChatStorageKey(userKey));
   dispatchChatCleared();
 }
 

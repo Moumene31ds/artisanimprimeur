@@ -26,10 +26,22 @@ export async function POST(req: Request) {
   let messages: any[];
   let lang: 'ar' | 'fr' | undefined;
   let page: string | undefined;
+  let user: any = null;
   try {
     const body = await req.json();
     messages = body.messages;
     lang = body.lang === 'ar' || body.lang === 'fr' ? body.lang : undefined;
+    // هوية المستخدم (اختيارية) ليعرف المساعد اسم المحادثة — تُنقّح قبل الاستخدام.
+    const rawUser = body.user;
+    if (rawUser && typeof rawUser === 'object') {
+      user = {
+        key: String(rawUser.key ?? rawUser.uid ?? 'guest').slice(0, 128),
+        uid: String(rawUser.uid ?? '').slice(0, 128),
+        displayName: String(rawUser.displayName ?? '').slice(0, 80),
+        email: String(rawUser.email ?? '').slice(0, 160),
+        isGuest: Boolean(rawUser.isGuest),
+      };
+    }
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: 'Messages array is empty or invalid.' }, { status: 400 });
     }
@@ -183,7 +195,7 @@ export async function POST(req: Request) {
     const { model, providerName, modelId } = await resolveModel();
 
     const summary = buildConversationSummary(messages) ?? undefined;
-    const system = buildChatSystemPrompt({ languageHint: lang, page, summary });
+    const system = buildChatSystemPrompt({ languageHint: lang, page, summary, user });
 
     const result = streamText({
       model,

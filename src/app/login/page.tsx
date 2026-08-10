@@ -603,9 +603,24 @@ export default function LoginPage() {
       </div>
 
       {/* Main Authentication Form Container */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative z-10">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 pb-[max(1.5rem,env(safe-area-inset-bottom))] relative z-10">
         <div className="w-full max-w-md">
           
+          {/* شعار الموقع على الجوال فقط (اللوحة التعريفية مخفية على الشاشات الصغيرة) */}
+          <div className="lg:hidden flex items-center gap-3 mb-6">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center border border-white/20 shadow-lg shadow-blue-500/30">
+              <Printer size={20} className="text-white" />
+            </div>
+            <div>
+              <p className="text-base font-black text-slate-900 dark:text-white leading-tight">
+                {isRtl ? "لارتيزان إمبريمور" : "L'Artisan Imprimeur"}
+              </p>
+              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                {isRtl ? "طباعة وتصميم احترافي في وهران" : "Impression & design premium à Oran"}
+              </p>
+            </div>
+          </div>
+
           {/* Quick Header & Language Toggle */}
           <div className="flex justify-between items-center mb-8">
              <Link href="/" className="text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5 transition-colors">
@@ -783,7 +798,7 @@ export default function LoginPage() {
                     <div className={`absolute inset-y-0 ${isRtl ? 'right-0 pr-4' : 'left-0 pl-4'} flex items-center pointer-events-none`}><UserIcon size={18} className="text-slate-400"/></div>
                     <input 
                       required type="text" value={name} onChange={e=>setName(e.target.value)} placeholder={t("nameLabel")} 
-                      className={`w-full ${isRtl ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-sm`} 
+                      className={`w-full ${isRtl ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-base`} 
                     />
                   </motion.div>
                 )}
@@ -794,7 +809,7 @@ export default function LoginPage() {
                 <div className={`absolute inset-y-0 ${isRtl ? 'right-0 pr-4' : 'left-0 pl-4'} flex items-center pointer-events-none`}><Mail size={18} className="text-slate-400"/></div>
                 <input 
                   required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder={t("email")} 
-                  className={`w-full ${isRtl ? 'pr-12 pl-4 text-right' : 'pl-12 pr-4 text-left'} py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-sm dir-ltr`} 
+                  className={`w-full ${isRtl ? 'pr-12 pl-4 text-right' : 'pl-12 pr-4 text-left'} py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-base dir-ltr`} 
                   dir="ltr" 
                 />
               </div>
@@ -808,7 +823,7 @@ export default function LoginPage() {
                       setPassword(e.target.value);
                       setPasswordStrength(getPasswordStrength(e.target.value));
                     }} placeholder={t("password")} 
-                    className={`w-full ${isRtl ? 'pr-12 pl-12 text-right' : 'pl-12 pr-12 text-left'} py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-sm dir-ltr`} 
+                    className={`w-full ${isRtl ? 'pr-12 pl-12 text-right' : 'pl-12 pr-12 text-left'} py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-base dir-ltr`} 
                     dir="ltr" 
                     autoComplete="current-password"
                   />

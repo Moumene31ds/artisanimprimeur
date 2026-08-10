@@ -12,10 +12,12 @@ import {
   Trash2, ArrowLeftRight, Truck, HelpCircle,
   Square, Copy, Check, RefreshCw, WifiOff, ArrowDown, Mic, MicOff,
   Volume2, ThumbsUp, ThumbsDown, Paperclip, UploadCloud, ExternalLink,
-  ShoppingCart, Cpu, BadgePercent, Settings2, Search, Download, HardDrive
+  ShoppingCart, Cpu, BadgePercent, Settings2, Search, Download, HardDrive,
+  ShieldCheck, User as UserIcon
 } from "lucide-react";
 import { nativeHaptic, nativeHapticSuccess, nativeSpeechRecognize, isNative } from "@/lib/native";
-import { CHAT_STORAGE_KEY, OPEN_CHAT_EVENT, CHAT_CLEARED_EVENT, buildChatExportText } from "@/lib/chat-storage";
+import { OPEN_CHAT_EVENT, CHAT_CLEARED_EVENT, buildChatExportText, getChatHistory, saveChatHistory, clearChatHistory } from "@/lib/chat-storage";
+import { useAuth } from "@/context/AuthContext";
 
 interface ProductResult {
   id: string;
@@ -82,6 +84,21 @@ export default function AntigravityChat() {
   const pathname = usePathname();
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
+  // هوية المستخدم الحالي: لكل حساب محادثة خاصة به (والضيف/الزائر له مفتاح عام).
+  const { user: authUser } = useAuth();
+  const chatUserKey = authUser ? (authUser.isAnonymous ? "guest" : authUser.uid) : "guest";
+  const chatUserMeta = authUser
+    ? {
+        key: chatUserKey,
+        uid: authUser.uid,
+        displayName: authUser.displayName,
+        email: authUser.email,
+        isGuest: authUser.isAnonymous,
+      }
+    : null;
+  // تُرفق هوية المستخدم مع كل طلب للخادم ليُخصِّص المساعد الرد باسمه
+  // ويحيط بمحادثته الخاصة (دون كشف أي شيء حساس).
+  const chatRequestOptions = chatUserMeta ? { body: { user: chatUserMeta } } : undefined;
 
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -174,7 +191,7 @@ export default function AntigravityChat() {
     return () => { cancelled = true; };
   }, [isOpen]);
 
-  // إعدادات البداية وحفظ المحادثات
+  // إعدادات البداية: حالة التحميل + مراقبة الاتصال
   useEffect(() => {
     setMounted(true);
     setIsOnline(typeof window !== "undefined" ? navigator.onLine : true);
@@ -185,32 +202,45 @@ export default function AntigravityChat() {
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
-    const saved = localStorage.getItem(CHAT_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.length > 0) {
-          const normalized = parsed.map((m: any) => {
-            if (!m.content && m.parts?.length > 0) {
-              const text = m.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('');
-              return { ...m, content: text };
-            }
-            return m;
-          });
-          setMessages(normalized);
-        }
-      } catch (e) {
-        console.error("Failed to parse chat history", e);
-      }
-    }
-
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
       window.speechSynthesis?.cancel();
     };
-  }, [setMessages]);
+  }, []);
 
+  // تحميل سجل محادثة **المستخدم الحالي** — يتغيّر المفتاح مع كل حساب،
+  // فلا تختلط محادثات المستخدمين، وعند تسجيل الدخول/الخروج تُحمَّل محادثة
+  // الحساب نفسه تلقائياً (والمحادثة الخاصة بي تبقى محفوظة كما هي).
+  useEffect(() => {
+    const info = getChatHistory(chatUserKey);
+    setFeedback({});
+    setTextInput("");
+    setSearchQuery("");
+    setUnreadCount(0);
+    if (info.messages.length > 0) {
+      try {
+        const normalized = info.messages.map((m: any) => {
+          if (!m.content && m.parts?.length > 0) {
+            const text = m.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('');
+            return { ...m, content: text };
+          }
+          return m;
+        });
+        setMessages(normalized);
+      } catch (e) {
+        console.error("Failed to parse chat history", e);
+        setMessages([defaultWelcome]);
+      }
+    } else {
+      setMessages([defaultWelcome]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatUserKey]);
+
+  // حفظ تلقائي لسجل المحادثة (محلياً — خصوصية كاملة، لا يُرفع أي شيء للخادم).
+  // المفتاح يُقرأ من الجلسة الحالية عند كل حفظ؛ لا نُدرجه في الاعتماديات حتى
+  // لا نحفظ رسائل الحساب السابق تحت مفتاح الحساب الجديد أثناء تبديل الحساب.
   useEffect(() => {
     if (mounted && messages.length > 1 && chatPersistHistory) {
       const clean = messages.map((m: any) => ({
@@ -219,7 +249,7 @@ export default function AntigravityChat() {
         content: getMessageTextContent(m),
         createdAt: m.createdAt,
       }));
-      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(clean));
+      saveChatHistory(clean, chatUserKey);
     }
   }, [messages, mounted, chatPersistHistory]);
 
@@ -376,11 +406,11 @@ export default function AntigravityChat() {
           const base64Url = reader.result as string;
           await sendMessage({
             text: contextPrefix + (userMessage || (isRtl ? "صورة مرفقة" : "Image jointe")) + `\n![${fileToUpload.file.name}](${base64Url})`
-          });
+          }, chatRequestOptions);
         };
         reader.readAsDataURL(fileToUpload.file);
       } else {
-        await sendMessage({ text: contextPrefix + userMessage });
+        await sendMessage({ text: contextPrefix + userMessage }, chatRequestOptions);
       }
     } catch (error) {
       console.error("Failed to send message:", error);
@@ -563,7 +593,7 @@ export default function AntigravityChat() {
   const handleQuickPromptClick = async (promptText: string) => {
     if (!isOnline || isLoading) return;
     const contextPrefix = messages.length <= 1 ? `[Context: Page ${pathname}, Lang ${language}]. ` : "";
-    await sendMessage({ text: contextPrefix + promptText });
+    await sendMessage({ text: contextPrefix + promptText }, chatRequestOptions);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -575,7 +605,7 @@ export default function AntigravityChat() {
 
   const handleClearChat = () => {
     if (window.confirm(isRtl ? "هل أنت متأكد من مسح المحادثة؟" : "Êtes-vous sûr de vouloir effacer la discussion ?")) {
-      localStorage.removeItem(CHAT_STORAGE_KEY);
+      clearChatHistory(chatUserKey);
       setMessages([defaultWelcome]);
       setTextInput("");
       setFeedback({});
@@ -954,6 +984,25 @@ export default function AntigravityChat() {
                   </h4>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
                     L'Artisan Imprimeur
+                    {authUser && !authUser.isAnonymous ? (
+                      <span
+                        className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 normal-case tracking-normal truncate max-w-[120px]"
+                        title={isRtl ? "محادثة خاصة بحسابك" : "Conversation privée de votre compte"}
+                      >
+                        <ShieldCheck size={9} />
+                        <span className="truncate">
+                          {isRtl ? "محادثة خاصة" : "Conversation privée"}
+                        </span>
+                      </span>
+                    ) : authUser ? (
+                      <span
+                        className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 normal-case tracking-normal"
+                        title={isRtl ? "أنت ضيف — سجّل دخولك لحفظ محادثتك" : "Mode invité — connectez-vous pour garder votre conversation"}
+                      >
+                        <UserIcon size={9} />
+                        {isRtl ? "ضيف" : "Invité"}
+                      </span>
+                    ) : null}
                     {meta?.available && (
                       <span
                         className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 normal-case tracking-normal"
