@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       imageUrl: uploadResponse.secure_url,
-      fallback: true,
+      fallback: false,
       publicId: uploadResponse.public_id,
     });
 

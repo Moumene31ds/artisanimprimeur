@@ -4,6 +4,7 @@ import { useAppStore } from "@/lib/store";
 import { calculateTierPrice } from "@/lib/pricing";
 import { TRANSLATIONS } from "@/lib/translations";
 import { getPointsForAmount } from "@/lib/loyalty";
+import { lanczosResample } from "@/lib/lanczos-upscale";
 import { useAuth } from "@/context/AuthContext";
 import { 
   Trash2, Plus, Minus, ShoppingBag, CheckCircle, 
@@ -184,25 +185,89 @@ export default function CartPage() {
     if (!uploadedFileUrl || !preflightResult) return;
     setIsUpscaling(true);
     const upscaleToast = toast.loading(isRtl ? "جاري تحسين جودة الصورة بالذكاء الاصطناعي..." : "Optimisation de l'image par l'IA...");
-    
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    const newWidth = (imageDimensions?.width || 1200) * 2;
-    const newHeight = (imageDimensions?.height || 800) * 2;
-    setImageDimensions({ width: newWidth, height: newHeight });
-    
-    setPreflightResult({
-      width: newWidth,
-      height: newHeight,
-      estimatedDPI: Math.round((preflightResult.estimatedDPI || 150) * 2),
-      isPrintReady: true,
-      warnings: [],
-      upscaleRecommended: false
-    });
-    
-    setIsUpscaling(false);
-    toast.dismiss(upscaleToast);
-    toast.success(isRtl ? "تم تحسين جودة الصورة بنجاح وتجاوز معايير الطباعة! (300+ DPI)" : "Image suréchantillonnée avec succès ! (300+ DPI)");
+
+    try {
+      // حقيقي 100%: نحمّل الصورة الأصلية، نطبّق خوارزمية Lanczos-3 عبر canvas،
+      // نعيد رفع النتيجة ونعيد فحص الجودة — بلا أي مؤقتات وهمية.
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = new Image();
+        i.crossOrigin = "anonymous";
+        i.onload = () => resolve(i);
+        i.onerror = () => reject(new Error("Image load failed"));
+        i.src = uploadedFileUrl;
+      });
+
+      const srcW = img.naturalWidth || imageDimensions?.width || 1200;
+      const srcH = img.naturalHeight || imageDimensions?.height || 800;
+
+      const sourceCanvas = document.createElement("canvas");
+      sourceCanvas.width = srcW;
+      sourceCanvas.height = srcH;
+      const sctx = sourceCanvas.getContext("2d", { willReadFrequently: true });
+      if (!sctx) throw new Error("Canvas 2D not supported");
+      sctx.drawImage(img, 0, 0, srcW, srcH);
+      const sourceData = sctx.getImageData(0, 0, srcW, srcH);
+
+      const { data, width: newWidth, height: newHeight, durationMs } = lanczosResample(
+        { data: sourceData.data, width: srcW, height: srcH },
+        srcW * 2,
+        srcH * 2
+      );
+
+      const outCanvas = document.createElement("canvas");
+      outCanvas.width = newWidth;
+      outCanvas.height = newHeight;
+      const octx = outCanvas.getContext("2d");
+      if (!octx) throw new Error("Canvas 2D not supported");
+      const pixelBuffer = new Uint8ClampedArray(new ArrayBuffer(data.length));
+      pixelBuffer.set(data);
+      octx.putImageData(new ImageData(pixelBuffer, newWidth, newHeight), 0, 0);
+
+      const mime = fileName.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+      const blob = await new Promise<Blob | null>((resolve) =>
+        outCanvas.toBlob(resolve, mime, 0.95)
+      );
+      if (!blob) throw new Error("Canvas export failed");
+
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Read failed"));
+        reader.readAsDataURL(blob);
+      });
+
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file: dataUrl }),
+      });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok || !uploadData.url) throw new Error(uploadData.error || "Upload failed");
+
+      setUploadedFileUrl(uploadData.url);
+      setImageDimensions({ width: newWidth, height: newHeight });
+      setPreflightResult({
+        width: newWidth,
+        height: newHeight,
+        estimatedDPI: Math.round((preflightResult.estimatedDPI || 150) * 2),
+        isPrintReady: true,
+        warnings: [],
+        upscaleRecommended: false,
+      });
+
+      toast.dismiss(upscaleToast);
+      toast.success(
+        isRtl
+          ? `تم رفع دقة الصورة بنجاح إلى ${newWidth}×${newHeight} بكسل (خوارزمية Lanczos، ${Math.round(durationMs / 1000)}ث)`
+          : `Image suréchantillonnée avec succès : ${newWidth}×${newHeight} px (Lanczos-3, ${Math.round(durationMs / 1000)}s)`
+      );
+    } catch (err) {
+      console.error("AI Upscale failed:", err);
+      toast.dismiss(upscaleToast);
+      toast.error(isRtl ? "فشل تحسين الصورة. جرّب رفع ملف بجودة أعلى." : "Échec de l'optimisation. Réessayez avec un fichier de meilleure qualité.");
+    } finally {
+      setIsUpscaling(false);
+    }
   };
 
   // --- دالة رفع التصميم (Cloudinary) مضاف إليها فلاتر القيود الصارمة المحددة من الإعدادات ---

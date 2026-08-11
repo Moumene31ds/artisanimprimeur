@@ -17,6 +17,7 @@ import {
   lookupPromo,
 } from '@/lib/chat-knowledge';
 import { getCatalogProducts } from '@/lib/catalog';
+import { moderateMessage, MODERATION_VIOLATION_MESSAGE } from '@/lib/moderation';
 
 export const maxDuration = 60;
 
@@ -59,6 +60,13 @@ export async function POST(req: Request) {
     }
     if (totalChars > 80_000) {
       return NextResponse.json({ error: 'Conversation is too large.' }, { status: 400 });
+    }
+    // وساطة المحتوى: منع الإساءة/الرسائل الضارة قبل وصولها للنموذج.
+    for (const m of messages) {
+      const text = typeof m?.content === 'string' ? m.content : m?.parts?.[0]?.text ?? '';
+      if (moderateMessage(text)) {
+        return NextResponse.json({ error: MODERATION_VIOLATION_MESSAGE }, { status: 400 });
+      }
     }
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
@@ -104,24 +112,37 @@ export async function POST(req: Request) {
 
       searchProducts: tool({
         description:
-          'Search the live store catalog for products matching a keyword (name or category) and return the top matches with real prices.',
+          'Search the live store catalog for products matching a keyword (name or category) and return the top matches with real prices. Supports multi-word queries.',
         inputSchema: z.object({
-          query: z.string().describe('Search keyword, e.g. "cartes", "flyers", "stickers", "affiche".'),
+          query: z.string().describe('Search keyword(s), e.g. "cartes", "flyers", "stickers", "affiche", "invitations".'),
         }),
         execute: async ({ query }) => {
           const q = (query ?? '').toLowerCase().trim();
           const all = await getCatalogProducts();
-          const matches = q
-            ? all.filter(
-                (p) =>
-                  p.name.toLowerCase().includes(q) ||
-                  String(p.category ?? '').toLowerCase().includes(q)
-              )
-            : all;
+          const tokens = q.split(/\s+/).filter(Boolean);
+          const scored = all
+            .map((p) => {
+              const name = p.name.toLowerCase();
+              const category = String(p.category ?? '').toLowerCase();
+              let score = 0;
+              for (const t of tokens) {
+                if (name.includes(t)) score += 2;
+                if (category.includes(t)) score += 1;
+              }
+              if (tokens.length > 1 && score === 0) {
+                const allTokensHit = tokens.every((t) => name.includes(t));
+                if (allTokensHit) score += 3;
+              }
+              return { p, score };
+            })
+            .filter((x) => x.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 6)
+            .map((x) => x.p);
           return {
             success: true,
             query: q,
-            results: matches.slice(0, 6).map((p) => ({
+            results: scored.map((p) => ({
               id: String(p.id),
               name: p.name,
               price: p.price,
@@ -156,6 +177,29 @@ export async function POST(req: Request) {
           messageToUser: z.string().describe('A short bilingual-ish message explaining the redirect to the user in their language.'),
         }),
         execute: async ({ route, messageToUser }) => ({ route, messageToUser, navigated: true }),
+      }),
+
+      deliveryStatus: tool({
+        description:
+          'Check the current delivery/collection status. Use when the user asks about delivery, livraison, التوصيل, or where to pick up their order.',
+        inputSchema: z.object({
+          wilaya: z.string().optional().describe('Optional wilaya the user asks about, e.g. "Oran" or "Alger".'),
+        }),
+        execute: async ({ wilaya }) => {
+          return {
+            success: true,
+            homeDeliveryAvailable: false,
+            collectionOnly: true,
+            workshopAddress: "Cité Akid Lotfi, Oran",
+            workshopHours: "09:00 – 18:00 (Sat–Thu)",
+            homeDeliverySoon: true,
+            messageFr:
+              'La livraison à domicile n\'est pas encore disponible. Les commandes se retirent à l\'atelier (Cité Akid Lotfi, Oran), ouvert de 09h à 18h du samedi au jeudi. La livraison arrive très bientôt !',
+            messageAr:
+              'التوصيل إلى المنزل غير متاح بعد. تُستلم الطلبات من مقر المطبعة (حيّ العقيد لطفي، وهران) من 09:00 إلى 18:00 من السبت إلى الخميس. التوصيل قريباً جداً!',
+            ...(wilaya ? { queriedWilaya: wilaya } : {}),
+          };
+        },
       }),
 
       createOrder: tool({
@@ -203,7 +247,7 @@ export async function POST(req: Request) {
       system,
       temperature: 0.4,
       tools: toolsDef,
-      stopWhen: stepCountIs(3),
+      stopWhen: stepCountIs(5),
       maxRetries: 2,
       onError: (err: any) => {
         console.warn(`[chat] stream error on ${providerName} (${modelId}):`, err?.message ?? err);

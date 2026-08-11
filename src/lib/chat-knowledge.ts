@@ -224,6 +224,7 @@ ${langRule}
 7. Keep answers concise and scannable: short lines, **bold** for prices/quantities, bullet lists, no long paragraphs.
 8. When the user wants to order, collect step by step (name → phone → product → quantity), then confirm with createOrder.
 9. When the user says something like "خذني إلى..." or "amène-moi à...", use navigateToPage.
+10. When the user asks about delivery status (livraison, التوصيل, الاستلام), call deliveryStatus. Never quote delivery times or fees to other wilayas.
 ${pageContext}
 ${userContext}
 
@@ -270,7 +271,7 @@ Also a daily "Wheel of Fortune" on the home page can generate a random welcome c
 - Contact: WhatsApp ${COMPANY.phone}.
 
 ===== TOOLS =====
-Use calculatePrice to give exact prices, searchProducts to find a product, checkPromoCode to validate a code, navigateToPage to move the user to a page, and createOrder to register an order after collecting name, phone, product and quantity.`;
+Use calculatePrice to give exact prices, searchProducts to find a product, checkPromoCode to validate a code, navigateToPage to move the user to a page, deliveryStatus to answer delivery/collection questions, and createOrder to register an order after collecting name, phone, product and quantity.`;
 }
 
 // ---------------------------------------------------------------------------

@@ -759,7 +759,9 @@ export default function AntigravityChat() {
     if (part.toolName === 'deliveryStatus') {
       return (
         <div key={`tool-${index}`} className="mt-2 p-3 bg-cyan-50 dark:bg-cyan-900/20 rounded-xl border border-cyan-200 dark:border-cyan-800 text-cyan-700 dark:text-cyan-300 text-xs font-semibold">
-          📦 {isRtl ? "التوصيل إلى المنزل قريباً جداً! حالياً تُستلم الطلبات من مقر المطبعة (حيّ العقيد لطفي، وهران)." : "La livraison à domicile arrive très bientôt ! Pour l'instant, les commandes se retirent à l'atelier (Cité Akid Lotfi, Oran)."}
+          📦 {isRtl
+            ? (out.messageAr || "التوصيل إلى المنزل قريباً جداً! حالياً تُستلم الطلبات من مقر المطبعة (حيّ العقيد لطفي، وهران).")
+            : (out.messageFr || "La livraison à domicile arrive très bientôt ! Pour l'instant, les commandes se retirent à l'atelier (Cité Akid Lotfi, Oran).")}
         </div>
       );
     }

@@ -81,6 +81,9 @@ export async function POST(req: NextRequest) {
         prompt: user,
         temperature: 0.3,
         maxRetries: 1,
+        onAttempt: ({ provider, error }) => {
+          if (error) recordProviderFailure(provider, error);
+        },
       });
 
       const text = result.text.trim();
@@ -93,7 +96,7 @@ export async function POST(req: NextRequest) {
         }
       }
     } catch (err: any) {
-      recordProviderFailure("openrouter", err);
+      // generateTextWithFallback already records per-provider failures via onAttempt.
       console.warn("[recommendations] AI failed, using heuristic fallback:", err?.message);
     }
   }

@@ -352,16 +352,13 @@ export default function AIStudioPage() {
           timestamp: Date.now(),
         };
         setDesignHistory(prev => [newItem, ...prev].slice(0, 5));
-        if (data.fallback) {
-          setErrorMsg(isRtl ? "مفتاح API غير مفعل. هذه صورة افتراضية للتجربة." : "Clé API non configurée. Image par défaut affichée.");
-        }
+        toast.success(isRtl ? "تم توليد التصميم بنجاح!" : "Design généré avec succès !");
       } else {
         throw new Error(data.error || "Generation failed");
       }
     } catch (error) {
       console.error(error);
       setErrorMsg(isRtl ? "حدث خطأ أثناء التوليد. يرجى المحاولة لاحقاً." : "Erreur lors de la génération. Veuillez réessayer.");
-      setGeneratedImage("https://images.unsplash.com/photo-1626785774573-4b799315345d?w=800&q=80");
     } finally {
       setIsGenerating(false);
     }
