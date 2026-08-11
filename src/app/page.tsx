@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Sparkles, Star, StarHalf, MapPin, Truck, Loader2, Phone, Globe, Gift, X, Copy, Check } from "lucide-react";
 import { WILAYAS } from "@/lib/constants";
 import { FEATURED_PRODUCTS } from "@/lib/catalog";
+import { organizationJsonLd } from "@/lib/seo";
 import { db } from "@/lib/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "sonner";
@@ -269,45 +270,14 @@ export default function Home() {
   const safeJsonLd = useMemo(() => {
     const cleanLocation = userWilaya ? userWilaya.replace(/[<>"/\\;]/g, '') : "Oran";
     const baseLd = {
+      ...organizationJsonLd({
+        address: {
+          "@type": "PostalAddress",
+          addressLocality: cleanLocation,
+          addressCountry: "DZ",
+        },
+      }),
       "@context": "https://schema.org",
-      "@type": ["Organization", "PrintingService"],
-      "@id": "https://artisanimprimeur.vercel.app/#organization",
-      name: "L'Artisan Imprimeur",
-      url: "https://artisanimprimeur.vercel.app",
-      image: "https://artisanimprimeur.vercel.app/opengraph-image",
-      logo: "https://artisanimprimeur.vercel.app/icons/icon.svg",
-      telephone: "+213549179000",
-      email: "contact@artisanimprimeur.dz",
-      priceRange: "DA",
-      address: {
-        "@type": "PostalAddress",
-        addressLocality: cleanLocation,
-        addressCountry: "DZ",
-      },
-      geo: {
-        "@type": "GeoCoordinates",
-        latitude: 35.6969,
-        longitude: -0.6331,
-      },
-      openingHoursSpecification: {
-        "@type": "OpeningHoursSpecification",
-        dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
-        opens: "09:00",
-        closes: "18:00",
-      },
-      aggregateRating: {
-        "@type": "AggregateRating",
-        ratingValue: "4.9",
-        reviewCount: "184",
-        bestRating: "5",
-        worstRating: "1",
-      },
-      sameAs: [
-        "https://www.facebook.com/artisanimprimeur",
-        "https://www.instagram.com/artisanimprimeur",
-        "https://www.tiktok.com/@artisanimprimeur",
-      ],
-      description: "Votre partenaire premium pour l'impression et le design en Algérie. Solutions publicitaires sur mesure.",
     };
 
     const websiteLd = {

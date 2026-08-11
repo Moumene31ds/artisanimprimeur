@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "@/lib/seo";
+import { SITE_URL, SITE_NAME, SITE_DESCRIPTION, organizationJsonLd } from "@/lib/seo";
 import { getCatalogProducts } from "@/lib/catalog";
 
 export const metadata: Metadata = {
@@ -57,6 +57,7 @@ export default async function PrixImpressionPage() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
+      organizationJsonLd(),
       {
         "@type": "WebPage",
         "@id": `${SITE_URL}/prix-impression/#page`,

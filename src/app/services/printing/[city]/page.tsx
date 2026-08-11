@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import { getCatalogProducts, CatalogProduct } from "@/lib/catalog";
-import { localBusinessCityJsonLd, breadcrumbJsonLd, faqJsonLd, SITE_URL } from "@/lib/seo";
+import { localBusinessCityJsonLd, breadcrumbJsonLd, faqJsonLd, organizationJsonLd, SITE_URL } from "@/lib/seo";
 import Link from "next/link";
 import { ArrowRight, Printer, MapPin, ShieldCheck, Truck, Clock, Phone } from "lucide-react";
 
@@ -104,6 +104,7 @@ export default async function CityPrintingPage({ params }: PageProps) {
 
   // LocalBusiness + FAQ structured schema markup for SEO
   const jsonLdMarkup = [
+    organizationJsonLd(),
     localBusinessCityJsonLd(cityKey, cityName.fr, cityName.ar, cityName.geo),
     breadcrumbJsonLd([
       { name: "Services", url: `${SITE_URL}/services` },
