@@ -256,26 +256,133 @@ export default function Home() {
     const cleanLocation = userWilaya ? userWilaya.replace(/[<>"/\\;]/g, '') : "Oran";
     const baseLd = {
       "@context": "https://schema.org",
-      "@type": "PrintingService",
-      "name": "L'Artisan Imprimeur",
-      "image": "https://artisanimprimeur.vercel.app/api/og?title=L'Artisan%20Imprimeur&subtitle=الطباعة%20الاحترافية%20في%20الجزائر",
-      "@id": "https://artisanimprimeur.vercel.app",
-      "url": "https://artisanimprimeur.vercel.app",
-      "telephone": "+213549179000",
-      "priceRange": "DA",
-      "address": {
+      "@type": ["Organization", "PrintingService"],
+      "@id": "https://artisanimprimeur.vercel.app/#organization",
+      name: "L'Artisan Imprimeur",
+      url: "https://artisanimprimeur.vercel.app",
+      image: "https://artisanimprimeur.vercel.app/opengraph-image",
+      logo: "https://artisanimprimeur.vercel.app/icons/icon.svg",
+      telephone: "+213549179000",
+      email: "contact@artisanimprimeur.dz",
+      priceRange: "DA",
+      address: {
         "@type": "PostalAddress",
-        "addressLocality": cleanLocation,
-        "addressCountry": "DZ"
+        addressLocality: cleanLocation,
+        addressCountry: "DZ",
       },
-      "aggregateRating": {
+      geo: {
+        "@type": "GeoCoordinates",
+        latitude: 35.6969,
+        longitude: -0.6331,
+      },
+      openingHoursSpecification: {
+        "@type": "OpeningHoursSpecification",
+        dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+        opens: "09:00",
+        closes: "18:00",
+      },
+      aggregateRating: {
         "@type": "AggregateRating",
-        "ratingValue": "4.9",
-        "reviewCount": "184"
+        ratingValue: "4.9",
+        reviewCount: "184",
+        bestRating: "5",
+        worstRating: "1",
       },
-      "description": "Votre partenaire premium pour l'impression et le design en Algérie. Solutions publicitaires sur mesure."
+      sameAs: [
+        "https://www.facebook.com/artisanimprimeur",
+        "https://www.instagram.com/artisanimprimeur",
+        "https://www.tiktok.com/@artisanimprimeur",
+      ],
+      description: "Votre partenaire premium pour l'impression et le design en Algérie. Solutions publicitaires sur mesure.",
     };
-    return JSON.stringify(baseLd).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+
+    const websiteLd = {
+      "@type": "WebSite",
+      "@id": "https://artisanimprimeur.vercel.app/#website",
+      url: "https://artisanimprimeur.vercel.app",
+      name: "L'Artisan Imprimeur",
+      inLanguage: ["fr", "ar"],
+      publisher: { "@id": "https://artisanimprimeur.vercel.app/#organization" },
+      potentialAction: {
+        "@type": "SearchAction",
+        target: {
+          "@type": "EntryPoint",
+          urlTemplate: "https://artisanimprimeur.vercel.app/services?q={search_term_string}",
+        },
+        "query-input": "required name=search_term_string",
+      },
+    };
+
+    const productListLd = {
+      "@type": "ItemList",
+      name: "L'Artisan Imprimeur — Produits d'impression",
+      numberOfItems: FEATURED_PRODUCTS.length,
+      itemListElement: FEATURED_PRODUCTS.map((product, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        item: {
+          "@type": "Product",
+          name: product.name,
+          image: `https://artisanimprimeur.vercel.app${product.image}`,
+          category: product.category,
+          offers: {
+            "@type": "Offer",
+            price: product.price,
+            priceCurrency: "DZD",
+            availability: "https://schema.org/InStock",
+            url: "https://artisanimprimeur.vercel.app/services",
+          },
+        },
+      })),
+    };
+
+    const breadcrumbLd = {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Accueil", item: "https://artisanimprimeur.vercel.app" },
+        { "@type": "ListItem", position: 2, name: "Services", item: "https://artisanimprimeur.vercel.app/services" },
+      ],
+    };
+
+    const faqLd = {
+      "@type": "FAQPage",
+      mainEntity: [
+        {
+          "@type": "Question",
+          name: "Quels produits d'impression proposez-vous en Algérie ?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "Cartes de visite premium, flyers publicitaires, stickers personnalisés, affiches de luxe et invitations — tous imprimés en haute définition.",
+          },
+        },
+        {
+          "@type": "Question",
+          name: "Comment passer une commande d'impression en ligne ?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "Sélectionnez votre produit, personnalisez-le dans notre studio en ligne, payez en toute sécurité et récupérez votre commande à l'atelier d'Oran. La livraison arrive bientôt.",
+          },
+        },
+        {
+          "@type": "Question",
+          name: "Livrez-vous dans d'autres villes d'Algérie ?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "Nous desservons Alger, Oran, Constantine, Annaba, Tlemcen, Sétif, Blida, Batna, Béjaïa et Chlef. Le retrait se fait actuellement à Oran, la livraison à domicile arrive bientôt.",
+          },
+        },
+      ],
+    };
+
+    const graphs = [baseLd, websiteLd, productListLd, breadcrumbLd, faqLd].map((node) => ({
+      "@context": "https://schema.org",
+      ...node,
+    }));
+
+    return JSON.stringify(graphs)
+      .replace(/</g, '\\u003c')
+      .replace(/>/g, '\\u003e')
+      .replace(/&/g, '\\u0026');
   }, [userWilaya]);
 
   if (!mounted) return null;

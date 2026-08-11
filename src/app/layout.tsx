@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Cairo } from "next/font/google";
 import "./globals.css";
 
+import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "@/lib/seo";
+
 import Navbar from "@/components/Navbar";
 import BottomNav from "@/components/BottomNav";
 import StickyCartBar from "@/components/StickyCartBar";
@@ -33,14 +35,71 @@ const cairo = Cairo({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://artisanimprimeur.vercel.app'),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "L'Artisan Imprimeur | المطبعة الاحترافية في الجزائر",
     template: "%s | L'Artisan Imprimeur"
   },
-  description: "L'Artisan Imprimeur : Votre partenaire premium pour l'impression et le design en Algérie. Cartes de visite, flyers, et solutions publicitaires. تواصل معنا: +213549179000",
-  keywords: ["Printing Algeria", "Impression Algérie", "طباعة الجزائر", "Cartes de visite", "Flyers"],
+  description: SITE_DESCRIPTION,
+  keywords: [
+    "Printing Algeria",
+    "Impression Algérie",
+    "طباعة الجزائر",
+    "Cartes de visite",
+    "Flyers",
+    "imprimerie en ligne",
+    "طباعة احترافية",
+    "design graphique",
+    "printshop Oran",
+    "impression numérique",
+    "أوراق عمل وهران",
+  ],
+  creator: "L'Artisan Imprimeur",
+  publisher: "L'Artisan Imprimeur",
+  authors: [{ name: SITE_NAME, url: SITE_URL }],
+  category: "business",
   manifest: "/manifest.json",
+  alternates: {
+    canonical: SITE_URL,
+    languages: {
+      "fr-FR": SITE_URL,
+      "ar-DZ": SITE_URL,
+    },
+  },
+  openGraph: {
+    type: "website",
+    locale: "fr_FR",
+    alternateLocale: "ar_DZ",
+    url: SITE_URL,
+    siteName: SITE_NAME,
+    title: "L'Artisan Imprimeur | المطبعة الاحترافية في الجزائر",
+    description: SITE_DESCRIPTION,
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "L'Artisan Imprimeur — Plateforme d'impression premium en Algérie",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "L'Artisan Imprimeur | المطبعة الاحترافية في الجزائر",
+    description: SITE_DESCRIPTION,
+    images: ["/opengraph-image"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
   icons: {
     icon: [
       { url: "/icons/icon.svg", type: "image/svg+xml" },
@@ -54,7 +113,12 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "L'Artisan Imprimeur",
   },
-  applicationName: "L'Artisan Imprimeur",
+  applicationName: SITE_NAME,
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
   other: {
     "mobile-web-app-capable": "yes",
     "apple-mobile-web-app-capable": "yes",
@@ -65,11 +129,15 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f172a",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f8fafc" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f172a" },
+  ],
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
   maximumScale: 5,
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({

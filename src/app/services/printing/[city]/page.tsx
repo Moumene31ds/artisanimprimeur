@@ -1,20 +1,21 @@
 import { Metadata } from "next";
 import { getCatalogProducts, CatalogProduct } from "@/lib/catalog";
+import { localBusinessCityJsonLd, breadcrumbJsonLd, SITE_URL } from "@/lib/seo";
 import Link from "next/link";
 import { ArrowRight, Printer, MapPin, ShieldCheck, Truck } from "lucide-react";
 
 // List of top Algerian cities to pre-render statically for fast load times and SEO indexing
-const CITIES_MAP: Record<string, { fr: string; ar: string }> = {
-  alger: { fr: "Alger", ar: "الجزائر" },
-  oran: { fr: "Oran", ar: "وهران" },
-  constantine: { fr: "Constantine", ar: "قسنطينة" },
-  annaba: { fr: "Annaba", ar: "عنابة" },
-  tlemcen: { fr: "Tlemcen", ar: "تلمسان" },
-  setif: { fr: "Sétif", ar: "سطيف" },
-  blida: { fr: "Blida", ar: "البليدة" },
-  batna: { fr: "Batna", ar: "باتنة" },
-  bejaia: { fr: "Béjaïa", ar: "بجاية" },
-  chlef: { fr: "Chlef", ar: "الشلف" },
+const CITIES_MAP: Record<string, { fr: string; ar: string; geo: { latitude: number; longitude: number } }> = {
+  alger: { fr: "Alger", ar: "الجزائر", geo: { latitude: 36.7538, longitude: 3.0588 } },
+  oran: { fr: "Oran", ar: "وهران", geo: { latitude: 35.6969, longitude: -0.6331 } },
+  constantine: { fr: "Constantine", ar: "قسنطينة", geo: { latitude: 36.365, longitude: 6.6147 } },
+  annaba: { fr: "Annaba", ar: "عنابة", geo: { latitude: 36.9, longitude: 7.7667 } },
+  tlemcen: { fr: "Tlemcen", ar: "تلمسان", geo: { latitude: 34.8828, longitude: -1.3167 } },
+  setif: { fr: "Sétif", ar: "سطيف", geo: { latitude: 36.1911, longitude: 5.4137 } },
+  blida: { fr: "Blida", ar: "البليدة", geo: { latitude: 36.4703, longitude: 2.8277 } },
+  batna: { fr: "Batna", ar: "باتنة", geo: { latitude: 35.5553, longitude: 6.1741 } },
+  bejaia: { fr: "Béjaïa", ar: "بجاية", geo: { latitude: 36.7509, longitude: 5.0567 } },
+  chlef: { fr: "Chlef", ar: "الشلف", geo: { latitude: 36.1652, longitude: 1.3345 } },
 };
 
 interface PageProps {
@@ -38,18 +39,38 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   
   const title = `Impression Professionnelle & Matériel Publicitaire à ${cityInfo.fr} | L'Artisan Imprimeur`;
   const description = `Besoin d'impression de cartes de visite, flyers ou étiquettes à ${cityInfo.fr} (${cityInfo.ar}) ? L'Artisan Imprimeur assure une qualité premium, devis en ligne et retrait à Oran. Livraison bientôt disponible.`;
+  const url = `${SITE_URL}/services/printing/${cityKey}`;
 
   return {
     title,
     description,
     alternates: {
-      canonical: `https://artisan-imprimeur.dz/services/printing/${cityKey}`,
+      canonical: url,
+      languages: {
+        fr: url,
+        ar: url,
+      },
     },
     openGraph: {
       title,
       description,
-      url: `https://artisan-imprimeur.dz/services/printing/${cityKey}`,
+      url,
       type: "website",
+      siteName: "L'Artisan Imprimeur",
+      images: [
+        {
+          url: `${SITE_URL}/opengraph-image`,
+          width: 1200,
+          height: 630,
+          alt: title,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [`${SITE_URL}/opengraph-image`],
     },
   };
 }
@@ -57,35 +78,26 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function CityPrintingPage({ params }: PageProps) {
   const { city } = await params;
   const cityKey = city.toLowerCase();
-  const cityName = CITIES_MAP[cityKey] || { fr: city, ar: city };
+  const cityName = CITIES_MAP[cityKey] || { fr: city, ar: city, geo: undefined };
 
   // Fetch the unified catalog (live Firestore data with static fallback)
   const products = await getCatalogProducts();
 
   // LocalBusiness structured schema markup for SEO
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "LocalBusiness",
-    "name": `L'Artisan Imprimeur ${cityName.fr}`,
-    "image": "https://artisan-imprimeur.dz/logo.png",
-    "@id": `https://artisan-imprimeur.dz/services/printing/${cityKey}`,
-    "url": `https://artisan-imprimeur.dz/services/printing/${cityKey}`,
-    "telephone": "+213555555555",
-    "priceRange": "$$",
-    "address": {
-      "@type": "PostalAddress",
-      "addressLocality": cityName.fr,
-      "addressCountry": "DZ",
-    },
-    "description": `Services d'impression numérique et offset premium pour professionnels et particuliers à ${cityName.fr}.`,
-  };
+  const jsonLdMarkup = [
+    localBusinessCityJsonLd(cityKey, cityName.fr, cityName.ar, cityName.geo),
+    breadcrumbJsonLd([
+      { name: "Services", url: `${SITE_URL}/services` },
+      { name: `Impression ${cityName.fr}` },
+    ]),
+  ];
 
   return (
     <>
       {/* Schema Markup Injection */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdMarkup) }}
       />
 
       <div className="pb-24 max-w-7xl mx-auto px-4 space-y-16 mt-8">
