@@ -1,8 +1,8 @@
 // src/lib/firebase.ts
 
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
+import { getAuth, type Auth } from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
 import { config } from "@/config"; // <-- استيراد الإعدادات
 
 // تهيئة Firebase باستخدام الإعدادات من ملف config
@@ -16,8 +16,17 @@ const firebaseConfig = {
   measurementId: config.firebase.measurementId,
 };
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const auth = getAuth(app);
-const db = getFirestore(app);
+// بدون مفاتيح صالحة لا يُهيَّأ Firebase حتى لا ينكسر `next build`
+// (عند النشر على Vercel تكون المفاتيح موجودة فيعمل كل شيء طبيعياً).
+const configured = Boolean(config.firebase.apiKey && config.firebase.projectId);
+
+const app: FirebaseApp = configured
+  ? !getApps().length
+    ? initializeApp(firebaseConfig)
+    : getApp()
+  : (undefined as unknown as FirebaseApp);
+
+const auth: Auth = configured ? getAuth(app) : (undefined as unknown as Auth);
+const db: Firestore = configured ? getFirestore(app) : (undefined as unknown as Firestore);
 
 export { app, auth, db };

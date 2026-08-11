@@ -590,7 +590,7 @@ export default function Home() {
                 className="h-full min-w-[72vw] sm:min-w-[42vw] md:min-w-0 snap-center shrink-0"
               >
                 <MagneticCard>
-                  <ProductCard product={product as any} />
+                  <ProductCard product={product as any} priority={index === 0} />
                 </MagneticCard>
               </motion.div>
             ))}

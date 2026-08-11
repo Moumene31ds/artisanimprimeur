@@ -147,6 +147,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr" className={`${cairo.variable} font-sans`} suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      </head>
       <body className="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased selection:bg-accent selection:text-white transition-colors duration-300 min-h-dvh overflow-x-hidden relative">
         
         {/* تم إضافة will-change-transform و transform-gpu لتحسين أداء الرندرة */}

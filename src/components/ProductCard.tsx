@@ -11,7 +11,7 @@ import BottomSheet from "@/components/BottomSheet";
 import { triggerHapticFeedback } from "@/lib/utils"; // افتراض أنك أنشأت هذه الدالة، وإلا يمكنك إزالتها
 import { nativeShare } from "@/lib/native";
 
-export default function ProductCard({ product }: { product: Product }) {
+export default function ProductCard({ product, priority = false }: { product: Product; priority?: boolean }) {
   const { language, addToCart, toggleFavorite, isFavorite } = useAppStore();
   const [mounted, setMounted] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -81,7 +81,8 @@ export default function ProductCard({ product }: { product: Product }) {
             alt={product.name}
             fill
             sizes="(max-width: 768px) 50vw, 33vw"
-            priority={false}
+            priority={priority}
+            fetchPriority={priority ? "high" : "auto"}
             className="object-cover transition-transform duration-700 group-hover:scale-110"
           />
           
