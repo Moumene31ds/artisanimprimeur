@@ -40,7 +40,7 @@ export default function Hero() {
   };
 
   return (
-    <section className="relative w-full overflow-hidden rounded-[2.5rem] min-h-[62vh] flex flex-col items-center justify-center px-5 py-14 sm:py-20 mb-2 bg-slate-950">
+    <section className="relative w-full overflow-hidden rounded-[2.5rem] min-h-[62vh] min-h-[62svh] flex flex-col items-center justify-center px-5 py-14 sm:py-20 mb-2 bg-slate-950">
       {/* طبقة Aurora المتحركة */}
       <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900" />
       <div className="absolute -top-24 -left-16 w-80 h-80 bg-blue-500 rounded-full mix-blend-screen filter blur-3xl opacity-40 animate-aurora"></div>

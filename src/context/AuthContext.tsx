@@ -1,7 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged } from 'firebase/auth';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { User, onAuthStateChanged, getIdToken, signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
 interface AuthContextType {
@@ -9,6 +9,13 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   isLoggedIn: boolean;
+  signInProvider: string | null;
+  emailVerified: boolean;
+  isPhoneUser: boolean;
+  token: string | null;
+  refreshToken: () => Promise<string | null>;
+  signOutUser: () => Promise<void>;
+  lastSignInAt: number | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,28 +28,95 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [signInProvider, setSignInProvider] = useState<string | null>(null);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [isPhoneUser, setIsPhoneUser] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [lastSignInAt, setLastSignInAt] = useState<number | null>(null);
+
+  const refreshToken = useCallback(async (): Promise<string | null> => {
+    try {
+      if (!auth.currentUser) return null;
+      const freshToken = await getIdToken(auth.currentUser, true);
+      setToken(freshToken);
+      return freshToken;
+    } catch (err) {
+      console.error('Erreur lors du rafraîchissement du token:', err);
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
     // مراقبة حالة المستخدم من Firebase
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        // استخراج مزوّد تسجيل الدخول
+        const provider = currentUser.providerData?.[0]?.providerId || null;
+        setSignInProvider(provider);
+        setEmailVerified(currentUser.emailVerified);
+        setIsPhoneUser(!!currentUser.phoneNumber && !currentUser.email);
+        setLastSignInAt(
+          currentUser.metadata.lastSignInTime
+            ? new Date(currentUser.metadata.lastSignInTime).getTime()
+            : null
+        );
+
+        // جلب توكن محدث للمصادقة
+        try {
+          const freshToken = await getIdToken(currentUser, true);
+          setToken(freshToken);
+        } catch (err) {
+          setToken(await getIdToken(currentUser).catch(() => null));
+        }
+      } else {
+        setSignInProvider(null);
+        setEmailVerified(false);
+        setIsPhoneUser(false);
+        setToken(null);
+        setLastSignInAt(null);
+      }
+
       setUser(currentUser);
       setIsLoggedIn(!!currentUser);
-      
+
       // التحقق الصارم من بريد المدير
       if (currentUser && currentUser.email === SUPER_ADMIN_EMAIL) {
         setIsAdmin(true);
       } else {
         setIsAdmin(false);
       }
-      
+
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
+  const signOutUser = useCallback(async () => {
+    await signOut(auth);
+    setUser(null);
+    setIsLoggedIn(false);
+    setIsAdmin(false);
+    setSignInProvider(null);
+    setToken(null);
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, isLoggedIn }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        isAdmin,
+        isLoggedIn,
+        signInProvider,
+        emailVerified,
+        isPhoneUser,
+        token,
+        refreshToken,
+        signOutUser,
+        lastSignInAt,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -55,4 +129,3 @@ export function useAuth() {
   }
   return context;
 }
-

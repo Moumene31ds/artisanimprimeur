@@ -182,8 +182,8 @@ service cloud.firestore {
     // 7. إعدادات المنصة (Settings)
     match /settings/{docId} {
       // السماح للجميع بقراءة وثيقة إعدادات الواجهة (settings/ui) وإعدادات الولاء (settings/loyalty)
-      // ليتسنى عرض تكلفة العجلة والجوائز والنقاط في واجهات الزبائن ولوحة المكافآت
-      allow get: if docId == 'ui' || docId == 'loyalty';
+      // وإعدادات التسويق (settings/marketing) ليتسنى عرض العروض والهدايا في واجهات الزبائن
+      allow get: if docId == 'ui' || docId == 'loyalty' || docId == 'marketing';
       // الإضافة والتعديل والسرد محصور بالمشرف
       allow list, write: if isAdmin();
     }

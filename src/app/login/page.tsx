@@ -14,12 +14,8 @@ import { doc, getDoc, collection, addDoc, serverTimestamp, setDoc } from "fireba
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  GoogleAuthProvider, 
-  FacebookAuthProvider, 
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
   signInAnonymously,
+  getRedirectResult,
   updateProfile,
   sendPasswordResetEmail
 } from "firebase/auth";
@@ -28,6 +24,7 @@ import { toast } from "sonner";
 import Link from "next/link";
 import { GlobalLoader } from "@/components/GlobalLoader"; 
 import SecurityVerification from "@/components/SecurityVerification";
+import SSOProviders from "@/components/SSOProviders";
 import { getAuthErrorMessage, getPasswordStrength, validateEmail, validateSignupForm } from "@/lib/auth-utils";
 
 type AuthMode = "login" | "signup" | "forgot" | "phone";
@@ -412,122 +409,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setLoading(true);
-    setFormMessage("");
-    try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
-
-      let res;
-      try {
-        // Primary method: popup (faster UX)
-        res = await signInWithPopup(auth, provider);
-      } catch (popupErr: any) {
-        // Fallback: redirect if popup is blocked or unsupported
-        const blockedCodes = [
-          'auth/popup-blocked',
-          'auth/popup-closed-by-user',
-          'auth/cancelled-popup-request',
-        ];
-        if (blockedCodes.includes(popupErr?.code)) {
-          toast.info(
-            isRtl
-              ? "جاري التحويل إلى صفحة تسجيل الدخول..."
-              : "Redirection vers la page de connexion Google..."
-          );
-          await signInWithRedirect(auth, provider);
-          return; // redirect will reload the page
-        }
-        throw popupErr; // rethrow non-popup errors
-      }
-
-      if (!res?.user) throw new Error('No user returned from Google sign-in.');
-
-      await applyReferralIfNewUser(
-        res.user.uid,
-        res.user.email ?? "",
-        res.user.displayName ?? "Google User"
-      );
-
-      await addDoc(collection(db, "securityLogs"), {
-        event: "login_success",
-        email: res.user.email ?? "google-user",
-        timestamp: serverTimestamp(),
-        type: "google",
-        status: "success",
-        ip: "client-logged",
-      });
-
-      toast.success(isRtl ? "أهلاً بك! تم تسجيل الدخول عبر Google." : "Bienvenue ! Connexion Google réussie.");
-      router.push("/");
-    } catch (err: any) {
-      console.error("Google Login Error:", err?.code, err?.message);
-      const friendlyMessage = getAuthErrorMessage(err?.code || "", isRtl);
-      setFormMessage(friendlyMessage);
-      toast.error(friendlyMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFacebookLogin = async () => {
-    setLoading(true);
-    setFormMessage("");
-    try {
-      const provider = new FacebookAuthProvider();
-      provider.addScope('email');
-
-      let res;
-      try {
-        res = await signInWithPopup(auth, provider);
-      } catch (popupErr: any) {
-        const blockedCodes = [
-          'auth/popup-blocked',
-          'auth/popup-closed-by-user',
-          'auth/cancelled-popup-request',
-        ];
-        if (blockedCodes.includes(popupErr?.code)) {
-          toast.info(
-            isRtl
-              ? "جاري التحويل إلى صفحة تسجيل الدخول..."
-              : "Redirection vers la page de connexion Facebook..."
-          );
-          await signInWithRedirect(auth, provider);
-          return;
-        }
-        throw popupErr;
-      }
-
-      if (!res?.user) throw new Error('No user returned from Facebook sign-in.');
-
-      await applyReferralIfNewUser(
-        res.user.uid,
-        res.user.email ?? "",
-        res.user.displayName ?? "Facebook User"
-      );
-
-      await addDoc(collection(db, "securityLogs"), {
-        event: "login_success",
-        email: res.user.email ?? "facebook-user",
-        timestamp: serverTimestamp(),
-        type: "facebook",
-        status: "success",
-        ip: "client-logged",
-      });
-
-      toast.success(isRtl ? "تم تسجيل الدخول بـ Facebook!" : "Connexion Facebook réussie !");
-      router.push("/");
-    } catch (err: any) {
-      console.error("Facebook Login Error:", err?.code, err?.message);
-      const friendlyMessage = getAuthErrorMessage(err?.code || "", isRtl);
-      setFormMessage(friendlyMessage);
-      toast.error(friendlyMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleGuest = async () => {
     setLoading(true);
     setFormMessage("");
@@ -536,6 +417,24 @@ export default function LoginPage() {
       router.push("/");
     } catch(err) {
       toast.error(isRtl ? "فشل الدخول كضيف." : "Échec de la connexion invité.");
+      setLoading(false);
+    }
+  };
+
+  // SSO multi-providers (Google/Facebook/Apple/GitHub/Microsoft/Yahoo)
+  const handleSSOSuccess = async (resUser: any) => {
+    setLoading(true);
+    setFormMessage("");
+    try {
+      await applyReferralIfNewUser(
+        resUser.uid,
+        resUser.email ?? "",
+        resUser.displayName ?? "SSO User"
+      );
+      toast.success(isRtl ? "أهلاً بك! تم تسجيل الدخول بنجاح." : "Bienvenue ! Connexion réussie.");
+      router.push("/");
+    } catch(err) {
+      console.error("SSO Success Error:", err);
       setLoading(false);
     }
   };
@@ -898,23 +797,12 @@ export default function LoginPage() {
           </div>
 
           {/* Social Auth & Guest Buttons */}
-          <div className="space-y-3">
-            <button onClick={handleGoogleLogin} disabled={loading} type="button" className="w-full py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-white rounded-2xl font-bold text-sm hover:shadow-md transition-all flex items-center justify-center gap-3 disabled:opacity-50">
-              <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-              {t("googleLogin")}
-            </button>
-            
-            <button onClick={handleFacebookLogin} disabled={loading} type="button" className="w-full py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white rounded-2xl font-bold text-sm hover:shadow-md transition-all flex items-center justify-center gap-3 disabled:opacity-50">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-              {t("facebookLogin")}
-            </button>
-
-            <button onClick={handleGuest} disabled={loading} type="button" className="w-full pt-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-bold text-xs transition-colors text-center disabled:opacity-50">
-              <span className="border-b border-dotted border-slate-400 hover:border-solid hover:border-slate-800 dark:hover:border-slate-200 pb-0.5">
-                {t("guestAccessHint")}
-              </span>
-            </button>
-          </div>
+          <SSOProviders
+            isRtl={isRtl}
+            disabled={loading}
+            onSuccess={handleSSOSuccess}
+            onGuest={handleGuest}
+          />
 
         </div>
       </div>

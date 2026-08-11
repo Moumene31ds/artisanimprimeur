@@ -15,6 +15,8 @@ import LiveSales from "@/components/LiveSales";
 import QuickSupport from "@/components/QuickSupport";
 import AnnouncementBar from "@/components/AnnouncementBar"; 
 import MaintenanceGuard from "@/components/MaintenanceGuard"; 
+import FlashSaleBanner from "@/components/FlashSaleBanner";
+import WelcomeOfferPopup from "@/components/WelcomeOfferPopup";
 
 import PWAPrompt from "@/components/PWAPrompt";
 
@@ -88,6 +90,7 @@ export default function RootLayout({
             <SettingsManager />
             <PWAPrompt />
             <AnnouncementBar /> 
+            <FlashSaleBanner />
             
             <OfflineDetector />
             <ScrollProgress />
@@ -103,6 +106,7 @@ export default function RootLayout({
             <WhatsAppButton />
             <StickyCartBar />
             <BottomNav />
+            <WelcomeOfferPopup />
             
           </MaintenanceGuard>
         </Providers>

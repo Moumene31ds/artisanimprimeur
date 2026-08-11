@@ -658,7 +658,7 @@ export default function Home() {
         <motion.div
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="fixed bottom-6 left-6 z-40"
+          className="fixed bottom-24 md:bottom-6 left-6 z-40"
         >
           <button
             onClick={() => setShowWheelModal(true)}
