@@ -44,6 +44,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
         languages: { fr: `${SITE_URL}/services`, ar: `${SITE_URL}/services` },
       },
     },
+    {
+      url: `${SITE_URL}/prix-impression`,
+      lastModified: now,
+      changeFrequency: 'monthly',
+      priority: 0.8,
+      alternates: {
+        languages: { fr: `${SITE_URL}/prix-impression`, ar: `${SITE_URL}/prix-impression` },
+      },
+    },
     { url: `${SITE_URL}/landing`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
     { url: `${SITE_URL}/ai-studio`, lastModified: now, changeFrequency: 'weekly', priority: 0.7 },
     { url: `${SITE_URL}/customizer`, lastModified: now, changeFrequency: 'weekly', priority: 0.7 },

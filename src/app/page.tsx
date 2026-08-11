@@ -73,6 +73,20 @@ function FaqItem({ question, answer }: FaqItemProps) {
   );
 }
 
+// Internal linking hub — city printing pages (SEO)
+const CITIES_LINKS = [
+  { key: "alger", label: "Alger", href: "/services/printing/alger" },
+  { key: "oran", label: "Oran", href: "/services/printing/oran" },
+  { key: "constantine", label: "Constantine", href: "/services/printing/constantine" },
+  { key: "annaba", label: "Annaba", href: "/services/printing/annaba" },
+  { key: "tlemcen", label: "Tlemcen", href: "/services/printing/tlemcen" },
+  { key: "setif", label: "Sétif", href: "/services/printing/setif" },
+  { key: "blida", label: "Blida", href: "/services/printing/blida" },
+  { key: "batna", label: "Batna", href: "/services/printing/batna" },
+  { key: "bejaia", label: "Béjaïa", href: "/services/printing/bejaia" },
+  { key: "chlef", label: "Chlef", href: "/services/printing/chlef" },
+];
+
 export default function Home() {
   const language = useAppStore((state) => state.language);
   const [mounted, setMounted] = useState(false);
@@ -699,6 +713,35 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Cities Served — internal linking hub for SEO */}
+      <section className="space-y-6">
+        <div className="text-center space-y-2">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-accent/10 text-accent rounded-full text-xs font-black uppercase tracking-wider">
+            <MapPin size={12} />
+            {isRtl ? "نغطي أكبر المدن الجزائرية" : "Nous couvrons les grandes villes d'Algérie"}
+          </span>
+          <h2 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white">
+            {isRtl ? "خدمة الطباعة في مدينتك" : "Imprimerie en ligne près de chez vous"}
+          </h2>
+          <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+            {isRtl ? "استلم طلبك من وهران — التوصيل قريباً" : "Retrait à Oran — Livraison bientôt disponible"}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap justify-center gap-3">
+          {CITIES_LINKS.map((c) => (
+            <Link
+              key={c.key}
+              href={c.href}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full glass-spotlight text-xs font-black text-slate-700 dark:text-slate-300 hover:text-accent hover:scale-105 transition-all"
+            >
+              <MapPin size={12} />
+              {c.label}
+            </Link>
+          ))}
+        </div>
+      </section>
+
       <motion.footer 
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -737,19 +780,22 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="flex flex-col items-center md:items-end gap-3">
-            <span className="text-xs uppercase tracking-widest text-slate-400 dark:text-slate-500 font-bold mb-1">
-              {isRtl ? "تصفح مريح" : "Navigation"}
-            </span>
-            <div className="flex gap-4 font-bold text-xs">
-              <a href="#products" className="text-slate-500 dark:text-slate-400 hover:text-accent dark:hover:text-accent transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900">
-                {t.services}
-              </a>
-              <Link href="/services" className="text-slate-500 dark:text-slate-400 hover:text-accent dark:hover:text-accent transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900">
-                {isRtl ? "كل الخدمات" : "Tous les services"}
-              </Link>
+            <div className="flex flex-col items-center md:items-end gap-3">
+              <span className="text-xs uppercase tracking-widest text-slate-400 dark:text-slate-500 font-bold mb-1">
+                {isRtl ? "تصفح مريح" : "Navigation"}
+              </span>
+              <div className="flex gap-4 font-bold text-xs flex-wrap justify-center md:justify-end">
+                <a href="#products" className="text-slate-500 dark:text-slate-400 hover:text-accent dark:hover:text-accent transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900">
+                  {t.services}
+                </a>
+                <Link href="/services" className="text-slate-500 dark:text-slate-400 hover:text-accent dark:hover:text-accent transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900">
+                  {isRtl ? "كل الخدمات" : "Tous les services"}
+                </Link>
+                <Link href="/prix-impression" className="text-slate-500 dark:text-slate-400 hover:text-accent dark:hover:text-accent transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900">
+                  {isRtl ? "أسعار الطباعة" : "Prix impression"}
+                </Link>
+              </div>
             </div>
-          </div>
 
         </div>
 

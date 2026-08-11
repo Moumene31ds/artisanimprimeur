@@ -1,8 +1,8 @@
 import { Metadata } from "next";
 import { getCatalogProducts, CatalogProduct } from "@/lib/catalog";
-import { localBusinessCityJsonLd, breadcrumbJsonLd, SITE_URL } from "@/lib/seo";
+import { localBusinessCityJsonLd, breadcrumbJsonLd, faqJsonLd, SITE_URL } from "@/lib/seo";
 import Link from "next/link";
-import { ArrowRight, Printer, MapPin, ShieldCheck, Truck } from "lucide-react";
+import { ArrowRight, Printer, MapPin, ShieldCheck, Truck, Clock, Phone } from "lucide-react";
 
 // List of top Algerian cities to pre-render statically for fast load times and SEO indexing
 const CITIES_MAP: Record<string, { fr: string; ar: string; geo: { latitude: number; longitude: number } }> = {
@@ -83,14 +83,36 @@ export default async function CityPrintingPage({ params }: PageProps) {
   // Fetch the unified catalog (live Firestore data with static fallback)
   const products = await getCatalogProducts();
 
-  // LocalBusiness structured schema markup for SEO
+  const cityFaqs = [
+    {
+      q: `Où retirer mes impressions à ${cityName.fr} ?`,
+      a: `Le retrait de vos commandes d'impression à ${cityName.fr} (${cityName.ar}) se fait actuellement à l'atelier principal de L'Artisan Imprimeur à Oran, cité Akid Lotfi, ouvert de 09h à 18h du lundi au samedi. La livraison à domicile à ${cityName.fr} arrive très bientôt.`,
+    },
+    {
+      q: `Quels délais pour l'impression à ${cityName.fr} ?`,
+      a: `Nous assurons un service rapide 24h/48h pour la plupart des supports (cartes de visite, flyers, affiches). Chaque commande passe par un contrôle automatique de fichiers par IA avant impression pour garantir une qualité irréprochable.`,
+    },
+    {
+      q: `Quels produits puis-je commander à ${cityName.fr} ?`,
+      a: `Cartes de visite premium, flyers publicitaires, stickers personnalisés, affiches de luxe, invitations et goodies — le tout en impression numérique et offset haute définition avec tarification dégressive transparente.`,
+    },
+    {
+      q: `Comment payer une commande à ${cityName.fr} ?`,
+      a: `Paiement à la réception en espèces lors du retrait, ou par virement BaridiMob avec envoi du reçu pour vérification rapide. La tarification dégressive vous garantit le meilleur prix selon les quantités.`,
+    },
+  ];
+
+  // LocalBusiness + FAQ structured schema markup for SEO
   const jsonLdMarkup = [
     localBusinessCityJsonLd(cityKey, cityName.fr, cityName.ar, cityName.geo),
     breadcrumbJsonLd([
       { name: "Services", url: `${SITE_URL}/services` },
       { name: `Impression ${cityName.fr}` },
     ]),
+    faqJsonLd(cityFaqs.map((f) => ({ q: f.q, a: f.a }))),
   ];
+
+  const otherCities = Object.entries(CITIES_MAP).filter(([key]) => key !== cityKey);
 
   return (
     <>
@@ -204,6 +226,90 @@ export default async function CityPrintingPage({ params }: PageProps) {
                 </div>
               ))
             )}
+          </div>
+        </section>
+
+        {/* FAQ Section — questions fréquentes pour {cityName.fr} */}
+        <section className="space-y-8">
+          <div className="text-center space-y-2">
+            <h2 className="text-3xl font-black text-slate-900 dark:text-white">
+              Questions fréquentes — Impression à {cityName.fr}
+            </h2>
+            <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+              tout ce qu'il faut savoir avant de commander
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {cityFaqs.map((faq, index) => (
+              <div
+                key={index}
+                className="premium-glass p-6 rounded-[2rem] border border-white/60 dark:border-white/10"
+              >
+                <h3 className="font-black text-slate-800 dark:text-white text-base mb-2">
+                  {faq.q}
+                </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 font-bold leading-relaxed">
+                  {faq.a}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Internal Linking Hub — autres villes desservies */}
+        <section className="space-y-6">
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white">
+              Nos services d'impression dans toute l'Algérie
+            </h2>
+            <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+              livraison et retrait dans les grandes villes
+            </p>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-3">
+            {otherCities.map(([key, info]) => (
+              <Link
+                key={key}
+                href={`/services/printing/${key}`}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full glass-spotlight text-xs font-black text-slate-700 dark:text-slate-300 hover:text-accent hover:scale-105 transition-all"
+              >
+                <MapPin size={12} />
+                {info.fr} / {info.ar}
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        {/* Local Contact Info */}
+        <section className="premium-glass p-8 rounded-[2.5rem] border border-white/60 dark:border-white/10 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-accent/10 text-accent flex items-center justify-center">
+              <Clock size={22} />
+            </div>
+            <div>
+              <p className="font-black text-slate-800 dark:text-white text-sm">
+                Horaires de l'atelier (Oran)
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-bold">
+                Lundi – Samedi · 09h00 – 18h00
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+              <Phone size={22} />
+            </div>
+            <div>
+              <p className="font-black text-slate-800 dark:text-white text-sm">Assistance</p>
+              <a
+                href="tel:+213549179000"
+                className="text-xs text-slate-500 dark:text-slate-400 font-bold hover:text-accent"
+              >
+                +213 549 17 90 00
+              </a>
+            </div>
           </div>
         </section>
       </div>
