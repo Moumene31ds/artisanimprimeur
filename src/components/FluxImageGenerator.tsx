@@ -35,12 +35,12 @@ export default function FluxImageGenerator() {
   const [aspect, setAspect] = useState<Aspect>(ASPECTS[0]);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isLoadingImage, setIsLoadingImage] = useState(false);
+  const [isImageLoading, setIsImageLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const t = (fr: string, ar: string) => (isRtl ? ar : fr);
 
-  const handleGenerate = useCallback(async () => {
+const handleGenerate = useCallback(async () => {
     const trimmed = prompt.trim();
     if (!trimmed) {
       toast.error(t("Veuillez écrire une description de votre design.", "يرجى كتابة وصف لتصميمك."));
@@ -62,14 +62,9 @@ export default function FluxImageGenerator() {
       });
       const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(trimmed)}?${params.toString()}`;
 
-      // Warm the image in the background while showing the skeleton loader.
-      setIsLoadingImage(true);
-      const probe = await fetch(url, { method: "HEAD" });
-      if (!probe.ok) {
-        throw new Error(`HTTP ${probe.status}`);
-      }
-      // Trigger the actual generation (Pollinations generates on first GET).
-      await fetch(url);
+      // Directly set the URL — the browser will load the image.
+      // Pollinations.ai generates on first GET; we rely on the <img> onLoad/onError.
+      setIsImageLoading(true);
       setImageUrl(url);
     } catch (err) {
       console.error("Flux generation failed:", err);
@@ -86,7 +81,6 @@ export default function FluxImageGenerator() {
         )
       );
     } finally {
-      setIsLoadingImage(false);
       setIsGenerating(false);
     }
   }, [prompt, aspect, t]);
@@ -195,7 +189,7 @@ export default function FluxImageGenerator() {
       {/* Result area */}
       <div className="relative rounded-3xl overflow-hidden border border-white/60 dark:border-white/5 shadow-2xl bg-slate-100 dark:bg-slate-900 aspect-[4/3]">
         <AnimatePresence mode="wait">
-          {isLoadingImage || isGenerating ? (
+          {isGenerating || isImageLoading ? (
             <motion.div
               key="skeleton"
               initial={{ opacity: 0 }}
@@ -243,6 +237,24 @@ export default function FluxImageGenerator() {
                 className="w-full h-full object-contain bg-white dark:bg-slate-950"
                 loading="eager"
                 decoding="async"
+                onLoad={() => {
+                  setIsImageLoading(false);
+                }}
+                onError={() => {
+                  setIsImageLoading(false);
+                  setError(
+                    t(
+                      "Impossible de charger l'image. Réessayez.",
+                      "تعذر تحميل الصورة. حاول مجدداً."
+                    )
+                  );
+                  toast.error(
+                    t(
+                      "Échec du chargement de l'image.",
+                      "فشل تحميل الصورة."
+                    )
+                  );
+                }}
               />
               <button
                 type="button"
