@@ -173,12 +173,20 @@ async function falRun(opts: Required<Pick<GenerateImageOptions, 'prompt'>> & Gen
   return url;
 }
 
-/** Pollinations.ai — free, no key. Acts as the universal fallback. */
+/** Pollinations.ai — free, no key. Serves FLUX.1 (model=flux). Acts as the universal fallback. */
 async function pollinationsRun(opts: Required<Pick<GenerateImageOptions, 'prompt'>> & GenerateImageOptions): Promise<string> {
   const seed = opts.seed ?? Math.floor(Math.random() * 100000);
   const width = opts.width ?? 1024;
   const height = opts.height ?? 1024;
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(opts.prompt)}?width=${width}&height=${height}&nologo=true&seed=${seed}`;
+  const params = new URLSearchParams({
+    model: 'flux',
+    width: String(width),
+    height: String(height),
+    seed: String(seed),
+    nologo: 'true',
+    private: 'true',
+  });
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(opts.prompt)}?${params.toString()}`;
   // Pollinations serves the image directly; verify it's reachable.
   const probe = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(20_000) });
   if (!probe.ok) throw new Error(`Pollinations error ${probe.status}`);

@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { prompt, style, seed } = await req.json();
+    const { prompt, style, seed, width, height } = await req.json();
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
       return NextResponse.json({ error: 'A valid prompt is required.' }, { status: 400 });
@@ -48,11 +48,15 @@ export async function POST(req: Request) {
 
     const finalPrompt = `${prompt.trim()}, ${styleSuffix}, isolated on solid background, printable high resolution, design prototype`;
 
+    // Clamp dimensions to safe print/generation bounds.
+    const genWidth = Math.min(Math.max(Number(width) || 1024, 256), 2048);
+    const genHeight = Math.min(Math.max(Number(height) || 1024, 256), 2048);
+
     // Generate via the FLUX.1 / Pollinations provider chain (auto fallback).
     const generated = await generateImage({
       prompt: finalPrompt,
-      width: 1024,
-      height: 1024,
+      width: genWidth,
+      height: genHeight,
       seed: typeof seed === 'number' ? seed : undefined,
     });
 
@@ -70,6 +74,8 @@ export async function POST(req: Request) {
       provider: generated.provider,
       providerLabel: providerLabel(generated.provider),
       publicId: uploadResponse.public_id,
+      width: genWidth,
+      height: genHeight,
     });
 
   } catch (error: any) {
