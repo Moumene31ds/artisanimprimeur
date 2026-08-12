@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
+import { generateImage, providerLabel } from '@/lib/image-gen';
 
 // ✅ Fixed: Use CLOUDINARY_CLOUD_NAME (server-side) with fallback
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -13,7 +14,7 @@ cloudinary.config({
   secure: true,
 });
 
-export const maxDuration = 40;
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   // Guard: Validate Cloudinary credentials
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { prompt, style } = await req.json();
+    const { prompt, style, seed } = await req.json();
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
       return NextResponse.json({ error: 'A valid prompt is required.' }, { status: 400 });
@@ -42,17 +43,21 @@ export async function POST(req: Request) {
       style === 'pro'
         ? 'professional premium vector logo graphic style'
         : style === 'creative'
-        ? 'artistic creative graphic design concept'
-        : 'minimalist clean layout design';
+          ? 'artistic creative graphic design concept'
+          : 'minimalist clean layout design';
 
     const finalPrompt = `${prompt.trim()}, ${styleSuffix}, isolated on solid background, printable high resolution, design prototype`;
 
-    // Free image generation via Pollinations.ai (no API key required).
-    const seed = Math.floor(Math.random() * 100000);
-    const uploadTarget = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?width=800&height=600&nologo=true&seed=${seed}`;
+    // Generate via the FLUX.1 / Pollinations provider chain (auto fallback).
+    const generated = await generateImage({
+      prompt: finalPrompt,
+      width: 1024,
+      height: 1024,
+      seed: typeof seed === 'number' ? seed : undefined,
+    });
 
     // 3. Upload result to Cloudinary for a permanent, fast-loading URL
-    const uploadResponse = await cloudinary.uploader.upload(uploadTarget, {
+    const uploadResponse = await cloudinary.uploader.upload(generated.imageUrl, {
       folder: 'lartisan-ai-studio',
       resource_type: 'image',
       access_mode: 'public',
@@ -61,7 +66,9 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       imageUrl: uploadResponse.secure_url,
-      fallback: false,
+      fallback: generated.fallback,
+      provider: generated.provider,
+      providerLabel: providerLabel(generated.provider),
       publicId: uploadResponse.public_id,
     });
 

@@ -27,6 +27,7 @@ export default function AIStudioPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [generatedProvider, setGeneratedProvider] = useState<string | null>(null);
 
   interface DesignHistoryItem {
     id: string;
@@ -333,6 +334,7 @@ export default function AIStudioPage() {
     setIsGenerating(true);
     setGeneratedImage(null);
     setErrorMsg("");
+    setGeneratedProvider(null);
     
     try {
       const response = await fetch('/api/generate-image', {
@@ -345,6 +347,12 @@ export default function AIStudioPage() {
       
       if (data.imageUrl) {
         setGeneratedImage(data.imageUrl);
+        setGeneratedProvider(data.providerLabel || null);
+        if (data.fallback && data.provider === 'pollinations') {
+          setErrorMsg(isRtl
+            ? "تم التوليد عبر مزوّد مجاني (Pollinations). أضف TOGETHER_API_KEY لتوليد FLUX.1 بجودة أعلى."
+            : "Généré via le fournisseur gratuit (Pollinations). Ajoutez TOGETHER_API_KEY pour une qualité FLUX.1 supérieure.");
+        }
         const newItem: DesignHistoryItem = {
           id: `design-${Date.now()}`,
           prompt,
@@ -883,6 +891,13 @@ export default function AIStudioPage() {
                     ref={containerRef}
                     className="relative w-full max-w-[480px] aspect-[4/3] rounded-2xl overflow-hidden shadow-2xl bg-black border border-slate-350 dark:border-slate-800 select-none"
                   >
+                    {generatedProvider && (
+                      <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 px-2.5 py-1 bg-black/60 backdrop-blur rounded-full text-[10px] font-black text-white border border-white/20">
+                        <Sparkles size={10} className="text-purple-400" />
+                        {generatedProvider}
+                      </div>
+                    )}
+
                     {generatedImage && (
                       <img 
                         src={generatedImage} 
