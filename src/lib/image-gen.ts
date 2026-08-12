@@ -187,9 +187,7 @@ async function pollinationsRun(opts: Required<Pick<GenerateImageOptions, 'prompt
     private: 'true',
   });
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(opts.prompt)}?${params.toString()}`;
-  // Pollinations serves the image directly; verify it's reachable.
-  const probe = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(20_000) });
-  if (!probe.ok) throw new Error(`Pollinations error ${probe.status}`);
+  // Pollinations blocks HEAD requests; return URL directly and let the consumer handle load errors.
   return url;
 }
 
