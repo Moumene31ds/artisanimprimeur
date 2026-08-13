@@ -36,6 +36,19 @@ test('specific provider mode prepends itself then falls back to pollinations', (
   assert.deepEqual(list, ['fal', 'pollinations']);
 });
 
+test('together mode uses Together AI exclusively (no fallback)', () => {
+  process.env.IMAGE_PROVIDER = 'together';
+  process.env.TOGETHER_API_KEY = 'tog-key';
+  delete process.env.REPLICATE_API_TOKEN;
+  delete process.env.FAL_KEY;
+
+  const list = configuredProviders();
+  assert.deepEqual(list, ['together']);
+
+  delete process.env.IMAGE_PROVIDER;
+  delete process.env.TOGETHER_API_KEY;
+});
+
 test('providerLabel returns human-friendly labels', () => {
   assert.ok(providerLabel('together').includes('FLUX.1'));
   assert.ok(providerLabel('replicate').includes('FLUX.1'));

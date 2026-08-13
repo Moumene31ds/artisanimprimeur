@@ -2,7 +2,7 @@
 // Multi-provider image generation layer.
 //
 // Priority (configure with IMAGE_PROVIDER=auto|together|replicate|fal|pollinations):
-//   1. Together AI — FLUX.1-schnell-free (free tier, needs TOGETHER_API_KEY)
+//   1. Together AI — FLUX.1-schnell (needs TOGETHER_API_KEY)
 //   2. Replicate   — black-forest-labs/flux-schnell (needs REPLICATE_API_TOKEN)
 //   3. fal.ai      — fal-ai/flux/schnell (needs FAL_KEY)
 //   4. Pollinations.ai (100% free, no key) — always available as last resort.
@@ -43,9 +43,11 @@ const FAL_KEY = () => process.env.FAL_KEY?.trim() || '';
 
 export function configuredProviders(): ImageProvider[] {
   const mode = (process.env.IMAGE_PROVIDER || 'auto').toLowerCase();
+  // "together" mode → Together AI حصرياً (بدون أي fallback) كما طلب المستخدم.
+  // auto → السلسلة الكاملة: Together → Replicate → fal → Pollinations.
   const order: ImageProvider[] =
     mode === 'together'
-      ? ['together', 'pollinations']
+      ? ['together']
       : mode === 'replicate'
         ? ['replicate', 'pollinations']
         : mode === 'fal'
@@ -67,7 +69,7 @@ export function configuredProviders(): ImageProvider[] {
 // Providers
 // ---------------------------------------------------------------------------
 
-/** Together AI — FLUX.1-schnell-free (official free FLUX tier). */
+/** Together AI — FLUX.1-schnell (the -free alias was retired). */
 async function togetherRun(opts: Required<Pick<GenerateImageOptions, 'prompt'>> & GenerateImageOptions): Promise<string> {
   const res = await fetch('https://api.together.xyz/v1/images/generations', {
     method: 'POST',
@@ -76,7 +78,7 @@ async function togetherRun(opts: Required<Pick<GenerateImageOptions, 'prompt'>> 
       Authorization: `Bearer ${TOGETHER_KEY()}`,
     },
     body: JSON.stringify({
-      model: 'black-forest-labs/FLUX.1-schnell-free',
+      model: 'black-forest-labs/FLUX.1-schnell',
       prompt: opts.prompt,
       width: opts.width ?? 1024,
       height: opts.height ?? 1024,
