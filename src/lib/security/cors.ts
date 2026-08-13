@@ -10,6 +10,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { isOriginAllowed } from './csrf';
+import { SITE_URL } from '@/lib/seo';
 
 const DEFAULT_ALLOWED_METHODS = 'GET, POST, PUT, PATCH, DELETE, OPTIONS';
 const DEFAULT_ALLOWED_HEADERS = [
@@ -21,7 +22,7 @@ const DEFAULT_ALLOWED_HEADERS = [
 ].join(', ');
 const MAX_AGE = 600; // 10 دقائق
 
-/** قائمة النطاقات المصرّح بها: من env أولاً ثم نطاق التطبيق. */
+/** قائمة النطاقات المصرّح بها: من env أولاً ثم نطاق التطبيق ثم النطاق الرسمي. */
 export function getAllowedOrigins(): string[] {
   const fromEnv = (process.env.CORS_ALLOWED_ORIGINS || '')
     .split(',')
@@ -29,7 +30,10 @@ export function getAllowedOrigins(): string[] {
     .filter(Boolean);
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   const primary = appUrl.replace(/\/+$/, '');
-  return [...new Set([...fromEnv, primary])];
+  // النطاق الرسمي يُضاف دائماً كاحتياط: يضمن قبول طلبات الموقع نفسه حتى لو
+  // نُشر دون ضبط NEXT_PUBLIC_APP_URL (خلاف ذلك تُرفض كل طلبات التطبيق بـ 403).
+  const official = SITE_URL.replace(/\/+$/, '');
+  return [...new Set([...fromEnv, primary, official])];
 }
 
 /**
