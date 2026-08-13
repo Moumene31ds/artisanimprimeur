@@ -174,10 +174,30 @@ async function falRun(opts: Required<Pick<GenerateImageOptions, 'prompt'>> & Gen
 }
 
 /** Pollinations.ai — free, no key. Serves FLUX.1 (model=flux). Acts as the universal fallback. */
-async function pollinationsRun(opts: Required<Pick<GenerateImageOptions, 'prompt'>> & GenerateImageOptions): Promise<string> {
+export async function pollinationsRun(opts: Required<Pick<GenerateImageOptions, 'prompt'>> & GenerateImageOptions): Promise<string> {
   const seed = opts.seed ?? Math.floor(Math.random() * 100000);
   const width = opts.width ?? 1024;
   const height = opts.height ?? 1024;
+  const prompt = opts.prompt;
+
+  // When a Pollinations API key is configured, use the modern gen endpoint which
+  // actually honors `model=flux` (FLUX.1) and serves full-quality images. The
+  // legacy image.pollinations.ai endpoint silently ignores `model=flux` and
+  // serves the low-quality "sana" model instead.
+  const apiKey = process.env.POLLINATIONS_API_KEY?.trim();
+  if (apiKey) {
+    const params = new URLSearchParams({
+      model: 'flux',
+      width: String(width),
+      height: String(height),
+      seed: String(seed),
+      nologo: 'true',
+      private: 'true',
+      key: apiKey,
+    });
+    return `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}?${params.toString()}`;
+  }
+
   const params = new URLSearchParams({
     model: 'flux',
     width: String(width),
@@ -186,7 +206,7 @@ async function pollinationsRun(opts: Required<Pick<GenerateImageOptions, 'prompt
     nologo: 'true',
     private: 'true',
   });
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(opts.prompt)}?${params.toString()}`;
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${params.toString()}`;
   // Pollinations blocks HEAD requests; return URL directly and let the consumer handle load errors.
   return url;
 }
@@ -241,6 +261,8 @@ export function providerLabel(provider: ImageProvider): string {
     case 'fal':
       return 'FLUX.1-schnell (fal.ai)';
     case 'pollinations':
-      return 'Pollinations.ai (gratuit)';
+      return process.env.POLLINATIONS_API_KEY?.trim()
+        ? 'FLUX.1 (Pollinations gen.ai)'
+        : 'Pollinations.ai (gratuit)';
   }
 }

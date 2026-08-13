@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { configuredProviders, providerLabel } from './image-gen';
+import { configuredProviders, providerLabel, pollinationsRun } from './image-gen';
 
 // Note: configuredProviders reads process.env at call time, so tests can set
 // keys per-case. Pollinations needs no key and is always offered as a fallback.
@@ -46,5 +46,24 @@ test('providerLabel returns human-friendly labels', () => {
 test('providerLabel for each valid provider is non-empty', () => {
   for (const p of ['together', 'replicate', 'fal', 'pollinations'] as const) {
     assert.ok(providerLabel(p).length > 0);
+  }
+});
+
+test('pollinationsRun uses legacy endpoint without a key', async () => {
+  delete process.env.POLLINATIONS_API_KEY;
+  const url = await pollinationsRun({ prompt: 'test card', width: 512, height: 512, seed: 1 });
+  assert.ok(url.startsWith('https://image.pollinations.ai/prompt/'));
+  assert.ok(url.includes('model=flux'));
+});
+
+test('pollinationsRun uses gen endpoint (real FLUX.1) when a key is set', async () => {
+  process.env.POLLINATIONS_API_KEY = 'pk_test';
+  try {
+    const url = await pollinationsRun({ prompt: 'بطاقة فاخرة', width: 512, height: 512, seed: 1 });
+    assert.ok(url.startsWith('https://gen.pollinations.ai/image/'));
+    assert.ok(url.includes('key=pk_test'));
+    assert.ok(url.includes('model=flux'));
+  } finally {
+    delete process.env.POLLINATIONS_API_KEY;
   }
 });
