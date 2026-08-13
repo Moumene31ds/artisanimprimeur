@@ -342,7 +342,24 @@ export default function AIStudioPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, style: selectedStyle }),
       });
-      
+
+      if (!response.ok) {
+        const text = await response.text();
+        let message = text || `HTTP ${response.status}`;
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed?.error) message = parsed.error;
+        } catch {
+          // plain-text error (rate limit / CSRF) — keep raw text
+        }
+        if (response.status === 429) {
+          throw new Error(isRtl
+            ? "طلبات كثيرة جداً. انتظر قليلاً ثم أعد المحاولة."
+            : "Trop de requêtes. Attendez un instant puis réessayez.");
+        }
+        throw new Error(message);
+      }
+
       const data = await response.json();
       
       if (data.imageUrl) {

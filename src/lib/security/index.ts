@@ -61,7 +61,7 @@ export const ROUTE_RATE_LIMITS: RouteRateLimit[] = [
   // محادثة الذكاء الاصطناعي: يحمي حصة المزود المجاني من الاستغلال.
   { match: /^\/api\/chat/, limit: 40, windowMs: 60_000 },
   // توليد الصور بالذكاء الاصطناعي: مكلف → حد ساعي.
-  { match: /^\/api\/generate-image/, limit: 25, windowMs: 60 * 60_000 },
+  { match: /^\/api\/generate-image/, limit: 60, windowMs: 60 * 60_000 },
   // رفع الملفات: يحمي حصة سحابة Cloudinary.
   { match: /^\/api\/upload/, limit: 30, windowMs: 15 * 60_000 },
   // التحقق من وصولات الدفع: منع إساءة استغلال معالجة الذكاء الاصطناعي.
