@@ -49,6 +49,34 @@ test('together mode uses Together AI exclusively (no fallback)', () => {
   delete process.env.TOGETHER_API_KEY;
 });
 
+test('huggingface mode uses HF + pollinations fallback', () => {
+  process.env.IMAGE_PROVIDER = 'huggingface';
+  process.env.HF_TOKEN = 'hf_test';
+  delete process.env.TOGETHER_API_KEY;
+  delete process.env.REPLICATE_API_TOKEN;
+  delete process.env.FAL_KEY;
+
+  const list = configuredProviders();
+  assert.deepEqual(list, ['huggingface', 'pollinations']);
+
+  delete process.env.IMAGE_PROVIDER;
+  delete process.env.HF_TOKEN;
+});
+
+test('auto mode includes huggingface when HF_TOKEN is set', () => {
+  process.env.IMAGE_PROVIDER = 'auto';
+  process.env.HF_TOKEN = 'hf_test';
+  delete process.env.TOGETHER_API_KEY;
+  delete process.env.REPLICATE_API_TOKEN;
+  delete process.env.FAL_KEY;
+
+  const list = configuredProviders();
+  assert.deepEqual(list, ['huggingface', 'pollinations']);
+
+  delete process.env.IMAGE_PROVIDER;
+  delete process.env.HF_TOKEN;
+});
+
 test('providerLabel returns human-friendly labels', () => {
   assert.ok(providerLabel('together').includes('FLUX.1'));
   assert.ok(providerLabel('replicate').includes('FLUX.1'));
@@ -57,7 +85,7 @@ test('providerLabel returns human-friendly labels', () => {
 });
 
 test('providerLabel for each valid provider is non-empty', () => {
-  for (const p of ['together', 'replicate', 'fal', 'pollinations'] as const) {
+  for (const p of ['together', 'replicate', 'fal', 'huggingface', 'pollinations'] as const) {
     assert.ok(providerLabel(p).length > 0);
   }
 });

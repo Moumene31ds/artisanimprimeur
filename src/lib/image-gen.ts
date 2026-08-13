@@ -1,16 +1,17 @@
 // src/lib/image-gen.ts
 // Multi-provider image generation layer.
 //
-// Priority (configure with IMAGE_PROVIDER=auto|together|replicate|fal|pollinations):
-//   1. Together AI — FLUX.1-schnell (needs TOGETHER_API_KEY)
-//   2. Replicate   — black-forest-labs/flux-schnell (needs REPLICATE_API_TOKEN)
-//   3. fal.ai      — fal-ai/flux/schnell (needs FAL_KEY)
-//   4. Pollinations.ai (100% free, no key) — always available as last resort.
+// Priority (configure with IMAGE_PROVIDER=auto|together|replicate|fal|huggingface|pollinations):
+//   1. Together AI    — FLUX.1-schnell (needs TOGETHER_API_KEY)
+//   2. Replicate      — black-forest-labs/flux-schnell (needs REPLICATE_API_TOKEN)
+//   3. fal.ai         — fal-ai/flux/schnell (needs FAL_KEY)
+//   4. Hugging Face   — FLUX.1-schnell free tier (needs HF_TOKEN, no card)
+//   5. Pollinations.ai (100% free, no key) — always available as last resort.
 //
 // Every provider wraps its network call and the chain falls through on failure,
 // so the AI Studio always gets an image even if a paid provider is down or unset.
 
-export type ImageProvider = 'together' | 'replicate' | 'fal' | 'pollinations';
+export type ImageProvider = 'together' | 'replicate' | 'fal' | 'huggingface' | 'pollinations';
 
 export interface GenerateImageOptions {
   prompt: string;
@@ -40,11 +41,12 @@ interface ProviderRunner {
 const TOGETHER_KEY = () => process.env.TOGETHER_API_KEY?.trim() || '';
 const REPLICATE_TOKEN = () => process.env.REPLICATE_API_TOKEN?.trim() || '';
 const FAL_KEY = () => process.env.FAL_KEY?.trim() || '';
+const HF_TOKEN = () => process.env.HF_TOKEN?.trim() || '';
 
 export function configuredProviders(): ImageProvider[] {
   const mode = (process.env.IMAGE_PROVIDER || 'auto').toLowerCase();
   // "together" mode → Together AI حصرياً (بدون أي fallback) كما طلب المستخدم.
-  // auto → السلسلة الكاملة: Together → Replicate → fal → Pollinations.
+  // auto → السلسلة الكاملة: Together → Replicate → fal → Hugging Face → Pollinations.
   const order: ImageProvider[] =
     mode === 'together'
       ? ['together']
@@ -52,7 +54,9 @@ export function configuredProviders(): ImageProvider[] {
         ? ['replicate', 'pollinations']
         : mode === 'fal'
           ? ['fal', 'pollinations']
-          : ['together', 'replicate', 'fal', 'pollinations'];
+          : mode === 'huggingface'
+            ? ['huggingface', 'pollinations']
+            : ['together', 'replicate', 'fal', 'huggingface', 'pollinations'];
 
   // Never attempt a provider whose key is missing (except Pollinations, which
   // needs none). This avoids useless failing network calls in "auto" mode.
@@ -61,7 +65,8 @@ export function configuredProviders(): ImageProvider[] {
       p === 'pollinations' ||
       (p === 'together' && TOGETHER_KEY().length > 0) ||
       (p === 'replicate' && REPLICATE_TOKEN().length > 0) ||
-      (p === 'fal' && FAL_KEY().length > 0)
+      (p === 'fal' && FAL_KEY().length > 0) ||
+      (p === 'huggingface' && HF_TOKEN().length > 0)
   );
 }
 
@@ -175,6 +180,41 @@ async function falRun(opts: Required<Pick<GenerateImageOptions, 'prompt'>> & Gen
   return url;
 }
 
+/** Hugging Face Inference — FLUX.1-schnell via the free Inference Providers tier. */
+async function huggingfaceRun(opts: Required<Pick<GenerateImageOptions, 'prompt'>> & GenerateImageOptions): Promise<string> {
+  const res = await fetch(
+    'https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${HF_TOKEN()}`,
+      },
+      body: JSON.stringify({
+        inputs: opts.prompt,
+        parameters: {
+          width: opts.width ?? 1024,
+          height: opts.height ?? 1024,
+          guidance_scale: 3.5,
+          num_inference_steps: 4,
+          ...(opts.seed != null ? { seed: opts.seed } : {}),
+        },
+      }),
+      signal: AbortSignal.timeout(90_000),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`Hugging Face error ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  }
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('image/')) {
+    throw new Error(`Hugging Face returned non-image response (${contentType})`);
+  }
+  // HF returns raw image bytes — upload directly via Cloudinary's data URI support.
+  const buf = Buffer.from(await res.arrayBuffer());
+  return `data:${contentType.split(';')[0]};base64,${buf.toString('base64')}`;
+}
+
 /** Pollinations.ai — free, no key. Serves FLUX.1 (model=flux). Acts as the universal fallback. */
 export async function pollinationsRun(opts: Required<Pick<GenerateImageOptions, 'prompt'>> & GenerateImageOptions): Promise<string> {
   const seed = opts.seed ?? Math.floor(Math.random() * 100000);
@@ -221,6 +261,7 @@ const RUNNERS: Record<ImageProvider, ProviderRunner['run']> = {
   together: togetherRun,
   replicate: replicateRun,
   fal: falRun,
+  huggingface: huggingfaceRun,
   pollinations: pollinationsRun,
 };
 
@@ -262,6 +303,8 @@ export function providerLabel(provider: ImageProvider): string {
       return 'FLUX.1-schnell (Replicate)';
     case 'fal':
       return 'FLUX.1-schnell (fal.ai)';
+    case 'huggingface':
+      return 'FLUX.1-schnell (Hugging Face)';
     case 'pollinations':
       return process.env.POLLINATIONS_API_KEY?.trim()
         ? 'FLUX.1 (Pollinations gen.ai)'
