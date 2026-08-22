@@ -27,7 +27,7 @@ import SecurityVerification from "@/components/SecurityVerification";
 import SSOProviders from "@/components/SSOProviders";
 import { getAuthErrorMessage, getPasswordStrength, validateEmail, validateSignupForm } from "@/lib/auth-utils";
 
-type AuthMode = "login" | "signup" | "forgot" | "phone";
+type AuthMode = "login" | "signup" | "forgot";
 
 export default function LoginPage() {
   const { language, setLanguage } = useAppStore();
@@ -421,7 +421,7 @@ export default function LoginPage() {
     }
   };
 
-  // SSO multi-providers (Google/Facebook/Apple/GitHub/Microsoft/Yahoo)
+  // SSO multi-providers (Google/Facebook/GitHub/Microsoft/Yahoo)
   const handleSSOSuccess = async (resUser: any) => {
     setLoading(true);
     setFormMessage("");
@@ -560,13 +560,11 @@ export default function LoginPage() {
               {authMode === "login" && t("welcomeBackTitle")}
               {authMode === "signup" && t("createAccountTitle")}
               {authMode === "forgot" && t("forgotPasswordTitle")}
-              {authMode === "phone" && (isRtl ? "الدخول برقم الهاتف" : "Connexion par Téléphone")}
             </h2>
             <p className="text-slate-500 dark:text-slate-400 font-medium text-sm">
               {authMode === "login" && t("welcomeBackSubtitle")}
               {authMode === "signup" && t("createAccountSubtitle")}
               {authMode === "forgot" && t("forgotPasswordDescription")}
-              {authMode === "phone" && (isRtl ? "أدخل رقم هاتفك الجزائري لاستلام رمز التحقق الفوري" : "Entrez votre numéro algérien pour recevoir un code SMS")}
             </p>
           </div>
 
@@ -585,14 +583,7 @@ export default function LoginPage() {
                >
                   {t("signup")}
                </button>
-               <button 
-                 onClick={() => { setAuthMode("phone"); setFormMessage(""); }} 
-                 className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1 ${authMode === "phone" ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
-               >
-                  <Smartphone size={14} />
-                  <span>{isRtl ? "هاتف" : "SMS"}</span>
-               </button>
-            </div>
+             </div>
           ) : (
             <button 
               onClick={() => { setAuthMode("login"); setFormMessage(""); setResetSentSuccess(false); }}
@@ -621,39 +612,8 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Form: Phone Mode vs Email/Password Mode */}
-          {authMode === "phone" ? (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="rounded-2xl border border-blue-200/60 bg-blue-50/60 p-5 text-center space-y-4 dark:border-blue-500/20 dark:bg-blue-950/20"
-            >
-              <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
-                <Smartphone size={24} className="text-white" />
-              </div>
-
-              <div>
-                <p className="text-base font-black text-slate-800 dark:text-slate-100">
-                  {isRtl ? "تسجيل دخول سريع وآمن برقم الهاتف" : "Connexion rapide et sécurisée par téléphone"}
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed font-medium">
-                  {isRtl
-                    ? "استلام رمز تحقق فوري عبر SMS مع استخراج تلقائي للرمز (WebOTP) وحماية خفية من Google reCAPTCHA."
-                    : "Recevez un code SMS instantané avec saisie automatique (WebOTP) et protection invisible Google reCAPTCHA."}
-                </p>
-              </div>
-
-              <button
-                onClick={() => router.push("/login/phone")}
-                className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-black text-base shadow-xl hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Smartphone size={18} />
-                {isRtl ? "الدخول برقم الهاتف" : "Continuer avec le téléphone"}
-                <ArrowRight size={18} className={isRtl ? 'rotate-180' : ''} />
-              </button>
-            </motion.div>
-          ) : (
-            <form onSubmit={handleEmailAuth} className="space-y-4 relative">
+          {/* Form: Email/Password Mode */}
+          <form onSubmit={handleEmailAuth} className="space-y-4 relative">
               <AnimatePresence>
                 {isLocked && (
                   <motion.div 
@@ -788,7 +748,6 @@ export default function LoginPage() {
                 {!loading && <ArrowRight size={18} className={isRtl ? 'rotate-180' : ''} />}
               </button>
             </form>
-          )}
 
           {/* Social Auth Divider */}
           <div className="relative my-6">
