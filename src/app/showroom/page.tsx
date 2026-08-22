@@ -40,6 +40,24 @@ function CanvasCaptureHelper({ triggerCapture, onCaptureComplete }: { triggerCap
   return null;
 }
 
+// يعيد الرسم عند أي تغيير في خصائص المشهد (ضروري مع frameloop="demand")
+function InvalidateOnRender() {
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => { invalidate(); });
+  return null;
+}
+
+// مشغّل دوران تلقائي اقتصادي (~20fps بدل 60fps) — لا يرسم شيئاً عند التوقف
+function AutoSpinDriver({ active }: { active: boolean }) {
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    if (!active) return;
+    const id = window.setInterval(() => invalidate(), 50);
+    return () => window.clearInterval(id);
+  }, [active, invalidate]);
+  return null;
+}
+
 // 3D MODELS WITH DYNAMIC MATERIALS
 
 // 1. Mug Model
@@ -215,6 +233,8 @@ export default function ShowroomPage() {
   const [triggerCapture, setTriggerCapture] = useState(false);
   const [showARModal, setShowARModal] = useState(false);
   const [arShareUrl, setArShareUrl] = useState("");
+  // الدوران التلقائي يتوقف نهائياً عند أول تفاعل — توفير كبير للمعالج والذاكرة
+  const [autoSpin, setAutoSpin] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // استعادة إعدادات المشهد من رابط QR الممسوح ضوئياً (?model=&material=&color=&design=)
@@ -254,6 +274,8 @@ export default function ShowroomPage() {
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // تحرير رابط blob السابق إن وجد لمنع تراكم الذاكرة
+      if (designUrl.startsWith("blob:")) URL.revokeObjectURL(designUrl);
       const url = URL.createObjectURL(file);
       setDesignUrl(url);
       toast.success(isRtl ? "تم تطبيق التصميم الجديد!" : "Design appliqué avec succès !");
@@ -265,16 +287,31 @@ export default function ShowroomPage() {
     setTriggerCapture(true);
   };
 
-  const handleCaptureComplete = (dataUrl: string) => {
+  const handleCaptureComplete = async (dataUrl: string) => {
     setTriggerCapture(false);
-    
+
     // Auto download image
     const link = document.createElement("a");
     link.download = `Artisan_Showroom_${modelType}_${Date.now()}.png`;
     link.href = dataUrl;
     link.click();
-    
+
     toast.success(isRtl ? "تم حفظ لقطة الشاشة للمنتج!" : "Capture d'écran enregistrée !");
+
+    // تسويق مجاني: مشاركة اللقطة أولاً بأول (Web Share مع ملفات)
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], `artisan-${modelType}.png`, { type: "image/png" });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: isRtl ? "تصميمي من الحرفي للطباعة" : "Mon design — L'Artisan Imprimeur",
+          text: isRtl ? "شاهد تصميمي المطبوع ثلاثي الأبعاد! 🎨" : "Regardez mon design imprimé en 3D ! 🎨",
+        });
+      }
+    } catch {
+      // المستخدم ألغى المشاركة أو غير مدعوم — التحميل تم بالفعل
+    }
   };
 
   return (
@@ -307,17 +344,21 @@ export default function ShowroomPage() {
           
           <div className="w-full h-[500px] bg-slate-100 dark:bg-slate-950 rounded-[2.5rem] overflow-hidden relative border border-slate-200 dark:border-slate-850 shadow-inner">
             
-            <Canvas 
-              shadows 
+            <Canvas
+              shadows
+              frameloop="demand"
+              dpr={[1, 1.5]}
               gl={{ preserveDrawingBuffer: true }}
               camera={{ position: [0, 1.5, 4.5], fov: 45 }}
             >
+              <InvalidateOnRender />
+              <AutoSpinDriver active={autoSpin} />
               <ambientLight intensity={lightPreset === 'neon' ? 0.2 : 0.65} />
               
               {/* Studio Lights */}
               {lightPreset === 'studio' && (
                 <>
-                  <spotLight position={[8, 8, 8]} angle={0.2} penumbra={1} intensity={1.5} castShadow />
+                  <spotLight position={[8, 8, 8]} angle={0.2} penumbra={1} intensity={1.5} castShadow shadow-mapSize={[1024, 1024]} />
                   <directionalLight position={[-5, 5, -5]} intensity={0.4} />
                 </>
               )}
@@ -325,7 +366,7 @@ export default function ShowroomPage() {
               {/* Warm Sunset Lights */}
               {lightPreset === 'sunset' && (
                 <>
-                  <directionalLight position={[5, 5, 5]} color="#f59e0b" intensity={2} castShadow />
+                  <directionalLight position={[5, 5, 5]} color="#f59e0b" intensity={2} castShadow shadow-mapSize={[1024, 1024]} />
                   <directionalLight position={[-5, 2, -5]} color="#ec4899" intensity={0.5} />
                 </>
               )}
@@ -354,7 +395,13 @@ export default function ShowroomPage() {
                 <CanvasCaptureHelper triggerCapture={triggerCapture} onCaptureComplete={handleCaptureComplete} />
               </Suspense>
               
-              <OrbitControls enableZoom={true} enablePan={false} minPolarAngle={Math.PI / 4} maxPolarAngle={Math.PI / 1.6} />
+              <OrbitControls
+                enableZoom={true}
+                enablePan={false}
+                minPolarAngle={Math.PI / 4}
+                maxPolarAngle={Math.PI / 1.6}
+                onStart={() => setAutoSpin(false)}
+              />
             </Canvas>
 
             {/* Canvas Actions floating */}
