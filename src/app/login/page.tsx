@@ -696,7 +696,7 @@ export default function LoginPage() {
                   <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:"auto"}} exit={{opacity:0, height:0}} className="relative">
                     <div className={`absolute inset-y-0 ${isRtl ? 'right-0 pr-4' : 'left-0 pl-4'} flex items-center pointer-events-none`}><UserIcon size={18} className="text-slate-400"/></div>
                     <input 
-                      required type="text" value={name} onChange={e=>setName(e.target.value)} placeholder={t("nameLabel")} 
+                      required type="text" autoComplete="name" value={name} onChange={e=>setName(e.target.value)} placeholder={t("nameLabel")} 
                       className={`w-full ${isRtl ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-base`} 
                     />
                   </motion.div>
@@ -707,7 +707,7 @@ export default function LoginPage() {
               <div className="relative">
                 <div className={`absolute inset-y-0 ${isRtl ? 'right-0 pr-4' : 'left-0 pl-4'} flex items-center pointer-events-none`}><Mail size={18} className="text-slate-400"/></div>
                 <input 
-                  required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder={t("email")} 
+                  required type="email" inputMode="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder={t("email")} 
                   className={`w-full ${isRtl ? 'pr-12 pl-4 text-right' : 'pl-12 pr-4 text-left'} py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-base dir-ltr`} 
                   dir="ltr" 
                 />
@@ -724,7 +724,7 @@ export default function LoginPage() {
                     }} placeholder={t("password")} 
                     className={`w-full ${isRtl ? 'pr-12 pl-12 text-right' : 'pl-12 pr-12 text-left'} py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-base dir-ltr`} 
                     dir="ltr" 
-                    autoComplete="current-password"
+                    autoComplete={authMode === "signup" ? "new-password" : "current-password"}
                   />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className={`absolute inset-y-0 ${isRtl ? 'left-0 pl-4' : 'right-0 pr-4'} flex items-center text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200`}>
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}

@@ -514,6 +514,10 @@ export default function CartPage() {
       });
 
       clearCart(); 
+      // اهتزاز نجاح مزدوج على الهاتف عند تسجيل الطلب
+      try {
+        if ("vibrate" in navigator) navigator.vibrate([40, 60, 40]);
+      } catch { /* لا شيء */ }
       toast.success(isRtl ? "تم تسجيل طلبك بنجاح! سنتصل بك قريباً عبر الهاتف أو الواتساب لتأكيده." : "Commande enregistrée avec succès !");
       router.push(`/success?orderId=${orderId}`);
 
@@ -980,8 +984,8 @@ export default function CartPage() {
               <h3 className="text-2xl font-black mb-6 text-slate-900 dark:text-white">{t.confirm}</h3>
               
               <div className="space-y-4 mb-6">
-                <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder={t.namePh} className="w-full p-4 rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-accent transition-all font-medium" />
-                <input required type="tel" dir="ltr" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder={t.phonePh} className="w-full p-4 rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-accent transition-all font-black tracking-wider text-slate-700 dark:text-slate-200 text-left" />
+                <input required type="text" autoComplete="name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder={t.namePh} className="w-full p-4 rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-accent transition-all font-medium" />
+                <input required type="tel" dir="ltr" inputMode="tel" autoComplete="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder={t.phonePh} className="w-full p-4 rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-accent transition-all font-black tracking-wider text-slate-700 dark:text-slate-200 text-left" />
                 
                 <div className="relative">
                   <select value={formData.wilaya} onChange={e => setFormData({...formData, wilaya: e.target.value})} className="w-full p-4 rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-accent transition-all appearance-none font-medium text-slate-655 dark:text-slate-300">
