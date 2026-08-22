@@ -16,9 +16,9 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import dynamic from "next/dynamic";
 import { GlobalLoader } from "@/components/GlobalLoader";
 import { buildStatusHistory } from "@/lib/order-status";
-import * as XLSX from 'xlsx';
 import QRScanner from "@/components/QRScanner";
 
 // Import modular components
@@ -28,12 +28,22 @@ import AdminProducts from "@/components/admin/AdminProducts";
 import AdminPromo from "@/components/admin/AdminPromo";
 import AdminSettings from "@/components/admin/AdminSettings";
 import PaymentAudit from "@/components/admin/PaymentAudit";
-import { MarketingDashboard } from "@/components/MarketingDashboard";
-import { CampaignBuilder } from "@/components/CampaignBuilder";
+// لوحات التحليلات الثقيلة (recharts) تُحمَّل عند الحاجة فقط — تقليل حجم حزمة الأدمن.
+const MarketingDashboard = dynamic(
+  () => import("@/components/MarketingDashboard").then((m) => m.MarketingDashboard),
+  { ssr: false, loading: () => <GlobalLoader /> }
+);
+const CampaignBuilder = dynamic(
+  () => import("@/components/CampaignBuilder").then((m) => m.CampaignBuilder),
+  { ssr: false, loading: () => <GlobalLoader /> }
+);
+const AdminAnalyticsDashboard = dynamic(
+  () => import("@/components/AdminAnalyticsDashboard"),
+  { ssr: false, loading: () => <GlobalLoader /> }
+);
 import { buildMarketingInsight } from "@/lib/marketing-ai";
 import ProductionDashboard from "@/components/admin/ProductionDashboard";
 import BATWorkflowPanel from "@/components/admin/BATWorkflowPanel";
-import AdminAnalyticsDashboard from "@/components/AdminAnalyticsDashboard";
 import AdminDeposits from "@/components/admin/AdminDeposits";
 import LoyaltyDashboard from "@/components/admin/LoyaltyDashboard";
 
@@ -418,7 +428,7 @@ export default function AdminPage() {
     }
   };
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     const data = orders.map(o => ({
       ID: o.id.slice(-6).toUpperCase(),
       Client: o.customerName,
@@ -430,6 +440,8 @@ export default function AdminPage() {
       Status: o.status,
       Date: o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('fr-CA') : 'N/A'
     }));
+    // xlsx (~430KB) يُحمَّل عند الطلب فقط عند الضغط على زر التصدير.
+    const XLSX = await import('xlsx');
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Commandes");

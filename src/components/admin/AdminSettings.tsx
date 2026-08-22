@@ -7,7 +7,6 @@ import {
   ShoppingBag, Clock, Box, FileWarning, MessageSquare, ShieldCheck, Key, ShieldX, Terminal, Trash2, Download, Loader2, Send, Bell
 } from "lucide-react";
 import { toast } from "sonner";
-import * as XLSX from 'xlsx';
 
 interface AdminSettingsProps {
   uiConfig: any;
@@ -118,7 +117,7 @@ export default function AdminSettings({
     return () => unsubscribe();
   }, []);
 
-  const exportSecurityLogs = () => {
+  const exportSecurityLogs = async () => {
     try {
       const logsToExport = securityLogs.map((log) => ({
         ID: log.id,
@@ -129,6 +128,8 @@ export default function AdminSettings({
         Statut: log.status || "N/A",
         Details: log.details || ""
       }));
+      // xlsx (~430KB) يُحمَّل عند الطلب فقط عند الضغط على زر التصدير.
+      const XLSX = await import('xlsx');
       const ws = XLSX.utils.json_to_sheet(logsToExport);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Security Logs");

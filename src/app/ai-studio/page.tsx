@@ -9,7 +9,6 @@ const ThreeDPreview = dynamic(() => import("@/components/ThreeDPreview"), { ssr:
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import html2canvas from "html2canvas";
 import { toast } from "sonner";
 import { loadOptionalFonts } from "@/lib/fonts";
 
@@ -204,7 +203,7 @@ export default function AIStudioPage() {
     
     setIsSavingCustom(true);
     try {
-      const canvas = await html2canvas(element, {
+      const canvas = await (await import("html2canvas")).default(element, {
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,

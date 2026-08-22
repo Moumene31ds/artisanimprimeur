@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import Link from "next/link";
 import { useAppStore } from "@/lib/store";
-import { jsPDF } from "jspdf";
+
 import confetti from "canvas-confetti";
 
 interface PrintFormat {
@@ -197,11 +197,12 @@ export default function BatScannerPage() {
     setOffsetY(touch.clientY - dragStart.current.y);
   };
 
-  // Export to PDF Bon à Tirer
-  const handleExportPDF = () => {
+  // Export to PDF Bon à Tirer — jsPDF يُحمَّل عند الطلب فقط
+  const handleExportPDF = async () => {
     if (!report || !imageUrl) return;
 
     try {
+      const { jsPDF } = await import("jspdf");
       const doc = new jsPDF({
         orientation: selectedFormat.widthMm > selectedFormat.heightMm ? "l" : "p",
         unit: "mm",
