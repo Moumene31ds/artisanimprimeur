@@ -763,3 +763,7 @@ section[id], [id^="section-"] {
 [data-anim-delay="5"] { animation-delay: 0.4s; }
 [data-anim-delay="6"] { animation-delay: 0.48s; }
 
+
+/* إخفاء شريط التمرير مع بقاء التمرير باللمس/العجلة — للأشرطة الأفقية */
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }

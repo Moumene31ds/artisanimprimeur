@@ -21,6 +21,7 @@ import FlashSaleBanner from "@/components/FlashSaleBanner";
 import WelcomeOfferPopup from "@/components/WelcomeOfferPopup";
 
 import PWAPrompt from "@/components/PWAPrompt";
+import CartReminder from "@/components/CartReminder";
 
 import SettingsManager from "@/components/SettingsManager";
 
@@ -167,7 +168,8 @@ export default function RootLayout({
 
             <SettingsManager />
             <PWAPrompt />
-            <AnnouncementBar /> 
+            <CartReminder />
+            <AnnouncementBar />
             <FlashSaleBanner />
             
             <OfflineDetector />

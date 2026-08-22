@@ -241,8 +241,9 @@ export default function InvoicePage() {
 
           {/* جدول المنتجات */}
           <div className="mb-8 flex-grow">
-            <table className="w-full text-left border-collapse">
-              <thead>
+            <div className="w-full overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
                 <tr className="bg-slate-900 text-white text-[11px] uppercase tracking-wider print:bg-slate-900 print:text-white">
                   <th className="py-3 px-4 font-bold rounded-l-lg w-1/2">Description de l'article</th>
                   <th className="py-3 px-4 font-bold text-center">Qté</th>
@@ -266,6 +267,7 @@ export default function InvoicePage() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
 
           {/* القسم السفلي: المجاميع والـ QR */}

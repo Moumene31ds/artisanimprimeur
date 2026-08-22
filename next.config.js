@@ -43,6 +43,8 @@ const nextConfig = {
             key: 'X-Robots-Tag',
             value: 'index, follow'
           },
+          // ملاحظة: CSP وCOOP تُدار مركزياً عبر middleware.ts + src/lib/security
+          // (لا تكررهما هنا — المتصفح يطبّق تقاطع السياسات المكررة فتتعطل الميزات)
         ]
       },
       {

@@ -287,5 +287,17 @@ service cloud.firestore {
       allow create: if isAdmin();
       allow update, delete: if isAdmin();
     }
+
+    // 18. النشرة البريدية (Newsletter Subscribers) — قناة تسويق مجانية
+    match /newsletter_subscribers/{docId} {
+      // أي زائر (حتى بدون حساب) يشترك ببريده — تحقق صارم من الشكل والحجم
+      allow create: if request.resource.data.keys().hasOnly(['email', 'source', 'subscribedAt'])
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$')
+        && (!('source' in request.resource.data) || request.resource.data.source in ['footer', 'popup', 'checkout']);
+      // قراءة القائمة وتعديلها وحذفها حصرية للإدارة (تصدير CSV / إلغاء اشتراك)
+      allow read, list, update, delete: if isAdmin();
+    }
   }
 }

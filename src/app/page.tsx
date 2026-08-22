@@ -4,6 +4,8 @@ import Hero from "@/components/Hero";
 import ProductCard from "@/components/ProductCard";
 import MagneticCard from "@/components/MagneticCard";
 import DeviceDashboardWidget from "@/components/DeviceDashboardWidget";
+import RecentlyViewed from "@/components/RecentlyViewed";
+import NewsletterForm from "@/components/NewsletterForm";
 import { useAppStore } from "@/lib/store";
 import { TRANSLATIONS } from "@/lib/translations";
 import { useEffect, useState, useMemo, useRef } from "react";
@@ -607,6 +609,8 @@ export default function Home() {
         </motion.div>
       </section>
 
+      <RecentlyViewed />
+
       <section className="my-2">
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white">
@@ -705,6 +709,13 @@ export default function Home() {
           {faqs.map((faq, idx) => (
             <FaqItem key={idx} question={faq.question} answer={faq.answer} />
           ))}
+        </div>
+      </section>
+
+      {/* Newsletter — قناة تسويق مجانية 100% */}
+      <section className="max-w-4xl mx-auto w-full my-10">
+        <div className="premium-glass p-8 rounded-[2rem] border border-white/60 dark:border-slate-800/80 shadow-md flex flex-col items-center text-center gap-4">
+          <NewsletterForm source="footer" />
         </div>
       </section>
 

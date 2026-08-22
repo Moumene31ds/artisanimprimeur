@@ -10,6 +10,7 @@ import { useState, useEffect } from "react";
 import BottomSheet from "@/components/BottomSheet";
 import { triggerHapticFeedback } from "@/lib/utils"; // افتراض أنك أنشأت هذه الدالة، وإلا يمكنك إزالتها
 import { nativeShare } from "@/lib/native";
+import { trackProductView } from "@/lib/recently-viewed";
 
 export default function ProductCard({ product, priority = false }: { product: Product; priority?: boolean }) {
   const { language, addToCart, toggleFavorite, isFavorite } = useAppStore();
@@ -95,9 +96,17 @@ export default function ProductCard({ product, priority = false }: { product: Pr
             >
               {isAdding ? <Check size={22} /> : <ShoppingCart size={22} />}
             </motion.button>
-            <motion.button 
+            <motion.button
                whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-               onClick={() => setIsQuickViewOpen(true)}
+               onClick={() => {
+                 trackProductView({
+                   id: String(product.id),
+                   name: product.name,
+                   price: product.price,
+                   image: product.image,
+                 });
+                 setIsQuickViewOpen(true);
+               }}
                className="p-4 bg-white text-slate-900 rounded-2xl shadow-xl flex items-center justify-center"
             >
               <Eye size={22} />
