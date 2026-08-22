@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createMarketingAutomation, getActiveAutomations } from '@/lib/marketing-service';
+import { requireAdmin } from '@/lib/admin-auth';
+import { ApiError } from '@/lib/security/api-error';
 
 export async function POST(request: NextRequest) {
   try {
+    // إنشاء أتمتة تسويقية يؤثر على رسائل الزبائن — المشرف فقط.
+    const admin = await requireAdmin(request);
+    if (!admin) throw new ApiError(401, 'Admin authentication required');
+
     const body = await request.json();
     const { name, description, trigger, triggerCondition, actions, enabled } = body;
 

@@ -1,29 +1,48 @@
+// src/app/api/push/send/route.ts
+// إرسال إشعار فوري لكل أجهزة مستخدم معيّن — للمشرف فقط (كان مفتوحاً للجميع:
+// أي شخص كان يستطيع إرسال إشعارات لأي زبون عبر userId).
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { z } from "zod";
 import webpush from "web-push";
+import { requireAdmin } from "@/lib/admin-auth";
+import { bearerToken } from "@/lib/auth-verify";
+import { fsQuery } from "@/lib/firestore-rest";
+import { ApiError, fail } from "@/lib/security/api-error";
+
+const sendSchema = z.object({
+  userId: z.string().min(1).max(128),
+  title: z.string().min(1).max(120).optional(),
+  body: z.string().max(500).optional(),
+  url: z.string().max(512).optional(),
+  orderId: z.string().max(128).optional(),
+});
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId, title, body, url, orderId } = await request.json();
+    const admin = await requireAdmin(request);
+    if (!admin) throw new ApiError(401, "Admin authentication required");
+    const token = bearerToken(request.headers.get("authorization")) as string;
 
-    if (!userId) {
-      return NextResponse.json({ error: "userId is required" }, { status: 400 });
-    }
+    const parsed = sendSchema.safeParse(await request.json());
+    if (!parsed.success) throw parsed.error;
+    const { userId, title, body, url, orderId } = parsed.data;
 
-    const q = query(
-      collection(db, "pushSubscriptions"),
-      where("userId", "==", userId)
-    );
-    const snap = await getDocs(q);
+    const snap = await fsQuery(token, {
+      from: [{ collectionId: "pushSubscriptions" }],
+      where: {
+        fieldFilter: {
+          field: { fieldPath: "userId" },
+          op: "EQUAL",
+          value: { stringValue: userId },
+        },
+      },
+      limit: 20,
+    });
 
-    if (snap.empty) {
-      return NextResponse.json({ error: "No subscriptions found" }, { status: 404 });
-    }
+    if (snap.length === 0) throw new ApiError(404, "No subscriptions found");
 
     const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
     const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-
     if (!vapidPrivateKey || !vapidPublicKey) {
       return NextResponse.json({ error: "VAPID keys not configured" }, { status: 500 });
     }
@@ -35,15 +54,10 @@ export async function POST(request: NextRequest) {
     );
 
     const results = await Promise.allSettled(
-      snap.docs.map(async (subDoc) => {
-        const sub = subDoc.data();
-        const pushSubscription = {
-          endpoint: sub.endpoint,
-          keys: sub.keys,
-        };
-
+      snap.map(async (doc) => {
+        const sub = doc as any;
         await webpush.sendNotification(
-          pushSubscription,
+          { endpoint: sub.endpoint, keys: sub.keys ?? {} },
           JSON.stringify({
             title: title || "L'Artisan Imprimeur",
             body: body || "",
@@ -63,10 +77,7 @@ export async function POST(request: NextRequest) {
     const failed = results.filter((r) => r.status === "rejected").length;
 
     return NextResponse.json({ success: true, sent, failed });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 }
-    );
+  } catch (error) {
+    return fail(error);
   }
 }

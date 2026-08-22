@@ -7,6 +7,7 @@ import {
   MessageSquare, Eye, ThumbsUp, ThumbsDown, Loader2, Upload
 } from "lucide-react";
 import { db } from "@/lib/firebase";
+import { getAuth } from "firebase/auth";
 import {
   collection, query, orderBy, onSnapshot, doc, updateDoc,
   addDoc, serverTimestamp, Timestamp, getDoc
@@ -110,9 +111,13 @@ export default function BATWorkflowPanel({
       });
 
       if (order.phone) {
+        const token = await getAuth().currentUser?.getIdToken();
         fetch("/api/whatsapp/send", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify({
             type: "bat_notification",
             phone: order.phone,

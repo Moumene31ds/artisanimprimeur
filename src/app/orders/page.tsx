@@ -69,18 +69,26 @@ function getStatusBadgeStyle(status: string): string {
 function CustomerBATApproval({ orderId, isRtl }: { orderId: string; isRtl: boolean }) {
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const { user } = useAuth();
+
+  const batAction = async (payload: Record<string, unknown>) => {
+    const token = user ? await user.getIdToken() : null;
+    if (!token) throw new Error("unauthenticated");
+    return fetch("/api/orders/bat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    }).then((res) => res.json());
+  };
 
   const handleApprove = async () => {
     setSubmitting(true);
     try {
-      const res = await fetch("/api/orders/bat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId, action: "approve" }),
-      });
-      const data = await res.json();
+      const data = await batAction({ orderId, action: "approve" });
       if (data.success) {
         toast.success(isRtl ? "تم اعتماد التصميم ✓" : "Design approuvé ✓");
+      } else if (data.error) {
+        toast.error(data.error);
       }
     } catch {
       toast.error(isRtl ? "فشل في الاعتماد" : "Erreur d'approbation");
@@ -96,18 +104,15 @@ function CustomerBATApproval({ orderId, isRtl }: { orderId: string; isRtl: boole
     }
     setSubmitting(true);
     try {
-      const res = await fetch("/api/orders/bat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderId,
-          action: "reject",
-          data: { reason: comment.trim() },
-        }),
+      const data = await batAction({
+        orderId,
+        action: "reject",
+        data: { reason: comment.trim() },
       });
-      const data = await res.json();
       if (data.success) {
         toast.success(isRtl ? "تم رفض التصميم - سيتم التواصل معك" : "Design rejeté - Nous vous contacterons");
+      } else if (data.error) {
+        toast.error(data.error);
       }
     } catch {
       toast.error(isRtl ? "فشل في الرفض" : "Erreur de rejet");

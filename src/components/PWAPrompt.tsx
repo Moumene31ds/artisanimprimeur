@@ -140,9 +140,10 @@ export default function PWAPrompt() {
   const saveSubscription = useCallback(async (subscription: PushSubscription) => {
     const user = auth.currentUser;
     if (!user) return;
+    const token = await user.getIdToken();
     await fetch("/api/push", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         userId: user.uid,
         subscription: subscription.toJSON(),

@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
 import { generateImage, providerLabel } from '@/lib/image-gen';
+import { getClientIp } from '@/lib/security';
+import { SlidingWindowRateLimiter } from '@/lib/rate-limit';
+
+// توليد الصور مكلف (AI + تخزين Cloudinary) — حد صارم لكل IP.
+const imageGenLimiter = new SlidingWindowRateLimiter(60 * 60 * 1000, 15);
 
 // ✅ Fixed: Use CLOUDINARY_CLOUD_NAME (server-side) with fallback
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -17,6 +23,14 @@ cloudinary.config({
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
+  const rl = imageGenLimiter.allow(`ip:${getClientIp(req as NextRequest)}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Too many generations. Please try again later.', retryAfterSeconds: Math.ceil(rl.retryAfterMs / 1000) },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    );
+  }
+
   // Guard: Validate Cloudinary credentials
   if (!cloudName || !apiKey || !apiSecret) {
     return NextResponse.json(
@@ -37,6 +51,9 @@ export async function POST(req: Request) {
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
       return NextResponse.json({ error: 'A valid prompt is required.' }, { status: 400 });
+    }
+    if (prompt.length > 500) {
+      return NextResponse.json({ error: 'Prompt is too long (max 500 characters).' }, { status: 400 });
     }
 
     const styleSuffix =

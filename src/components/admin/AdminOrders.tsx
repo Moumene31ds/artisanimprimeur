@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { getAuth } from "firebase/auth";
 import { toast } from "sonner";
 
 interface AdminOrdersProps {
@@ -37,9 +38,10 @@ export default function AdminOrders({
   const handleSendWANotification = async (order: any, type: string) => {
     setSendingWA(prev => ({ ...prev, [`${order.id}-${type}`]: true }));
     try {
+      const token = await getAuth().currentUser?.getIdToken();
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           type,
           phone: order.phone,

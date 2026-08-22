@@ -62,6 +62,22 @@ service cloud.firestore {
       match /productionLog/{logId} {
         allow read, create, update, delete: if isAdmin();
       }
+
+      // سجل تدقيق البروفة (BAT): صاحب الطلب يقرأ ويضيف قراره (اعتماد/رفض)،
+      // والمشرف يدير كل شيء. get() على الوثيقة الأب يضمن ملكية الطلب.
+      match /batAudit/{logId} {
+        allow read, create: if isAdmin() ||
+          (isLoggedIn() &&
+           get(/databases/(default)/documents/orders/$(orderId)).data.customerUserId == request.auth.uid);
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // 2ب. اشتراكات الإشعارات الفورية (Push Subscriptions)
+    // نقاط النهاية ومفاتيح التشفير أسرار — كل مستخدم يرى/يحذف اشتراكاته فقط.
+    match /pushSubscriptions/{subId} {
+      allow read, delete: if isAdmin() || (isLoggedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isLoggedIn() && request.resource.data.userId == request.auth.uid;
     }
 
     // 3. المنتجات والخدمات (Products)

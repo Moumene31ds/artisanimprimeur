@@ -1,4 +1,8 @@
+// src/app/api/whatsapp/send/route.ts
+// إرسال رسائل WhatsApp (تأكيد طلب، حالة، BAT، ترويجي) — للمشرف فقط.
+// كان مفتوحاً للجميع: أي شخص يستطيع إرسال رسائل باي اسم المحل لأي رقم.
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import {
   sendOrderConfirmation,
   sendOrderStatusUpdate,
@@ -6,22 +10,44 @@ import {
   sendOrderReadyNotification,
   sendPromotionalMessage,
 } from "@/lib/whatsapp-service";
+import { requireAdmin } from "@/lib/admin-auth";
+import { ApiError, fail } from "@/lib/security/api-error";
+
+const dataSchema = z
+  .object({
+    customerName: z.string().max(120).optional(),
+    orderId: z.string().max(128).optional(),
+    total: z.number().nonnegative().max(10_000_000).optional(),
+    newStatus: z.string().max(60).optional(),
+    batUrl: z.string().max(2048).optional(),
+    promoCode: z.string().max(60).optional(),
+    discountValue: z.number().nonnegative().max(1_000_000).optional(),
+    discountType: z.string().max(20).optional(),
+  })
+  .optional();
+
+const bodySchema = z.object({
+  type: z.enum([
+    "order_confirmation",
+    "order_status",
+    "bat_notification",
+    "order_ready",
+    "promotional",
+  ]),
+  phone: z.string().min(6).max(20),
+  data: dataSchema,
+});
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { type, phone, data } = body;
+    const admin = await requireAdmin(request);
+    if (!admin) throw new ApiError(401, "Admin authentication required");
 
-    if (!phone) {
-      return NextResponse.json({ error: "Phone number is required" }, { status: 400 });
-    }
-
-    if (!type) {
-      return NextResponse.json({ error: "Message type is required" }, { status: 400 });
-    }
+    const parsed = bodySchema.safeParse(await request.json());
+    if (!parsed.success) throw new ApiError(400, "Invalid request payload");
+    const { type, phone, data } = parsed.data;
 
     let result;
-
     switch (type) {
       case "order_confirmation":
         result = await sendOrderConfirmation(
@@ -66,9 +92,6 @@ export async function POST(request: NextRequest) {
           data?.discountType || "percent"
         );
         break;
-
-      default:
-        return NextResponse.json({ error: "Invalid message type" }, { status: 400 });
     }
 
     if (!result.success) {
@@ -82,10 +105,7 @@ export async function POST(request: NextRequest) {
       success: true,
       messageId: result.messageId,
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 }
-    );
+  } catch (error) {
+    return fail(error);
   }
 }
