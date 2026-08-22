@@ -12,8 +12,10 @@ import { motion } from 'framer-motion';
 import {
   TrendingUp, DollarSign, ShoppingCart, Package,
   Activity, AlertCircle, Loader2, PieChart as PieChartIcon,
-  UserPlus, ShoppingBag
+  UserPlus, ShoppingBag, Download
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { downloadCsv, datedFilename } from '@/lib/export-utils';
 
 const STAT_COLORS = {
   prêt: '#10b981',
@@ -188,6 +190,21 @@ export default function AdminAnalyticsDashboard() {
     axisLine: false,
   };
 
+  // تصدير ملخص التحليلات إلى CSV (مؤشرات + إيراد يومي + أفضل المنتجات).
+  const exportAnalyticsCsv = () => {
+    const rows = [
+      ...metrics.map((m) => ({ section: 'KPI', label: m.label, value: m.value })),
+      ...revenueByDate.map((r) => ({ section: t('الإيرادات', 'Revenus'), label: r.date, value: r.revenue })),
+      ...popularProducts.map((p) => ({
+        section: t('أفضل المنتجات', 'Top produits'),
+        label: p.name,
+        value: p.quantity,
+      })),
+    ];
+    downloadCsv(datedFilename('LArtisan_Analytics'), rows);
+    toast.success(t('تم تصدير التحليلات (CSV) ✓', 'Analyses exportées (CSV) ✓'));
+  };
+
   if (loading) {
     return (
       <motion.div
@@ -305,9 +322,19 @@ export default function AdminAnalyticsDashboard() {
               {t('لوحة تحليلات المتجر', 'Tableau de bord analytique')}
             </h2>
           </div>
-          <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            {t('بيانات حية', 'Données en temps réel')}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 md:self-end">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              {t('بيانات حية', 'Données en temps réel')}
+            </div>
+            <button
+              onClick={exportAnalyticsCsv}
+              className="self-start md:self-end flex items-center gap-2 px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-black hover:opacity-90 transition-opacity"
+              aria-label={t('تصدير التحليلات CSV', 'Exporter les analyses en CSV')}
+            >
+              <Download size={14} />
+              {t('تصدير CSV', 'Exporter CSV')}
+            </button>
           </div>
         </div>
       </motion.div>

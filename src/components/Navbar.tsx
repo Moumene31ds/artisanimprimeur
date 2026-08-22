@@ -52,6 +52,18 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // إغلاق القوائم المنسدلة بمفتاح Escape (تنقّل لوحة المفاتيح).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setIsNotificationsOpen(false);
+      setIsProfileDropdownOpen(false);
+      setIsMobileMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   // مزامنة ملف المستخدم عند أول دخول.
   useEffect(() => {
     if (!isLoggedIn || !user) return;
@@ -195,10 +207,11 @@ export default function Navbar() {
           <div className="flex items-center gap-1.5 relative">
             
             {/* زر تبديل اللغة */}
-            <button 
+            <button
               onClick={() => setLanguage(language === "ar" ? "fr" : "ar")}
               className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 transition-colors"
               title="Changer de langue"
+              aria-label={isRtl ? "تغيير اللغة" : "Changer de langue"}
             >
               <Globe size={20} />
             </button>
@@ -209,8 +222,10 @@ export default function Navbar() {
             </div>
 
             {/* أيقونة مركز الإشعارات */}
-            <button 
+            <button
               onClick={() => { setIsNotificationsOpen(!isNotificationsOpen); setIsProfileDropdownOpen(false); }}
+              aria-label={isRtl ? "الإشعارات" : "Notifications"}
+              aria-expanded={isNotificationsOpen}
               className={`min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 transition-all relative ${isNotificationsOpen ? "bg-accent/10 text-accent" : ""}`}
             >
               <Bell size={20} />
@@ -222,7 +237,7 @@ export default function Navbar() {
             </button>
 
             {/* زر المفضلة (سطح المكتب) */}
-            <Link href="/favorites" className="hidden md:flex min-w-[44px] min-h-[44px] items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 transition-colors relative">
+            <Link href="/favorites" aria-label={isRtl ? "المفضلة" : "Favoris"} className="hidden md:flex min-w-[44px] min-h-[44px] items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 transition-colors relative">
               <Heart size={20} />
               {favorites && favorites.length > 0 && (
                 <span className="absolute top-1.5 right-1.5 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow-md">
@@ -244,7 +259,7 @@ export default function Navbar() {
             )}
 
             {/* سلة التسوق الذكية */}
-            <Link href="/cart" className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 transition-colors relative">
+            <Link href="/cart" aria-label={isRtl ? "سلة التسوق" : "Panier"} className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 transition-colors relative">
               <ShoppingCart size={20} />
               {cart && cart.length > 0 && (
                 <span className="absolute top-1.5 right-1.5 bg-accent text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow-md">
@@ -256,8 +271,10 @@ export default function Navbar() {
             {/* بوابات الدخول للمستخدم لسطح المكتب */}
             <div className="hidden md:block relative">
               {isLoggedIn ? (
-                <button 
+                <button
                   onClick={() => { setIsProfileDropdownOpen(!isProfileDropdownOpen); setIsNotificationsOpen(false); }}
+                  aria-label={isRtl ? "قائمة الحساب" : "Menu du compte"}
+                  aria-expanded={isProfileDropdownOpen}
                   className="flex items-center gap-2 p-1.5 pr-3 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200/50 dark:border-slate-700/50 hover:shadow-sm transition-all"
                 >
                   <div className="w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center font-bold text-sm">
@@ -304,8 +321,10 @@ export default function Navbar() {
             </div>
 
             {/* زر القائمة للهواتف */}
-            <button 
+            <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              aria-label={isRtl ? "القائمة" : "Menu"}
+              aria-expanded={isMobileMenuOpen}
               className="lg:hidden min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 pointer-events-auto"
             >
               {isMobileMenuOpen ? <X size={22} /> : <Menu size={22} />}

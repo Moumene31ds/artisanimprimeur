@@ -49,6 +49,16 @@ export default function BottomSheet({
     };
   }, [open]);
 
+  // Fermeture au clavier (Escape) — accessibilité.
+  useEffect(() => {
+    if (!open || !dismissible) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open, dismissible, onClose]);
+
   const handleDragStart = (_: unknown, info: PanInfo) => {
     dragStartY.current = info.point.y;
   };
@@ -105,7 +115,7 @@ export default function BottomSheet({
               {!hideClose && (
                 <button
                   onClick={onClose}
-                  aria-label="Fermer"
+                  aria-label={isRtl ? "إغلاق" : "Fermer"}
                   className="shrink-0 p-2.5 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-90 transition-all cursor-pointer"
                 >
                   <X size={18} />

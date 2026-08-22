@@ -369,7 +369,32 @@ export default function Home() {
       .replace(/&/g, '\\u0026');
   }, [userWilaya]);
 
-  if (!mounted) return null;
+  // قبل الإكمال (hydration) نُظهر هيكل تحميل بدل صفحة فارغة:
+  // يحسّن انطباع السرعة (LCP) ويبقي JSON-LD في HTML المُرسَل من الخادم للـ SEO.
+  if (!mounted) {
+    return (
+      <div className="flex flex-col gap-16 animate-fadeIn" dir="rtl">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: safeJsonLd }}
+        />
+        <div aria-hidden="true" className="animate-pulse space-y-10">
+          <div className="h-[60vh] rounded-[2.5rem] bg-slate-200/70 dark:bg-slate-800/50" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-40 rounded-3xl bg-slate-200/70 dark:bg-slate-800/50" />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-72 rounded-3xl bg-slate-200/70 dark:bg-slate-800/50" />
+            ))}
+          </div>
+          <div className="h-64 rounded-3xl bg-slate-200/70 dark:bg-slate-800/50" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex flex-col gap-16 animate-fadeIn ${isRtl ? "text-right" : "text-left"}`} dir={isRtl ? "rtl" : "ltr"}>

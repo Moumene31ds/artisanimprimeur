@@ -11,6 +11,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import Link from "next/link";
+import { QRCodeSVG } from "qrcode.react";
 import { useAppStore } from "@/lib/store";
 
 // Preset textures for testing
@@ -213,7 +214,41 @@ export default function ShowroomPage() {
   // Capture states
   const [triggerCapture, setTriggerCapture] = useState(false);
   const [showARModal, setShowARModal] = useState(false);
+  const [arShareUrl, setArShareUrl] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // استعادة إعدادات المشهد من رابط QR الممسوح ضوئياً (?model=&material=&color=&design=)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const m = params.get("model");
+      if (m === "mug" || m === "tshirt" || m === "box" || m === "poster") setModelType(m);
+      const mat = params.get("material");
+      if (mat === "matte" || mat === "glossy" || mat === "holographic" || mat === "gold") setMaterial(mat);
+      const color = params.get("color");
+      if (color && /^#[0-9a-fA-F]{3,8}$/.test(color)) setModelColor(color);
+      const design = params.get("design");
+      if (design && /^https:\/\/.{1,1900}$/.test(design)) setDesignUrl(design);
+    } catch {
+      // تجاهل روابط غير صالحة
+    }
+  }, []);
+
+  // توليد رابط مشاركة حقيقي لنفس إعدادات المشهد عند فتح النافذة
+  useEffect(() => {
+    if (!showARModal) return;
+    try {
+      const params = new URLSearchParams();
+      params.set("model", modelType);
+      params.set("material", material);
+      params.set("color", modelColor);
+      // روابط blob: المحلية لا تعمل على الهاتف — نشارك الروابط العامة فقط
+      if (/^https?:\/\//.test(designUrl)) params.set("design", designUrl);
+      setArShareUrl(`${window.location.origin}/showroom?${params.toString()}`);
+    } catch {
+      setArShareUrl("");
+    }
+  }, [showARModal, modelType, material, modelColor, designUrl]);
 
   // Handle design texture upload
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -509,40 +544,17 @@ export default function ShowroomPage() {
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 font-bold leading-relaxed">
                 {isRtl 
-                  ? "امسح الكود التالي بهاتفك المحمول لفتح كاميرا الهاتف وإسقاط المجسم ثلاثي الأبعاد مباشرة فوق مكتبك الحقيقي!"
-                  : "Scannez ce code QR avec votre mobile pour projeter la maquette 3D directement sur votre bureau en réalité augmentée !"}
+                  ? "امسح الكود بهاتفك لفتح نفس التصميم ثلاثي الأبعاد (المجسم، الخامة، اللون والتصميم) على شاشة هاتفك مباشرة!"
+                  : "Scannez ce code pour ouvrir exactement cette maquette 3D (modèle, matériau, couleur et design) sur votre mobile !"}
               </p>
 
-              {/* Simulated QR Code placeholder */}
-              <div className="bg-slate-100 dark:bg-slate-950 p-6 rounded-2xl w-44 h-44 mx-auto flex items-center justify-center border border-slate-200 dark:border-slate-800 mb-6">
-                {/* QR graphic with boxes */}
-                <div className="grid grid-cols-5 grid-rows-5 gap-1.5 w-full h-full p-2 opacity-85">
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div></div>
-                  <div></div>
-                  <div></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                </div>
+              {/* QR حقيقي (مولّد محلياً) يشير لنفس إعدادات المشهد */}
+              <div className="bg-white p-3 rounded-2xl w-44 h-44 mx-auto flex items-center justify-center border border-slate-200 dark:border-slate-800 mb-6 shadow-inner">
+                {arShareUrl ? (
+                  <QRCodeSVG value={arShareUrl} size={144} level="M" />
+                ) : (
+                  <Smartphone size={40} className="text-slate-300 animate-pulse" />
+                )}
               </div>
 
               <button 

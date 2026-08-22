@@ -297,6 +297,13 @@ section[id], [id^="section-"] {
   scroll-margin-top: 6rem;
 }
 
+/* 🎯 حلقة تركيز واضحة لتنقّل لوحة المفاتيح (لا تظهر بالنقر بالفأرة) */
+:focus-visible {
+  outline: 2px solid var(--color-accent, #2563eb);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
 /* احترام من يفضل الحركة المخففة */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

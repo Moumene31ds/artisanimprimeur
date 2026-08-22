@@ -60,6 +60,8 @@ export default function BottomNav() {
             <Link
               key={item.href}
               href={item.href}
+              aria-current={isActive ? "page" : undefined}
+              aria-label={item.label}
               onClick={() => { try { triggerHapticFeedback('light'); } catch (e) {} }}
               className="relative flex flex-col items-center justify-center w-full h-full group"
             >

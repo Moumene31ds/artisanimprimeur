@@ -5,24 +5,29 @@ import { TRANSLATIONS } from "@/lib/translations";
 import ProductCard from "@/components/ProductCard";
 import { Search, Grid, CreditCard, FileText, Gift } from "lucide-react";
 import { useEffect, useState } from "react";
-
-// نفس المنتجات الوهمية (يمكنك نقلها لملف بيانات منفصل لاحقاً أو جلبها من Firebase)
-const ALL_PRODUCTS = [
-  { id: "p1", name: "Cartes de Visite Premium(100)", price: 2500, image: "https://img.magnific.com/psd-gratuit/modele-conception-carte-visite-professionnelle_47987-19617.jpg?semt=ais_hybrid&w=740&q=80", category: "Cartes" },
-  { id: "p2", name: "Flyers Publicitaires (A4)", price: 4500, image: "https://images.unsplash.com/photo-1563298723-dcfebaa392e3?auto=format&fit=crop&q=80&w=800", category: "Flyers" },
-  { id: "p3", name: "Stickers Personnalisés", price: 1200, image: "https://lesgommettesfrancaises.com/wp-content/uploads/2024/01/GF506-stickers-joyeux-anniversaire-personnalise-gommettes-francaises.jpg", category: "Goodies" },
-  { id: "p4", name: "Affiches (A3)", price: 3000, image: "https://www.procopy.fr/media/products/02-08-affiche-a3-imprimee.jpg", category: "Flyers" },
-  { id: "p6", name: "Invitations Mariage", price: 5000, image: "https://images.unsplash.com/photo-1515934751635-c81c6bc9a2d8?auto=format&fit=crop&q=80&w=800", category: "Cartes" },
-];
+import { getCatalogProducts, type CatalogProduct } from "@/lib/catalog";
 
 export default function ServicesPage() {
   const { language } = useAppStore();
   const [mounted, setMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
+  const [products, setProducts] = useState<CatalogProduct[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setMounted(true);
+    let alive = true;
+    getCatalogProducts()
+      .then((list) => {
+        if (alive) setProducts(list);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   if (!mounted) return null;
@@ -38,7 +43,7 @@ export default function ServicesPage() {
   ];
 
   // تصفية المنتجات بناءً على البحث والتصنيف
-  const filteredProducts = ALL_PRODUCTS.filter(p => {
+  const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = activeCategory === "all" || p.category === activeCategory;
     return matchesSearch && matchesCategory;
@@ -82,7 +87,19 @@ export default function ServicesPage() {
       </div>
 
       {/* شبكة المنتجات */}
-      {filteredProducts.length > 0 ? (
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="ios-glass rounded-3xl overflow-hidden animate-pulse">
+              <div className="aspect-square bg-slate-200 dark:bg-slate-800" />
+              <div className="p-5 space-y-3">
+                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-full w-3/4" />
+                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-full w-1/2" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : filteredProducts.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredProducts.map((product) => (
             <ProductCard key={product.id} product={product} />
@@ -91,8 +108,14 @@ export default function ServicesPage() {
       ) : (
         <div className="ios-glass p-12 rounded-3xl text-center border border-white/60 mt-8">
           <Search size={48} className="mx-auto mb-4 text-slate-300" />
-          <h3 className="text-xl font-bold text-slate-700 mb-2">لا توجد نتائج</h3>
-          <p className="text-slate-500">لم نتمكن من العثور على منتجات تطابق بحثك.</p>
+          <h3 className="text-xl font-bold text-slate-700 mb-2">
+            {isRtl ? "لا توجد نتائج" : "Aucun résultat"}
+          </h3>
+          <p className="text-slate-500">
+            {isRtl
+              ? "لم نتمكن من العثور على منتجات تطابق بحثك."
+              : "Aucun produit ne correspond à votre recherche."}
+          </p>
         </div>
       )}
     </div>

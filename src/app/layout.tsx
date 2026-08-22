@@ -146,7 +146,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fr" className={`${cairo.variable} font-sans`} suppressHydrationWarning>
+    // اللغة الافتراضية للمتجر عربية → lang="ar" dir="rtl" (يحدّثها SettingsManager حسب تفضيل المستخدم)
+    <html lang="ar" dir="rtl" className={`${cairo.variable} font-sans`} suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -158,7 +159,15 @@ export default function RootLayout({
 
         <Providers>
           <MaintenanceGuard>
-            
+
+            {/* رابط تخطي التنقل لقارئات الشاشة ولوحة المفاتيح */}
+            <a
+              href="#main-content"
+              className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-1/2 focus:-translate-x-1/2 focus:z-[100000] focus:px-5 focus:py-2.5 focus:rounded-xl focus:bg-slate-900 focus:text-white focus:text-sm focus:font-black focus:shadow-2xl"
+            >
+              {`تخطي إلى المحتوى — Aller au contenu`}
+            </a>
+
             <SettingsManager />
             <PWAPrompt />
             <AnnouncementBar /> 
@@ -169,7 +178,7 @@ export default function RootLayout({
             <LiveSales />
             <Navbar />
             
-            <main className="min-h-dvh max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[calc(6rem+env(safe-area-inset-top))] pb-28 md:pb-12 relative z-10">
+            <main id="main-content" className="min-h-dvh max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[calc(6rem+env(safe-area-inset-top))] pb-28 md:pb-12 relative z-10">
               {children}
             </main>
             
