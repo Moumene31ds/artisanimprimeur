@@ -22,9 +22,6 @@ import WelcomeOfferPopup from "@/components/WelcomeOfferPopup";
 
 import PWAPrompt from "@/components/PWAPrompt";
 
-import { Analytics } from "@vercel/analytics/react";
-import { SpeedInsights } from "@vercel/speed-insights/next";
-
 import SettingsManager from "@/components/SettingsManager";
 
 const cairo = Cairo({ 
@@ -198,8 +195,8 @@ export default function RootLayout({
           <div className="decor-blob absolute top-[40%] right-[15%] w-[30%] h-[30%] bg-cyan-500/5 dark:bg-indigo-600/10 rounded-full blur-[140px] animate-blob animation-delay-1000"></div>
         </div>
 
-        <Analytics />
-        <SpeedInsights />
+        {/* التتبع مجاني 100%: GA4 (Measurement Protocol) + Meta CAPI — انظر src/lib/tracking.ts */}
+
       </body>
     </html>
   );

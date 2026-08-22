@@ -39,8 +39,6 @@
     "@react-three/fiber": "^9.6.1",
     "@types/canvas-confetti": "^1.9.0",
     "@types/three": "^0.184.1",
-    "@vercel/analytics": "^2.0.1",
-    "@vercel/speed-insights": "^2.0.0",
     "ai": "^6.0.191",
     "canvas-confetti": "^1.9.4",
     "cloudinary": "^2.10.0",
