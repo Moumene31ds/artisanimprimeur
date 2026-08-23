@@ -3,11 +3,13 @@
 import { motion } from "framer-motion";
 import { 
   ShoppingBag, Search, CreditCard, Truck, Image as ImageIcon, FileImage, 
-  Printer, Trash2, MessageCircle, Loader2
+  Printer, Trash2, MessageCircle, Loader2, CheckSquare, Square, BadgeCheck
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { getAuth } from "firebase/auth";
+import { doc, updateDoc, writeBatch } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { toast } from "sonner";
 
 interface AdminOrdersProps {
@@ -34,6 +36,8 @@ export default function AdminOrders({
   deleteOrder
 }: AdminOrdersProps) {
   const [sendingWA, setSendingWA] = useState<Record<string, boolean>>({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const handleSendWANotification = async (order: any, type: string) => {
     setSendingWA(prev => ({ ...prev, [`${order.id}-${type}`]: true }));
@@ -75,6 +79,64 @@ export default function AdminOrders({
     return matchesSearch && matchesStatus;
   });
 
+  // ===== إجراءات جماعية =====
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelected(prev => (prev.size === filteredOrders.length ? new Set() : new Set(filteredOrders.map(o => o.id))));
+  };
+
+  const bulkStatus = async (status: string) => {
+    if (!selected.size) return;
+    setBulkBusy(true);
+    try {
+      const batch = writeBatch(db);
+      selected.forEach(id => batch.update(doc(db, "orders", id), { status }));
+      await batch.commit();
+      toast.success(`${selected.size} commande(s) → ${status}`);
+      setSelected(new Set());
+    } catch {
+      toast.error("Erreur de mise à jour groupée");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const bulkDelete = async () => {
+    if (!selected.size) return;
+    if (!confirm(isRtl ? `حذف ${selected.size} طلب نهائياً؟` : `Supprimer définitivement ${selected.size} commande(s) ?`)) return;
+    setBulkBusy(true);
+    try {
+      for (let i = 0; i < selected.size; i += 400) {
+        const ids = Array.from(selected).slice(i, i + 400);
+        const batch = writeBatch(db);
+        ids.forEach(id => batch.delete(doc(db, "orders", id)));
+        await batch.commit();
+      }
+      toast.success("Commandes supprimées");
+      setSelected(new Set());
+    } catch {
+      toast.error("Erreur de suppression groupée");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const markPayment = async (order: any, status: string) => {
+    try {
+      await updateDoc(doc(db, "orders", order.id), { paymentStatus: status });
+      toast.success(isRtl ? "تم تحديث حالة الدفع" : "Paiement mis à jour");
+    } catch {
+      toast.error("Erreur de mise à jour");
+    }
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }} 
@@ -83,6 +145,16 @@ export default function AdminOrders({
       className="space-y-4"
     >
       <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
+          <button
+            onClick={toggleSelectAll}
+            className="px-3 py-2 rounded-xl font-bold text-xs transition-all whitespace-nowrap bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 flex items-center gap-1.5 cursor-pointer"
+            title="Tout sélectionner"
+          >
+            {selected.size === filteredOrders.length && filteredOrders.length > 0
+              ? <CheckSquare size={14} className="text-accent" />
+              : <Square size={14} />}
+            {isRtl ? "تحديد الكل" : "Tout"}
+          </button>
           {["Tous", "En attente", "Conception", "Impression", "Découpage", "Façonnage", "Contrôle qualité", "Prêt", "Annulé"].map((statusOpt) => (
           <button
             key={statusOpt}
@@ -108,6 +180,49 @@ export default function AdminOrders({
         />
       </div>
       
+      {/* شريط الإجراءات الجماعية */}
+      {selected.size > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="sticky top-2 z-20 premium-glass p-4 rounded-3xl border-2 border-accent/40 shadow-2xl flex flex-wrap items-center gap-3"
+        >
+          <span className="font-black text-sm text-slate-900 dark:text-white px-2">
+            {isRtl ? `${selected.size} محدد` : `${selected.size} sélectionnée(s)`}
+          </span>
+          <select
+            onChange={(e) => { if (e.target.value) bulkStatus(e.target.value); e.target.value = ""; }}
+            defaultValue=""
+            disabled={bulkBusy}
+            className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:ring-1 focus:ring-accent cursor-pointer text-slate-800 dark:text-slate-100 disabled:opacity-50"
+          >
+            <option value="" disabled>{isRtl ? "تغيير الحالة إلى..." : "Changer le statut →"}</option>
+            <option value="En attente">En attente</option>
+            <option value="Conception">Conception</option>
+            <option value="Impression">Impression</option>
+            <option value="Découpage">Découpage</option>
+            <option value="Façonnage">Façonnage</option>
+            <option value="Contrôle qualité">Contrôle qualité</option>
+            <option value="Prêt">Prêt</option>
+            <option value="Annulé">Annulé</option>
+          </select>
+          <button
+            onClick={bulkDelete}
+            disabled={bulkBusy}
+            className="flex items-center gap-2 p-2.5 bg-red-500 text-white rounded-xl font-black text-xs hover:bg-red-600 transition-colors disabled:opacity-50 cursor-pointer"
+          >
+            {bulkBusy ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            {isRtl ? "حذف المحدد" : "Supprimer"}
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="mr-auto text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+          >
+            {isRtl ? "إلغاء التحديد" : "Désélectionner"}
+          </button>
+        </motion.div>
+      )}
+
       {filteredOrders.length > 0 ? filteredOrders.map(order => (
         <div 
           key={order.id} 
@@ -115,6 +230,11 @@ export default function AdminOrders({
         >
           <div className="flex-1 w-full">
             <div className="flex items-center gap-2 mb-2">
+              <button onClick={() => toggleSelect(order.id)} className="p-1 cursor-pointer shrink-0" title="Sélectionner">
+                {selected.has(order.id)
+                  ? <CheckSquare size={18} className="text-accent" />
+                  : <Square size={18} className="text-slate-300 hover:text-slate-500" />}
+              </button>
               <h4 className="font-black text-lg text-slate-900 dark:text-white">{order.customerName}</h4>
               <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-full font-mono text-slate-600 dark:text-slate-300">
                 #{order.id.slice(-6).toUpperCase()}
@@ -131,21 +251,32 @@ export default function AdminOrders({
                 <CreditCard size={12}/> {order.paymentMethod || 'Paiement à la livraison'}
               </span>
               {order.paymentMethod === 'Baridimob' && (
-                <span className={`text-[10px] font-black px-2 py-1 rounded-lg border flex items-center gap-1 ${
-                  order.paymentStatus === 'Payé'
-                    ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900'
-                    : order.paymentStatus === 'Refusé'
-                    ? 'bg-red-50 text-red-650 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900'
-                    : order.paymentStatus === 'Envoyé'
-                    ? 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/40 dark:text-amber-450 dark:border-amber-900 animate-pulse'
-                    : 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-                }`}>
-                  {order.paymentStatus === 'Payé' ? (isRtl ? 'تم التحقق' : 'Reçu Vérifié') :
-                   order.paymentStatus === 'Refusé' ? (isRtl ? 'مرفوض' : 'Reçu Rejeté') :
-                   order.paymentStatus === 'Envoyé' ? (isRtl ? 'وصل جديد' : 'Reçu à Valider') :
-                   (isRtl ? 'بانتظار الوصل' : 'Attente Reçu')}
-                  {order.paidAmount !== undefined && ` (${order.paidAmount} DA)`}
-                </span>
+                <>
+                  <span className={`text-[10px] font-black px-2 py-1 rounded-lg border flex items-center gap-1 ${
+                    order.paymentStatus === 'Payé'
+                      ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900'
+                      : order.paymentStatus === 'Refusé'
+                      ? 'bg-red-50 text-red-650 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900'
+                      : order.paymentStatus === 'Envoyé'
+                      ? 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/40 dark:text-amber-450 dark:border-amber-900 animate-pulse'
+                      : 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                  }`}>
+                    {order.paymentStatus === 'Payé' ? (isRtl ? 'تم التحقق' : 'Reçu Vérifié') :
+                     order.paymentStatus === 'Refusé' ? (isRtl ? 'مرفوض' : 'Reçu Rejeté') :
+                     order.paymentStatus === 'Envoyé' ? (isRtl ? 'وصل جديد' : 'Reçu à Valider') :
+                     (isRtl ? 'بانتظار الوصل' : 'Attente Reçu')}
+                    {order.paidAmount !== undefined && ` (${order.paidAmount} DA)`}
+                  </span>
+                  {order.paymentStatus !== 'Payé' && (
+                    <button
+                      onClick={() => markPayment(order, 'Payé')}
+                      className="text-[10px] font-black px-2 py-1 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors flex items-center gap-1 cursor-pointer"
+                      title={isRtl ? "تأكيد استلام الدفعة" : "Confirmer la réception du paiement"}
+                    >
+                      <BadgeCheck size={12} /> {isRtl ? "تأكيد الدفع" : "Marquer Payé"}
+                    </button>
+                  )}
+                </>
               )}
               <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-200 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400 flex items-center gap-1">
                  <Truck size={12}/> {order.deliveryType === 'desk' ? 'Stop Desk' : 'À domicile'}

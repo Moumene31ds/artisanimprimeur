@@ -1,10 +1,13 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { 
-  Plus, Trash2, Edit3, Save, X, Loader2, Image as ImageIcon 
+  Plus, Trash2, Edit3, Save, X, Loader2, Image as ImageIcon, Copy, Eye, EyeOff
 } from "lucide-react";
+import { toast } from "sonner";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { PRODUCT_CATEGORIES } from "@/lib/catalog";
 
 interface AdminProductsProps {
@@ -21,6 +24,7 @@ interface AdminProductsProps {
   startEditingPrice: (id: string, price: number) => void;
   handleUpdatePrice: (id: string) => void;
   deleteProduct: (id: string) => void;
+  duplicateProduct: (p: any) => void;
 }
 
 export default function AdminProducts({
@@ -36,8 +40,26 @@ export default function AdminProducts({
   setEditingPrice,
   startEditingPrice,
   handleUpdatePrice,
-  deleteProduct
+  deleteProduct,
+  duplicateProduct
 }: AdminProductsProps) {
+  const [filter, setFilter] = useState<"all" | "active" | "hidden">("all");
+
+  const toggleActive = async (p: any) => {
+    const next = p.active === false;
+    try {
+      await updateDoc(doc(db, "products", p.id), { active: next });
+      toast.success(next ? "Produit visible sur le site" : "Produit masqué du site");
+    } catch {
+      toast.error("Erreur de mise à jour");
+    }
+  };
+
+  const isActive = (p: any) => p.active !== false;
+
+  const visible = products.filter(p =>
+    filter === "all" ? true : filter === "active" ? isActive(p) : !isActive(p)
+  );
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }} 
@@ -114,13 +136,37 @@ export default function AdminProducts({
         </button>
       </form>
       
+      {/* فلاتر العرض */}
+      <div className="flex gap-2">
+        {([
+          { id: "all", label: `Tous (${products.length})` },
+          { id: "active", label: `Visibles (${products.filter(isActive).length})` },
+          { id: "hidden", label: `Masqués (${products.filter(p => !isActive(p)).length})` },
+        ] as const).map(f => (
+          <button
+            key={f.id}
+            onClick={() => setFilter(f.id)}
+            className={`px-4 py-2 rounded-xl font-bold text-xs transition-all ${
+              filter === f.id
+                ? "bg-slate-900 dark:bg-accent text-white shadow"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        {products.map(p => (
+        {visible.map(p => (
           <div 
             key={p.id} 
-            className="premium-glass p-4 rounded-2xl border border-white/60 dark:border-white/5 relative group hover:shadow-lg transition-all flex flex-col justify-between"
+            className={`premium-glass p-4 rounded-2xl border border-white/60 dark:border-white/5 relative group hover:shadow-lg transition-all flex flex-col justify-between ${!isActive(p) ? 'opacity-60 grayscale' : ''}`}
           >
             <div>
+              {!isActive(p) && (
+                <span className="absolute top-2 left-2 text-[8px] font-black uppercase bg-slate-800 text-white px-2 py-0.5 rounded-full z-10">Masqué</span>
+              )}
               <button 
                 onClick={() => deleteProduct(p.id)} 
                 className="absolute top-2 right-2 p-1.5 bg-red-50 text-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:bg-red-500 hover:text-white"
@@ -140,22 +186,38 @@ export default function AdminProducts({
                     onChange={e => setEditingPrice(e.target.value)}
                     className="w-full p-1 text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border rounded"
                   />
-                  <button onClick={() => handleUpdatePrice(p.id)} className="p-1 bg-emerald-500 text-white rounded">
+                  <button onClick={() => handleUpdatePrice(p.id)} className="p-1 bg-emerald-500 text-white rounded cursor-pointer">
                     <Save size={12}/>
                   </button>
-                  <button onClick={() => setEditingProductId(null)} className="p-1 bg-slate-400 text-white rounded">
+                  <button onClick={() => setEditingProductId(null)} className="p-1 bg-slate-400 text-white rounded cursor-pointer">
                     <X size={12}/>
                   </button>
                 </div>
               ) : (
                 <>
                   <p className="font-black text-accent text-sm">{p.price} DA</p>
-                  <button 
-                    onClick={() => startEditingPrice(p.id, p.price)} 
-                    className="text-slate-400 hover:text-accent p-1 transition-colors"
-                  >
-                    <Edit3 size={14} />
-                  </button>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={() => duplicateProduct(p)}
+                      title="Dupliquer"
+                      className="text-slate-400 hover:text-blue-500 p-1 transition-colors cursor-pointer"
+                    >
+                      <Copy size={13} />
+                    </button>
+                    <button
+                      onClick={() => toggleActive(p)}
+                      title={isActive(p) ? "Masquer du site" : "Afficher sur le site"}
+                      className={`p-1 transition-colors cursor-pointer ${isActive(p) ? 'text-emerald-500 hover:text-emerald-600' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      {isActive(p) ? <Eye size={14} /> : <EyeOff size={14} />}
+                    </button>
+                    <button 
+                      onClick={() => startEditingPrice(p.id, p.price)} 
+                      className="text-slate-400 hover:text-accent p-1 transition-colors cursor-pointer"
+                    >
+                      <Edit3 size={14} />
+                    </button>
+                  </div>
                 </>
               )}
             </div>

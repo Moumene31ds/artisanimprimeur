@@ -4,7 +4,8 @@ import { collection, query, orderBy, limit, onSnapshot, deleteDoc, doc, getDocs,
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   ShieldAlert, AlertTriangle, Megaphone, Truck, CreditCard, Globe, 
-  ShoppingBag, Clock, Box, FileWarning, MessageSquare, ShieldCheck, Key, ShieldX, Terminal, Trash2, Download, Loader2, Send, Bell
+  ShoppingBag, Clock, Box, FileWarning, MessageSquare, ShieldCheck, Key, ShieldX, Terminal, Trash2, Download, Loader2, Send, Bell,
+  FileText
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -514,6 +515,43 @@ export default function AdminSettings({
               className="w-full p-3 mt-1 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent transition-colors text-xs text-slate-800 dark:text-slate-100"
             />
           </div>
+        </div>
+      </div>
+
+      {/* 🧾 Facturation — champs affichés sur la facture PDF (une page A4) */}
+      <div className="premium-glass p-8 rounded-[2.5rem] border border-white/60 dark:border-white/5 shadow-2xl space-y-6">
+        <h3 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-3 border-b border-slate-200 dark:border-slate-700 pb-4">
+          <FileText size={28} className="text-cyan-500"/> Facture & Mentions Légales
+        </h3>
+        <p className="text-xs font-bold text-slate-400 -mt-4">
+          Ces informations apparaissent en haut et en bas de chaque facture PDF générée par le site.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {([
+            { key: 'companyEmail', label: "Email de Contact (facture)", ph: "contact@lartisan.dz" },
+            { key: 'legalRc', label: "Numéro RC (Registre de Commerce)", ph: "31/00-1234567A20" },
+            { key: 'legalNif', label: "NIF (Numéro d'Identification Fiscale)", ph: "0000 987654321 00" },
+            { key: 'bankName', label: "Banque & Agence", ph: "BDL — Agence Akid Lotfi" },
+            { key: 'legalRib', label: "RIB Bancaire (facture)", ph: "005 00000 123456789 00" },
+            { key: 'invoiceAddress', label: "Adresse sur la Facture", ph: "Quartier Akid Lotfi, Oran, Algérie 31000" },
+          ] as const).map(f => (
+            <div key={f.key}>
+              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 ml-2">{f.label}</label>
+              <input 
+                type="text"
+                placeholder={f.ph}
+                value={uiConfig[f.key] || ''} 
+                onChange={(e)=>setUiConfig({...uiConfig, [f.key]: e.target.value})}
+                onBlur={()=> {
+                  if (uiConfig[f.key] !== undefined) {
+                    saveUiConfig({ [f.key]: uiConfig[f.key] });
+                    toast.success(`${f.label} enregistré !`);
+                  }
+                }}
+                className="w-full p-3 mt-1 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent transition-colors text-xs text-slate-800 dark:text-slate-100"
+              />
+            </div>
+          ))}
         </div>
       </div>
 

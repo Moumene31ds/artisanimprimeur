@@ -11,7 +11,8 @@ import {
 import { 
   ShoppingBag, Settings, LayoutDashboard, Package, 
   ShieldCheck, Download, Tag, ScanLine, X, CheckCircle, Sparkles, Megaphone,
-  Printer, FileImage, BarChart3, HandCoins, Crown, User, Loader2, Plus, Phone, Mail
+  Printer, FileImage, BarChart3, HandCoins, Crown, User, Loader2, Plus, Phone, Mail,
+  Users as UsersIcon, Star, ShieldAlert, Database, Power, Store
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -46,6 +47,10 @@ import ProductionDashboard from "@/components/admin/ProductionDashboard";
 import BATWorkflowPanel from "@/components/admin/BATWorkflowPanel";
 import AdminDeposits from "@/components/admin/AdminDeposits";
 import LoyaltyDashboard from "@/components/admin/LoyaltyDashboard";
+import AdminUsers from "@/components/admin/AdminUsers";
+import AdminReviews from "@/components/admin/AdminReviews";
+import AdminNewsletter from "@/components/admin/AdminNewsletter";
+import AdminSecurity from "@/components/admin/AdminSecurity";
 
 
 export default function AdminPage() {
@@ -284,6 +289,69 @@ export default function AdminPage() {
     }
   };
 
+  // نسخ منتج موجود كنموذج جديد (مسودة مخفية حتى تعديلها)
+  const duplicateProduct = async (p: any) => {
+    try {
+      await addDoc(collection(db, "products"), {
+        name: `${p.name} (copie)`,
+        price: p.price,
+        category: p.category || "Impression",
+        image: p.image || "",
+        active: false,
+        createdAt: serverTimestamp(),
+      });
+      toast.success("Produit dupliqué en brouillon !");
+    } catch (e) {
+      toast.error("Erreur de duplication");
+    }
+  };
+
+  // نسخة احتياطية شاملة بصيغة JSON لكل بيانات المتجر
+  const exportJsonBackup = async () => {
+    try {
+      const { getDocs } = await import("firebase/firestore");
+      toast.info("Création de la sauvegarde...");
+      const [ordersS, productsS, promosS, usersS] = await Promise.all([
+        getDocs(collection(db, "orders")),
+        getDocs(collection(db, "products")),
+        getDocs(collection(db, "promoCodes")),
+        getDocs(collection(db, "users")),
+      ]);
+      const serialize = (d: any) => ({
+        ...d,
+        createdAt: d.createdAt?.toDate ? d.createdAt.toDate().toISOString() : d.createdAt ?? null,
+      });
+      const backup = {
+        exportedAt: new Date().toISOString(),
+        orders: ordersS.docs.map(d => ({ id: d.id, ...serialize(d.data()) })),
+        products: productsS.docs.map(d => ({ id: d.id, ...serialize(d.data()) })),
+        promoCodes: promosS.docs.map(d => ({ id: d.id, ...serialize(d.data()) })),
+        users: usersS.docs.map(d => ({ id: d.id, ...serialize(d.data()) })),
+      };
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `LArtisan_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Sauvegarde JSON téléchargée !");
+    } catch (e) {
+      toast.error("Échec de la sauvegarde");
+    }
+  };
+
+  // مفاتيح تحكم فورية بحالة الموقع (صيانة / متجر مفتوح)
+  const toggleQuickSetting = async (field: string, value: boolean, label: string) => {
+    try {
+      await setDoc(doc(db, 'settings', 'ui'), { [field]: value }, { merge: true });
+      setUiConfig((prev: any) => ({ ...prev, [field]: value }));
+      toast.success(label);
+    } catch (e) {
+      toast.error("Erreur de sauvegarde");
+    }
+  };
+
   const deletePromoCode = async (codeId: string) => {
     if (confirm("Supprimer?")) {
       try {
@@ -454,7 +522,7 @@ export default function AdminPage() {
   return (
     <div className={`animate-fadeIn pb-24 max-w-6xl mx-auto ${isRtl ? 'text-right' : 'text-left'}`} dir={isRtl ? 'rtl' : 'ltr'}>
       
-      <header className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+      <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div className="flex items-center gap-4">
           <div className="p-4 bg-slate-900 dark:bg-accent text-white rounded-3xl shadow-2xl animate-pulse-glow">
             <ShieldCheck size={32} />
@@ -464,9 +532,41 @@ export default function AdminPage() {
             <p className="text-xs font-bold text-slate-400">SUPER ADMIN: {user?.email}</p>
           </div>
         </div>
-        <button onClick={exportToExcel} className="flex items-center gap-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl font-black text-sm shadow-xl hover:bg-emerald-600 transition-all">
-          <Download size={18} /> Export Excel
-        </button>
+
+        {/* مفاتيح تحكم فورية بحالة الموقع */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => toggleQuickSetting('maintenanceMode', !uiConfig.maintenanceMode, uiConfig.maintenanceMode ? "Mode maintenance désactivé" : "Mode maintenance ACTIVÉ")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs shadow transition-all cursor-pointer ${
+              uiConfig.maintenanceMode
+                ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200'
+            }`}
+            title={isRtl ? "نمط الصيانة" : "Mode maintenance"}
+          >
+            <Power size={14} /> {uiConfig.maintenanceMode ? (isRtl ? "الصيانة مفعلة" : "MAINTENANCE ON") : (isRtl ? "الصيانة" : "Maintenance")}
+          </button>
+          <button
+            onClick={() => toggleQuickSetting('storeOpen', !(uiConfig.storeOpen !== false), uiConfig.storeOpen !== false ? "Boutique fermée aux commandes" : "Boutique ouverte")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs shadow transition-all cursor-pointer ${
+              uiConfig.storeOpen !== false
+                ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                : 'bg-orange-500 text-white hover:bg-orange-600'
+            }`}
+            title={isRtl ? "قبول الطلبات" : "Accepter les commandes"}
+          >
+            <Store size={14} /> {(uiConfig.storeOpen !== false) ? (isRtl ? "المتجر مفتوح" : "Ouvert") : (isRtl ? "المتجر مغلق" : "Fermé")}
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <button onClick={exportJsonBackup} className="flex items-center gap-2 px-5 py-3 bg-slate-800 text-white rounded-2xl font-black text-sm shadow-xl hover:bg-slate-700 transition-all">
+            <Database size={17} /> Backup JSON
+          </button>
+          <button onClick={exportToExcel} className="flex items-center gap-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl font-black text-sm shadow-xl hover:bg-emerald-600 transition-all">
+            <Download size={18} /> Export Excel
+          </button>
+        </div>
       </header>
 
       <div className="flex gap-2 ios-glass p-2 rounded-[2rem] mb-10 overflow-x-auto hide-scrollbar border border-white/60 dark:border-white/5 shadow-sm">
@@ -483,6 +583,10 @@ export default function AdminPage() {
           { id: 'production', icon: Printer, label: isRtl ? 'الإنتاج' : 'Production' },
           { id: 'bat', icon: FileImage, label: isRtl ? 'BAT' : 'BAT' },
           { id: 'loyalty', icon: Crown, label: isRtl ? 'الولاء' : 'Fidélité' },
+          { id: 'users', icon: UsersIcon, label: isRtl ? 'العملاء' : 'Clients' },
+          { id: 'reviews', icon: Star, label: isRtl ? 'التقييمات' : 'Avis' },
+          { id: 'newsletter', icon: Mail, label: 'Newsletter' },
+          { id: 'security', icon: ShieldAlert, label: isRtl ? 'الأمان' : 'Sécurité' },
           { id: 'settings', icon: Settings, label: 'Site' }
         ].map(t => (
           <button 
@@ -749,6 +853,7 @@ export default function AdminPage() {
             startEditingPrice={startEditingPrice}
             handleUpdatePrice={handleUpdatePrice}
             deleteProduct={deleteProduct}
+            duplicateProduct={duplicateProduct}
           />
         )}
 
@@ -803,6 +908,56 @@ export default function AdminPage() {
         {tab === 'loyalty' && (
           <motion.div key="loyalty" initial={{opacity:0, y:15}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-15}}>
             <LoyaltyDashboard isRtl={isRtl} />
+          </motion.div>
+        )}
+
+        {/* ==================== USERS TAB ==================== */}
+        {tab === 'users' && (
+          <motion.div key="users" initial={{opacity:0, y:15}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-15}}>
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-2">
+                {isRtl ? 'إدارة العملاء' : 'Gestion des Clients'}
+              </h2>
+              <p className="text-slate-500">{isRtl ? 'حظر، نقاط، إحصائيات وتصدير قاعدة الزبائن' : 'Blocage, points, statistiques et export de la clientèle'}</p>
+            </div>
+            <AdminUsers orders={orders} isRtl={isRtl} />
+          </motion.div>
+        )}
+
+        {/* ==================== REVIEWS TAB ==================== */}
+        {tab === 'reviews' && (
+          <motion.div key="reviews" initial={{opacity:0, y:15}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-15}}>
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-2">
+                {isRtl ? 'إدارة التقييمات' : 'Modération des Avis'}
+              </h2>
+              <p className="text-slate-500">{isRtl ? 'نشر، إخفاء أو حذف تقييمات الزبائن' : 'Publier, masquer ou supprimer les avis clients'}</p>
+            </div>
+            <AdminReviews isRtl={isRtl} />
+          </motion.div>
+        )}
+
+        {/* ==================== NEWSLETTER TAB ==================== */}
+        {tab === 'newsletter' && (
+          <motion.div key="newsletter" initial={{opacity:0, y:15}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-15}}>
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-2">Newsletter</h2>
+              <p className="text-slate-500">{isRtl ? 'قائمة المشتركين، تصدير ومراسلة جماعية' : 'Abonnés, export CSV et envoi groupé'}</p>
+            </div>
+            <AdminNewsletter isRtl={isRtl} />
+          </motion.div>
+        )}
+
+        {/* ==================== SECURITY TAB ==================== */}
+        {tab === 'security' && (
+          <motion.div key="security" initial={{opacity:0, y:15}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-15}}>
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-2">
+                {isRtl ? 'السجل الأمني' : 'Journal de Sécurité'}
+              </h2>
+              <p className="text-slate-500">{isRtl ? 'مراقبة تسجيلات الدخول والنشاطات المشبوهة' : 'Connexions et activités suspectes en direct'}</p>
+            </div>
+            <AdminSecurity isRtl={isRtl} />
           </motion.div>
         )}
 

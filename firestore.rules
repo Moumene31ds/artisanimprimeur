@@ -299,5 +299,22 @@ service cloud.firestore {
       // قراءة القائمة وتعديلها وحذفها حصرية للإدارة (تصدير CSV / إلغاء اشتراك)
       allow read, list, update, delete: if isAdmin();
     }
+
+    // 19. تقييمات الزبائن (Reviews)
+    match /reviews/{reviewId} {
+      // القراءة عامة لعرض التقييمات في واجهات الموقع
+      allow read: if true;
+      // إنشاء تقييم: حقول محددة فقط مع ملاحظة صحيحة وحجم معقول للنص
+      // (المعرفات والنص قد يكونان null للزوائر — يجب السماح بذلك صراحة)
+      allow create: if request.resource.data.keys().hasOnly(['userId', 'orderId', 'rating', 'comment', 'isVerified', 'hidden', 'createdAt'])
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && (!('userId' in request.resource.data) || request.resource.data.userId == null || request.resource.data.userId is string)
+        && (!('orderId' in request.resource.data) || request.resource.data.orderId == null || request.resource.data.orderId is string)
+        && (!('comment' in request.resource.data) || request.resource.data.comment == null || (request.resource.data.comment is string && request.resource.data.comment.size() <= 1000));
+      // الإخفاء/التعديل/الحذف حصريان للمشرف (إدارة التقييمات من لوحة التحكم)
+      allow update, delete: if isAdmin();
+    }
   }
 }

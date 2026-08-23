@@ -2,7 +2,9 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, onAuthStateChanged, getIdToken, signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { toast } from 'sonner';
+import { auth, db } from '@/lib/firebase';
 
 interface AuthContextType {
   user: User | null;
@@ -67,6 +69,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setToken(freshToken);
         } catch (err) {
           setToken(await getIdToken(currentUser).catch(() => null));
+        }
+
+        // فرض الحظر: الحساب المحجوب من الإدارة يتم تسجيل خروجه فوراً
+        try {
+          const profileSnap = await getDoc(doc(db, 'users', currentUser.uid));
+          if (profileSnap.exists() && profileSnap.data().blocked === true) {
+            await signOut(auth);
+            toast.error('Votre compte a été suspendu. Contactez le support si vous pensez qu\'il s\'agit d\'une erreur.');
+            return;
+          }
+        } catch (profileErr) {
+          console.error('Blocked-check failed (non-blocking):', profileErr);
         }
       } else {
         setSignInProvider(null);

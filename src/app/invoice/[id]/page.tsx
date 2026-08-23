@@ -6,7 +6,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { Loader2, Printer, ArrowLeft, CheckCircle, MessageCircle, AlertCircle, Share2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
-import Barcode from "react-barcode"; // المكتبة الجديدة للباركود
+import Barcode from "react-barcode";
 import { toast } from "sonner";
 import { nativeShare } from "@/lib/native";
 
@@ -30,10 +30,34 @@ interface Order {
   createdAt?: any;
 }
 
+// معلومات المؤسسة القابلة للتحكم من لوحة الأدمن (settings/ui) مع قيم احتياطية
+interface CompanyInfo {
+  shopPhone: string;
+  shopAddress: string;
+  companyEmail: string;
+  legalRc: string;
+  legalNif: string;
+  legalRib: string;
+  bankName: string;
+}
+
+const DEFAULT_COMPANY: CompanyInfo = {
+  shopPhone: "+213 549 17 90 00",
+  shopAddress: "Quartier Akid Lotfi, Oran, Algérie 31000",
+  companyEmail: "contact@lartisan.dz",
+  legalRc: "31/00-1234567A20",
+  legalNif: "0000 987654321 00",
+  legalRib: "005 00000 123456789 00",
+  bankName: "BDL — Agence Akid Lotfi",
+};
+
+const MAX_VISIBLE_ITEMS = 14;
+
 export default function InvoicePage() {
   const { id } = useParams();
   const router = useRouter();
   const [order, setOrder] = useState<Order | null>(null);
+  const [company, setCompany] = useState<CompanyInfo>(DEFAULT_COMPANY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [currentUrl, setCurrentUrl] = useState("");
@@ -46,6 +70,26 @@ export default function InvoicePage() {
 
     const fetchOrder = async () => {
       try {
+        // جلب بيانات المؤسسة من إعدادات الأدمن (قراءة عامة مسموحة)
+        try {
+          const settingsSnap = await getDoc(doc(db, "settings", "ui"));
+          if (settingsSnap.exists()) {
+            const s = settingsSnap.data();
+            setCompany((prev) => ({
+              ...prev,
+              ...(s.shopPhone ? { shopPhone: s.shopPhone } : {}),
+              ...(s.invoiceAddress || s.shopAddress ? { shopAddress: s.invoiceAddress || s.shopAddress } : {}),
+              ...(s.companyEmail ? { companyEmail: s.companyEmail } : {}),
+              ...(s.legalRc ? { legalRc: s.legalRc } : {}),
+              ...(s.legalNif ? { legalNif: s.legalNif } : {}),
+              ...(s.legalRib ? { legalRib: s.legalRib } : {}),
+              ...(s.bankName ? { bankName: s.bankName } : {}),
+            }));
+          }
+        } catch {
+          /* الإعدادات اختيارية — نستخدم القيم الافتراضية */
+        }
+
         const docRef = doc(db, "orders", id as string);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
@@ -111,7 +155,7 @@ export default function InvoicePage() {
   };
 
   const isPaid = order.status.toLowerCase() === "livré" || order.status.toLowerCase() === "payé";
-  
+
   const invoiceDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date();
   const dueDate = new Date(invoiceDate);
   dueDate.setDate(dueDate.getDate() + 15);
@@ -121,9 +165,18 @@ export default function InvoicePage() {
   // تحسين بيانات الـ QR لتشمل رابط الفاتورة المباشر للمسح السريع
   const qrData = currentUrl || `https://lartisan.dz/invoice/${order.id}`;
 
+  // ===== كثافة تكيفية: تضمن أن الفاتورة تبقى دائماً في ورقة A4 واحدة =====
+  const itemCount = order.items?.length || 0;
+  const hiddenCount = Math.max(0, itemCount - MAX_VISIBLE_ITEMS);
+  const visibleItems = order.items?.slice(0, MAX_VISIBLE_ITEMS) || [];
+  // كلما زاد عدد المواد قلّصنا المساحات تلقائياً
+  const dense = itemCount > 5;
+  const veryDense = itemCount > 10;
+  const rowPad = veryDense ? "py-1 px-3" : dense ? "py-2 px-3" : "py-3 px-4";
+
   return (
     <div className="min-h-dvh bg-slate-200 py-8 px-4 font-sans text-slate-800 print:p-0 print:bg-white" dir="ltr">
-      
+
       {/* أزرار التحكم (تختفي عند الطباعة) */}
       <div className="max-w-[210mm] mx-auto mb-8 flex flex-col sm:flex-row justify-between items-center gap-4 print:hidden">
         <button
@@ -149,47 +202,51 @@ export default function InvoicePage() {
             onClick={handlePrint}
             className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-slate-900 text-white px-6 py-2.5 rounded-xl shadow-md hover:bg-slate-800 transition-all font-medium"
           >
-            <Printer size={18} /> Imprimer / PDF
+            <Printer size={18} /> Imprimer / PDF (A4)
           </button>
         </div>
       </div>
 
-      {/* ورقة الفاتورة (A4 Format) */}
-      <div className="invoice-paper relative max-w-[210mm] min-h-[297mm] mx-auto bg-white shadow-2xl overflow-hidden flex flex-col print:shadow-none print:max-w-full">
-        
+      {/* ورقة الفاتورة (A4) — ارتفاع ثابت لضمان ورقة واحدة فقط عند التصدير PDF */}
+      <div className="invoice-paper relative max-w-[210mm] h-[296mm] mx-auto bg-white shadow-2xl overflow-hidden flex flex-col print:shadow-none print:max-w-full">
+
         {/* شريط علوي ملون */}
-        <div className="h-3 w-full bg-slate-900 absolute top-0 left-0 print:bg-slate-900"></div>
+        <div className="h-2 w-full bg-slate-900 shrink-0 print:bg-slate-900"></div>
 
         {/* ختم الدفع */}
         {isPaid && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden">
-            <div className="transform -rotate-45 border-[8px] border-emerald-500/10 text-emerald-500/10 rounded-3xl px-12 py-4">
-              <h1 className="text-[120px] font-black tracking-widest uppercase m-0 leading-none">PAYÉ</h1>
+            <div className={`transform -rotate-45 border-[8px] border-emerald-500/10 text-emerald-500/10 rounded-3xl px-12 py-4 ${veryDense ? "text-[80px]" : "text-[100px]"}`}>
+              <h1 className="font-black tracking-widest uppercase m-0 leading-none">PAYÉ</h1>
             </div>
           </div>
         )}
 
-        <div className="relative z-10 p-10 sm:p-14 flex-grow flex flex-col">
-          
+        <div className={`relative z-10 flex-grow min-h-0 flex flex-col overflow-hidden p-8`}> 
+
           {/* Header */}
-          <div className="flex justify-between items-start pb-6 mb-6 border-b-2 border-slate-100">
-            <div className="flex gap-4 items-center">
-              <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-sm print:bg-slate-900 print:text-white">
+          <div className={`flex justify-between items-start ${dense ? "pb-3 mb-3" : "pb-4 mb-4"} border-b-2 border-slate-100 shrink-0`}>
+            <div className="flex gap-3 items-center">
+              <div className={`${dense ? "w-11 h-11 text-lg" : "w-14 h-14 text-xl"} bg-slate-900 rounded-xl flex items-center justify-center text-white font-black shadow-sm shrink-0 print:bg-slate-900 print:text-white`}>
                 LA
               </div>
               <div>
-                <h1 className="text-3xl font-black text-slate-900 tracking-tight">L'Artisan</h1>
-                <p className="text-xs font-bold tracking-widest text-slate-400 uppercase mt-1">Impression Pro</p>
+                <h1 className={`${dense ? "text-2xl" : "text-3xl"} font-black text-slate-900 tracking-tight leading-none`}>L'Artisan</h1>
+                <p className="text-[9px] font-bold tracking-widest text-slate-400 uppercase mt-0.5">Impression Pro</p>
+                <div className="text-[10px] text-slate-500 mt-1 leading-snug">
+                  <p>{company.shopAddress}</p>
+                  <p className="font-mono" dir="ltr">{company.shopPhone}</p>
+                </div>
               </div>
             </div>
-            
+
             <div className="text-right flex flex-col items-end">
-              <h2 className="text-4xl font-black text-slate-200 tracking-tighter uppercase mb-2">Facture</h2>
-              {/* الباركود الخطي الجديد هنا */}
-              <div className="mb-2 scale-90 origin-right opacity-80">
+              <h2 className={`${dense ? "text-3xl" : "text-4xl"} font-black text-slate-200 tracking-tighter uppercase mb-0.5 leading-none`}>Facture</h2>
+              {/* الباركود الخطي */}
+              <div className={`${dense ? "mb-0 scale-75" : "mb-1 scale-90"} origin-right opacity-80`}>
                 <Barcode 
                   value={invoiceNumber.replace('INV-', '')} 
-                  height={30} 
+                  height={26} 
                   width={1.5} 
                   displayValue={false} 
                   margin={0} 
@@ -197,42 +254,44 @@ export default function InvoicePage() {
                   lineColor="#0f172a"
                 />
               </div>
-              <div className="flex flex-col items-end gap-1.5 text-sm">
-                <span className="font-mono font-bold text-slate-800 bg-slate-100 px-3 py-1 rounded-lg print:bg-slate-100">
+              <div className="flex flex-col items-end gap-0.5">
+                <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded-lg print:bg-slate-100">
                   {invoiceNumber}
                 </span>
-                <span className="text-slate-500 font-medium">Date : <span className="text-slate-800">{invoiceDate.toLocaleDateString('fr-FR')}</span></span>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  Date : <span className="text-slate-800">{invoiceDate.toLocaleDateString('fr-FR')}</span>
+                  {" · "}Échéance : <span className="text-slate-800">{dueDate.toLocaleDateString('fr-FR')}</span>
+                </span>
               </div>
             </div>
           </div>
 
           {/* معلومات العميل والشركة */}
-          <div className="grid grid-cols-2 gap-10 mb-8">
+          <div className={`grid grid-cols-2 gap-6 ${dense ? "mb-2" : "mb-4"} shrink-0`}>
             {/* من */}
             <div>
-              <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Émetteur</h3>
-              <div className="text-sm text-slate-600 space-y-1.5 leading-relaxed">
-                <p className="font-bold text-slate-900 text-base">L'Artisan Imprimeur</p>
-                <p>Quartier Akid Lotfi</p>
-                <p>Oran, Algérie 31000</p>
-                <p className="pt-2 text-slate-500">Email : contact@lartisan.dz</p>
-                <p className="font-mono text-slate-500">Tél : +213 549 17 90 00</p>
+              <h3 className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Émetteur</h3>
+              <div className="text-[11px] text-slate-600 space-y-0.5 leading-relaxed">
+                <p className="font-black text-slate-900 text-sm">L'Artisan Imprimeur</p>
+                <p>{company.shopAddress}</p>
+                <p>Email : {company.companyEmail}</p>
+                <p className="font-mono" dir="ltr">Tél : {company.shopPhone}</p>
               </div>
             </div>
 
             {/* إلى */}
             <div>
-              <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Facturé à</h3>
-              <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100 print:bg-slate-50 print:border-slate-200">
-                <p className="font-black text-lg text-slate-900 mb-2">{order.customerName}</p>
-                <div className="text-sm text-slate-600 space-y-2">
+              <h3 className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Facturé à</h3>
+              <div className={`${dense ? "p-2.5" : "p-3"} bg-slate-50/50 rounded-xl border border-slate-100 print:bg-slate-50 print:border-slate-200`}>
+                <p className={`${dense ? "text-sm" : "text-base"} font-black text-slate-900 mb-0.5 truncate`}>{order.customerName}</p>
+                <div className="text-[11px] text-slate-600 space-y-0.5">
                   <p className="flex justify-between">
                     <span className="text-slate-400">Téléphone</span>
-                    <span className="font-mono font-medium text-slate-800">{order.phone}</span>
+                    <span className="font-mono font-semibold text-slate-800" dir="ltr">{order.phone}</span>
                   </p>
                   <p className="flex justify-between">
                     <span className="text-slate-400">Wilaya</span>
-                    <span className="font-medium text-slate-800">{order.wilaya}</span>
+                    <span className="font-semibold text-slate-800">{order.wilaya}</span>
                   </p>
                 </div>
               </div>
@@ -240,63 +299,68 @@ export default function InvoicePage() {
           </div>
 
           {/* جدول المنتجات */}
-          <div className="mb-8 flex-grow">
-            <div className="w-full overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                <tr className="bg-slate-900 text-white text-[11px] uppercase tracking-wider print:bg-slate-900 print:text-white">
-                  <th className="py-3 px-4 font-bold rounded-l-lg w-1/2">Description de l'article</th>
-                  <th className="py-3 px-4 font-bold text-center">Qté</th>
-                  <th className="py-3 px-4 font-bold text-right">Prix Unitaire</th>
-                  <th className="py-3 px-4 font-bold text-right rounded-r-lg">Montant</th>
+          <div className="flex-grow min-h-0">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white text-[9px] uppercase tracking-wider print:bg-slate-900 print:text-white">
+                  <th className={`${rowPad} font-bold rounded-l-lg w-1/2`}>Description de l'article</th>
+                  <th className={`${rowPad} font-bold text-center`}>Qté</th>
+                  <th className={`${rowPad} font-bold text-right`}>P.U.</th>
+                  <th className={`${rowPad} font-bold text-right rounded-r-lg`}>Montant</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-sm">
-                {order.items?.map((item, i) => {
+              <tbody className="divide-y divide-slate-100">
+                {visibleItems.map((item, i) => {
                   const itemName = typeof item.name === 'object' ? item.name.fr : item.name;
                   return (
                     <tr key={i} className="page-break-avoid group hover:bg-slate-50/50 transition-colors">
-                      <td className="py-4 px-4 font-medium text-slate-800">{itemName}</td>
-                      <td className="py-4 px-4 text-center font-bold text-slate-600 bg-slate-50/30 group-hover:bg-transparent">{item.quantity}</td>
-                      <td className="py-4 px-4 text-right text-slate-600 font-mono">{item.price.toLocaleString()} DA</td>
-                      <td className="py-4 px-4 text-right font-black text-slate-900 font-mono bg-slate-50/30 group-hover:bg-transparent">
+                      <td className={`${rowPad} ${veryDense ? "text-[11px]" : "text-xs"} font-medium text-slate-800 truncate max-w-[320px]`}>{itemName}</td>
+                      <td className={`${rowPad} ${veryDense ? "text-[11px]" : "text-xs"} text-center font-bold text-slate-600 bg-slate-50/30 group-hover:bg-transparent`}>{item.quantity}</td>
+                      <td className={`${rowPad} ${veryDense ? "text-[11px]" : "text-xs"} text-right text-slate-600 font-mono`}>{item.price.toLocaleString()}</td>
+                      <td className={`${rowPad} ${veryDense ? "text-[11px]" : "text-xs"} text-right font-black text-slate-900 font-mono bg-slate-50/30 group-hover:bg-transparent`}>
                         {(item.price * item.quantity).toLocaleString()} DA
                       </td>
                     </tr>
                   );
                 })}
+                {hiddenCount > 0 && (
+                  <tr className="page-break-avoid">
+                    <td colSpan={4} className={`${rowPad} text-[11px] italic text-slate-500 bg-slate-50 text-center`}>
+                      + {hiddenCount} autre(s) article(s) — inclus dans le total ci-dessous
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
-            </div>
           </div>
 
           {/* القسم السفلي: المجاميع والـ QR */}
-          <div className="flex justify-between items-end gap-8 mt-auto pt-6">
-            
+          <div className={`flex justify-between items-end gap-8 mt-auto pt-3 shrink-0`}>
+
             {/* QR و الشروط */}
-            <div className="w-1/2 space-y-6">
-              <div className="flex gap-4 items-center">
-                <div className="p-2 bg-white border border-slate-200 rounded-xl shadow-sm print:border-slate-300">
-                  <QRCodeSVG value={qrData} size={80} level="H" />
+            <div className="w-1/2 space-y-2">
+              <div className="flex gap-3 items-center">
+                <div className="p-1.5 bg-white border border-slate-200 rounded-lg shadow-sm shrink-0 print:border-slate-300">
+                  <QRCodeSVG value={qrData} size={dense ? 60 : 72} level="H" />
                 </div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-widest space-y-1.5 font-medium">
+                <div className="text-[8px] text-slate-500 uppercase tracking-widest space-y-0.5 font-medium">
                   <p className="font-bold text-slate-700">Scan Vérification</p>
                   <p>Document Officiel</p>
                   <p>Lien direct vers la facture</p>
                 </div>
               </div>
-              
-              <div className="text-[11px] text-slate-500 leading-relaxed pr-8 border-t border-slate-100 pt-4">
-                <p className="font-bold text-slate-700 uppercase mb-1">Conditions de paiement</p>
+
+              <div className="text-[9px] text-slate-500 leading-relaxed pr-4 border-t border-slate-100 pt-1.5">
+                <p className="font-bold text-slate-700 uppercase mb-0.5">Conditions de paiement</p>
                 <p>En cas de paiement différé, l'échéance est fixée au <span className="font-bold">{dueDate.toLocaleDateString('fr-FR')}</span>. Veuillez mentionner le N° de facture lors du règlement.</p>
               </div>
             </div>
 
             {/* الحسابات */}
             <div className="w-1/2">
-              <div className="space-y-3 text-sm p-5 rounded-2xl bg-slate-50 border border-slate-100 print:bg-slate-50 print:border-slate-200">
+              <div className={`${dense ? "space-y-1" : "space-y-2"} text-xs p-3.5 rounded-xl bg-slate-50 border border-slate-100 print:bg-slate-50 print:border-slate-200`}>
                 <div className="flex justify-between text-slate-600">
-                  <span>Sous-total</span>
+                  <span>Sous-total ({itemCount})</span>
                   <span className="font-mono">{order.subtotal.toLocaleString()} DA</span>
                 </div>
                 {order.discount > 0 && (
@@ -306,14 +370,14 @@ export default function InvoicePage() {
                   </div>
                 )}
                 <div className="flex justify-between text-slate-600">
-                  <span>Livraison (retrait atelier)</span>
+                  <span>Livraison</span>
                   <span className="font-mono">{Number(order.deliveryFee) > 0 ? `${Number(order.deliveryFee).toLocaleString()} DA` : "Gratuit"}</span>
                 </div>
-                <div className="flex justify-between items-center pt-4 mt-2 border-t border-slate-200/80">
-                  <span className="text-base font-bold text-slate-900 uppercase">Total Net</span>
-                  <div className="flex items-center gap-2">
-                    {isPaid && <CheckCircle size={18} className="text-emerald-500 print:text-emerald-600" />}
-                    <span className="text-xl font-black font-mono text-slate-900">{order.total.toLocaleString()} DA</span>
+                <div className="flex justify-between items-center pt-2 mt-1 border-t border-slate-200/80">
+                  <span className="text-sm font-bold text-slate-900 uppercase">Total Net</span>
+                  <div className="flex items-center gap-1.5">
+                    {isPaid && <CheckCircle size={15} className="text-emerald-500 print:text-emerald-600" />}
+                    <span className="text-lg font-black font-mono text-slate-900">{order.total.toLocaleString()} DA</span>
                   </div>
                 </div>
               </div>
@@ -322,79 +386,100 @@ export default function InvoicePage() {
         </div>
 
         {/* الفوتر القانوني */}
-        <div className="bg-slate-900 text-slate-400 p-6 text-[10px] print:bg-white print:text-slate-500 print:border-t-2 print:border-slate-900 mt-auto">
+        <div className="bg-slate-900 text-slate-400 px-6 py-2.5 text-[8px] shrink-0 print:bg-white print:text-slate-500 print:border-t-2 print:border-slate-900">
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
-              <p className="font-bold text-white print:text-slate-800 mb-1 uppercase">Immatriculation</p>
-              <p>RC : 31/00-1234567A20</p>
-              <p>NIF : 0000 987654321 00</p>
+              <p className="font-bold text-white print:text-slate-800 uppercase">Immatriculation</p>
+              <p>RC : {company.legalRc}</p>
+              <p>NIF : {company.legalNif}</p>
             </div>
             <div>
-              <p className="font-bold text-white print:text-slate-800 mb-1 uppercase">Contact</p>
-              <p>+213 549 17 90 00</p>
-              <p>contact@lartisan.dz</p>
+              <p className="font-bold text-white print:text-slate-800 uppercase">Contact</p>
+              <p dir="ltr">{company.shopPhone}</p>
+              <p>{company.companyEmail}</p>
             </div>
             <div>
-              <p className="font-bold text-white print:text-slate-800 mb-1 uppercase">Banque (BDL)</p>
-              <p>Agence Akid Lotfi</p>
-              <p>RIB : 005 00000 123456789 00</p>
+              <p className="font-bold text-white print:text-slate-800 uppercase">Banque</p>
+              <p>{company.bankName}</p>
+              <p>RIB : <span dir="ltr">{company.legalRib}</span></p>
             </div>
           </div>
         </div>
 
       </div>
 
-      <style dangerouslySetInnerHTML={{__html: `
-        @media print {
-          @page { 
-            size: A4; 
-            margin: 0; 
-          }
-          
-          body * { visibility: hidden !important; }
-          .invoice-paper, .invoice-paper * { visibility: visible !important; }
-          
-          html, body, main {
-            position: static !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            width: 100% !important;
-            height: auto !important;
-            box-shadow: none !important;
-            background-color: white !important;
-          }
-          
-          .invoice-paper {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 210mm !important;
-            min-height: 297mm !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            border: none !important;
-            box-shadow: none !important;
-            background: white !important;
-          }
-          
-          .print\\:hidden { 
-            display: none !important; 
-            visibility: hidden !important;
-          }
-          
-          .page-break-avoid {
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-          
-          body { 
-            -webkit-print-color-adjust: exact !important; 
-            print-color-adjust: exact !important;
-          }
-          
-          ::-webkit-scrollbar { display: none; }
-        }
-      `}} />
+      <InvoicePrintStyles />
     </div>
   );
 }
+
+function InvoicePrintStyles() {
+  return (
+    <style dangerouslySetInnerHTML={{ __html: INVOICE_PRINT_CSS }} />
+  );
+}
+
+const INVOICE_PRINT_CSS = `
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  body * { visibility: hidden !important; }
+  .invoice-paper, .invoice-paper * { visibility: visible !important; }
+
+  html, body, main {
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 210mm !important;
+    height: auto !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    background-color: white !important;
+  }
+
+  .invoice-paper {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 210mm !important;
+    /* ارتفاع أقل قليلاً من 297mm لتفادي انزلاق صفحة فارغة ثانية بسبب التقريب */
+    height: 296mm !important;
+    min-height: unset !important;
+    max-height: 296mm !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: white !important;
+    page-break-after: avoid !important;
+    break-after: avoid-page !important;
+  }
+
+  .print\\:hidden {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .page-break-avoid {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* منع أي انقسام للصفوف بين الصفحات */
+  table, tr, td, th, tbody, thead {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  ::-webkit-scrollbar { display: none; }
+}
+`;
