@@ -12,19 +12,19 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Sparkles, Download, ImageOff, Wand2, RefreshCw } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 
-type Aspect = { label: string; width: number; height: number };
+type Aspect = { label: string; labelAr: string; width: number; height: number };
 
 const ASPECTS: Aspect[] = [
-  { label: "Carré 1:1", width: 1024, height: 1024 },
-  { label: "Paysage 16:9", width: 1280, height: 720 },
-  { label: "Portrait 9:16", width: 720, height: 1280 },
+  { label: "Carré 1:1", labelAr: "مربع 1:1", width: 1024, height: 1024 },
+  { label: "Paysage 16:9", labelAr: "أفقي 16:9", width: 1280, height: 720 },
+  { label: "Portrait 9:16", labelAr: "عمودي 9:16", width: 720, height: 1280 },
 ];
 
 const QUICK_PROMPTS = [
-  "Cartes de visite premium noir et or, minimaliste",
-  "Flyer publicitaire moderne pour un café",
-  "Logo de marque géométrique élégant",
-  "Menu de restaurant luxueux",
+  { fr: "Cartes de visite premium noir et or, minimaliste", ar: "بطاقات زيارة فاخرة بالأسود والذهبي، مينيمالية" },
+  { fr: "Flyer publicitaire moderne pour un café", ar: "منشور دعائي عصري لمقهى" },
+  { fr: "Logo de marque géométrique élégant", ar: "شعار علامة تجارية هندسي أنيق" },
+  { fr: "Menu de restaurant luxueux", ar: "قائمة مطعم فاخرة" },
 ];
 
 export default function FluxImageGenerator() {
@@ -130,12 +130,12 @@ const handleGenerate = useCallback(async () => {
         <div className="flex flex-wrap gap-2">
           {QUICK_PROMPTS.map((p) => (
             <button
-              key={p}
+              key={p.fr}
               type="button"
-              onClick={() => setPrompt(p)}
+              onClick={() => setPrompt(isRtl ? p.ar : p.fr)}
               className="px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:bg-accent/10 hover:text-accent transition-colors cursor-pointer"
             >
-              {p}
+              {isRtl ? p.ar : p.fr}
             </button>
           ))}
         </div>
@@ -157,7 +157,7 @@ const handleGenerate = useCallback(async () => {
                     : "bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-accent/50"
                 }`}
               >
-                {a.label}
+                {isRtl ? a.labelAr : a.label}
                 <span className="block text-[9px] opacity-70 font-bold mt-0.5">
                   {a.width}×{a.height}
                 </span>

@@ -845,7 +845,7 @@ export default function ProfilePage() {
                 <div className="absolute top-0 left-0 w-full h-1.5 bg-accent"></div>
                 <ShieldCheck size={48} className="text-accent mb-4 group-hover:scale-110 transition-transform" />
                 <h3 className="font-black text-xl text-white">{isRtl ? "لوحة التحكم" : "Console d'Admin"}</h3>
-                <p className="text-[10px] text-slate-400 font-bold mt-2 uppercase tracking-widest">Accès Sécurisé</p>
+                <p className="text-[10px] text-slate-400 font-bold mt-2 uppercase tracking-widest">{isRtl ? "وصول آمن" : "Accès Sécurisé"}</p>
               </div>
             </Link>
           )}

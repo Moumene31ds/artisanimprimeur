@@ -138,10 +138,10 @@ export default function RewardsPage() {
       } else if (data.alreadyCheckedIn) {
         toast.info(isRtl ? "سجلت حضورك اليوم بالفعل" : "Déjà enregistré aujourd'hui");
       } else {
-        toast.error(data.error || "Erreur");
+        toast.error(data.error || (isRtl ? "خطأ" : "Erreur"));
       }
     } catch (err) {
-      toast.error("Erreur");
+      toast.error(isRtl ? "حدث خطأ" : "Erreur");
     } finally {
       setCheckingIn(false);
     }
@@ -162,10 +162,10 @@ export default function RewardsPage() {
         setProfile(data.profile);
         toast.success(isRtl ? "تم حفظ تاريخ ميلادك 🎂" : "Date d'anniversaire enregistrée 🎂");
       } else {
-        toast.error(data.error || "Erreur");
+        toast.error(data.error || (isRtl ? "خطأ" : "Erreur"));
       }
     } catch (err) {
-      toast.error("Erreur");
+      toast.error(isRtl ? "حدث خطأ" : "Erreur");
     }
   };
 
@@ -187,10 +187,10 @@ export default function RewardsPage() {
       } else if (data.alreadyClaimed) {
         toast.info(isRtl ? "حصلت على هدية عيد الميلاد هذه السنة" : "Bonus déjà réclamé cette année");
       } else {
-        toast.error(data.error || "Erreur");
+        toast.error(data.error || (isRtl ? "خطأ" : "Erreur"));
       }
     } catch (err) {
-      toast.error("Erreur");
+      toast.error(isRtl ? "حدث خطأ" : "Erreur");
     } finally {
       setClaimingBirthday(false);
     }
@@ -218,10 +218,10 @@ export default function RewardsPage() {
         toast.success(isRtl ? "مبروك! تم توليد كود الخصم" : "Félicitations ! Code généré");
         confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
       } else {
-        toast.error(data.error || "Erreur");
+        toast.error(data.error || (isRtl ? "خطأ" : "Erreur"));
       }
     } catch (err) {
-      toast.error("Erreur lors de l'échange");
+      toast.error(isRtl ? "حدث خطأ أثناء الاستبدال" : "Erreur lors de l'échange");
     } finally {
       setRedeeming(null);
     }
@@ -272,7 +272,7 @@ export default function RewardsPage() {
             toast.success(isRtl ? `+${data.prizePoints} نقطة!` : `+${data.prizePoints} points !`);
           }
         } else {
-          toast.error(data.error || "Erreur");
+          toast.error(data.error || (isRtl ? "خطأ" : "Erreur"));
           await fetchProfile();
         }
       } catch (err) {
@@ -294,7 +294,7 @@ export default function RewardsPage() {
       toast.success(msg);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      toast.error("Erreur de copie");
+      toast.error(isRtl ? "فشل النسخ" : "Erreur de copie");
     }
   };
 

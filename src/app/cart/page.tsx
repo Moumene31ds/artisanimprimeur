@@ -767,7 +767,7 @@ export default function CartPage() {
                     <motion.div key="good" initial={{opacity:0}} animate={{opacity:1}} className="text-center text-emerald-500">
                       <FileCheck className="mx-auto mb-3 drop-shadow-md" size={48} />
                       <p className="font-black text-slate-800 dark:text-white mb-1 truncate max-w-[250px] mx-auto">{fileName}</p>
-                      <p className="text-[10px] uppercase font-black tracking-widest text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 px-3 py-1 rounded-full inline-block">Prêt pour l'impression</p>
+                      <p className="text-[10px] uppercase font-black tracking-widest text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 px-3 py-1 rounded-full inline-block">{isRtl ? "جاهز للطباعة" : "Prêt pour l'impression"}</p>
                     </motion.div>
                   ) : (
                     <motion.div key="idle" initial={{opacity:0}} animate={{opacity:1}} className="text-center">
