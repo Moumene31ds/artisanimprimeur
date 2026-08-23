@@ -206,6 +206,28 @@ export interface ChatPromptOptions {
       isOpenNow: boolean;
     };
   } | null;
+  /** لغة آخر رسالة من المستخدم كما كشفها الخادم (فرض المرآة اللغوية) */
+  detectedUserLang?: 'ar' | 'fr' | null;
+}
+
+/**
+ * كشف لغة رسالة المستخدم بشكل حتمي:
+ * - أي حرف عربي (أو فارسي/عثماني) → عربية
+ * - وإلا فرنسية/لاتينية، مع محاولة التقاط الدارجة اللاتينية الجزائرية
+ */
+export function detectUserLanguage(text: string): 'ar' | 'fr' {
+  if (!text) return 'fr';
+  // نتجاهل بادئة السياق الداخلية وروابط الصور
+  const clean = text
+    .replace(/\[Context:[^\]]*\]\.?/gi, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .trim();
+  if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(clean)) return 'ar';
+  // دارجة لاتينية شائعة (جزائرية) → نعتبرها عربية العامية لكن بالحروف اللاتينية
+  const darijaWords =
+    /\b(salam|slm|chhal|ch7al|chhel|bch|bghit|nheb|nbghik|wach|waalach|kayn|makayn|mezian|mzyan|khouya|khti|zwina|bezzaf|bzaf|choukra|chkoun|3lach|3andek|3andi|rani|hna|dyal|dial|ghir|hwaja|khdma|khedma|taman|thaman|smit|smiya)\b/i;
+  if (darijaWords.test(clean)) return 'ar';
+  return 'fr';
 }
 
 export function buildChatSystemPrompt(options: ChatPromptOptions = {}): string {
@@ -225,7 +247,14 @@ export function buildChatSystemPrompt(options: ChatPromptOptions = {}): string {
   } else if (options.languageHint === 'fr') {
     langRule = 'Reply in FRENCH. Keep Arabic terms in parentheses when useful.';
   } else {
-    langRule = 'Reply in the SAME language the user writes in (Arabic or French).';
+    const detected = options.detectedUserLang;
+    const mirror =
+      detected === 'ar'
+        ? 'The user\'s LAST message is in ARABIC. MANDATORY: reply ONLY in Arabic (Modern Standard with a natural friendly touch). Absolutely no French sentences — French product names may stay in parentheses.'
+        : detected === 'fr'
+          ? 'The user\'s LAST message is in FRENCH (Latin script). MANDATORY: reply ONLY in French. If they use casual Latin-script Algerian dialect (darija), mirror that same casual tone in Latin darija. Absolutely no Arabic-script sentences.'
+          : 'MANDATORY LANGUAGE MIRROR: detect the language of the user\'s LAST message and reply in EXACTLY that language. Arabic script → Arabic. Latin script → French (or casual Latin darija if they write darija). Never mix the two scripts in one sentence.';
+    langRule = `LANGUAGE RULE (HIGHEST PRIORITY, overrides everything else about wording): ${mirror} This applies to EVERY reply, including greetings, prices and tool explanations.`;
   }
 
   const lengthRule =

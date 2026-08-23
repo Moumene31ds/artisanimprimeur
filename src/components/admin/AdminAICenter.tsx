@@ -452,7 +452,7 @@ export default function AdminAICenter({ isRtl }: AiCenterProps) {
               onChange={(e) => save({ languagePolicy: e.target.value as any })}
               className="w-full p-3 mt-1 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent font-bold text-sm text-slate-800 dark:text-slate-100 cursor-pointer"
             >
-              <option value="auto">{isRtl ? "لغة الزائر تلقائياً 🌍" : "Langue du visiteur 🌍"}</option>
+              <option value="auto">{isRtl ? "نفس لغة السؤال دائماً 🪞" : "Miroir : langue du client 🪞"}</option>
               <option value="ar">العربية دائماً 🇩🇿</option>
               <option value="fr">Français toujours 🇫🇷</option>
             </select>

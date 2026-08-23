@@ -5,7 +5,7 @@ import {
   AIUnavailableError,
 } from "@/lib/ai";
 import { getAiRuntimeConfig } from "@/lib/ai-runtime";
-import { buildChatSystemPrompt } from "@/lib/chat-knowledge";
+import { buildChatSystemPrompt, detectUserLanguage } from "@/lib/chat-knowledge";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
   try {
     const result = await generateTextWithFallback({
       system: buildChatSystemPrompt({
+        detectedUserLang: rt.languagePolicy === 'auto' ? detectUserLanguage(prompt) : null,
         admin: {
           personality: rt.personality,
           customStyle: rt.customStyle,

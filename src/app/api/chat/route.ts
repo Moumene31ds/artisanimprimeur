@@ -11,6 +11,7 @@ import {
 import {
   buildChatSystemPrompt,
   buildConversationSummary,
+  detectUserLanguage,
   parseUserContext,
   stripUserContext,
   computePrice,
@@ -326,6 +327,12 @@ export async function POST(req: Request) {
     const { model, providerName, modelId } = await resolveModel();
 
     const summary = buildConversationSummary(messages) ?? undefined;
+    // فرض مرآة اللغة: نكشف لغة آخر رسالة مستخدم (بعد إزالة بادئة السياق)
+    const lastUserText = [...cleanedMessages].reverse().find((m: any) => m.role === 'user');
+    const detectedUserLang =
+      rt.languagePolicy === 'auto'
+        ? detectUserLanguage(String(lastUserText?.content ?? ''))
+        : null;
     const isOpenNow = rt.workingHoursEnabled
       ? isWithinWorkingHours(rt.workingHoursStart, rt.workingHoursEnd)
       : true;
@@ -334,6 +341,7 @@ export async function POST(req: Request) {
       page,
       summary,
       user,
+      detectedUserLang,
       admin: {
         personality: rt.personality,
         customStyle: rt.customStyle,
