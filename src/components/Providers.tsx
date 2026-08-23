@@ -6,6 +6,7 @@ import { AuthProvider } from "@/context/AuthContext"; // استيراد AuthProv
 import SyncManager from "@/components/SyncManager";
 import PWALifecycle from "@/components/PWALifecycle";
 import OutboxManager from "@/components/OutboxManager";
+import SmartNotifications from "@/components/SmartNotifications";
 import NativeBootstrap from "@/components/NativeBootstrap";
 import LockManager from "@/components/LockManager";
 import { MotionConfig } from "framer-motion";
@@ -49,6 +50,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
       {/* طابور الإجراءات غير المتصلة: إعادة إرسال تلقائي عند عودة الشبكة */}
       <OutboxManager />
+
+      {/* المحرك الذكي للإشعارات: تنبيهات انخفاض الأسعار على المفضلة */}
+      <SmartNotifications />
 
       {/* إقلاع التطبيق الأصلي (أندرويد/iOS): شاشة البداية، الإشعارات، قفل البصمة */}
       <NativeBootstrap />

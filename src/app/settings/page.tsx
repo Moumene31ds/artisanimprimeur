@@ -10,9 +10,9 @@ import {
   Wifi, RefreshCw, Rocket, Bell, Vibrate, Loader2, Activity, Droplets, Eye,
   HardDrive, Trash2, Battery, BatteryCharging, Clock, Download, CheckCircle2,
   Share2, Fingerprint, ScanFace, ShieldCheck, Lock, KeyRound, Timer, EyeOff,
-  Bot, Volume2, ArrowDown, MessageSquareCode, User
+  Bot, Volume2, ArrowDown, MessageSquareCode, User, BellRing, MoonStar
 } from "lucide-react";
-import { useAppStore, type ThemeMode, type FontSizeMode, type DeviceTier } from "@/lib/store";
+import { useAppStore, type ThemeMode, type FontSizeMode, type DeviceTier, type NotificationPrefs } from "@/lib/store";
 import { useTheme } from "next-themes";
 import { TRANSLATIONS, normalizeLanguage } from "@/lib/translations";
 import Reveal from "@/components/Reveal";
@@ -152,6 +152,7 @@ export default function SettingsPage() {
     autoOptimize, setAutoOptimize,
     hapticFeedback, setHapticFeedback,
     notificationsEnabled, setNotificationsEnabled,
+    notificationPrefs, setNotificationPref,
     deviceScore, deviceTier, deviceDetectedAt, deviceDetail, setDeviceInfo,
     backgroundEffects, setBackgroundEffects,
     reduceBlur, setReduceBlur,
@@ -909,6 +910,106 @@ export default function SettingsPage() {
                 </div>
               </div>
               <Toggle checked={hapticFeedback} onChange={setHapticFeedback} />
+            </div>
+          </div>
+        </SectionCard>
+
+        {/* مركز الإشعارات الذكي */}
+        <SectionCard
+          icon={BellRing}
+          title={isRtl ? "مركز الإشعارات الذكي" : "Centre de notifications"}
+          desc={isRtl ? "تحكم كامل في كل تنبيه — فئات، صوت، وسكون ليلي" : "Contrôle total des alertes — catégories, son et silence nocturne"}
+          iconClass="bg-gradient-to-tr from-amber-500 to-orange-600"
+        >
+          <div className="flex flex-col gap-4">
+            {/* الفئات */}
+            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{isRtl ? "فئات التنبيهات" : "Catégories d'alertes"}</p>
+            {([
+              { key: "orders", label: isRtl ? "حالة الطلبات" : "Suivi des commandes", desc: isRtl ? "تأكيدات، تصنيع، توصيل" : "Confirmations, fabrication, livraison", emoji: "📦" },
+              { key: "billing", label: isRtl ? "الفواتير والمدفوعات" : "Factures et paiements", desc: isRtl ? "فاتورة جديدة، تأكيد دفع" : "Nouvelle facture, paiement confirmé", emoji: "🧾" },
+              { key: "promos", label: isRtl ? "العروض والتسويق" : "Offres et promotions", desc: isRtl ? "خصومات وعمليات ترويجية" : "Réductions et campagnes promo", emoji: "🎉" },
+              { key: "priceDrops", label: isRtl ? "انخفاض أسعار المفضلة" : "Baisse de prix des favoris", desc: isRtl ? "تنبيه فوري عند تخفيض منتج أعجبك" : "Alerte immédiate quand un favori baisse", emoji: "🏷️" },
+              { key: "system", label: isRtl ? "النظام والأمان" : "Système et sécurité", desc: isRtl ? "تحديثات مهمة وتنبيهات الحساب" : "Mises à jour importantes et compte", emoji: "⚙️" },
+            ] as { key: keyof NotificationPrefs; label: string; desc: string; emoji: string }[]).map((row) => (
+              <div key={row.key} className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                <div className="flex items-start gap-3 min-w-0">
+                  <span className="text-lg leading-none mt-0.5 shrink-0">{row.emoji}</span>
+                  <div>
+                    <p className="font-black text-sm text-slate-800 dark:text-slate-100 truncate">{row.label}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{row.desc}</p>
+                  </div>
+                </div>
+                <Toggle checked={Boolean(notificationPrefs[row.key])} onChange={(v) => setNotificationPref(row.key, v as never)} />
+              </div>
+            ))}
+
+            {/* قنوات الإخراج */}
+            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mt-2">{isRtl ? "طريقة التنبيه" : "Mode d'alerte"}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setNotificationPref("sound", !notificationPrefs.sound)}
+                className={`flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 transition-all active:scale-[0.98] ${
+                  notificationPrefs.sound
+                    ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30"
+                    : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50"
+                }`}
+              >
+                <Volume2 size={20} className={notificationPrefs.sound ? "text-emerald-500" : "text-slate-400"} />
+                <span className="text-xs font-black text-slate-700 dark:text-slate-200">{isRtl ? "نغمة صوتية" : "Son"}</span>
+              </button>
+              <button
+                onClick={() => setNotificationPref("vibration", !notificationPrefs.vibration)}
+                className={`flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 transition-all active:scale-[0.98] ${
+                  notificationPrefs.vibration
+                    ? "border-pink-500 bg-pink-50 dark:bg-pink-950/30"
+                    : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50"
+                }`}
+              >
+                <Vibrate size={20} className={notificationPrefs.vibration ? "text-pink-500" : "text-slate-400"} />
+                <span className="text-xs font-black text-slate-700 dark:text-slate-200">{isRtl ? "اهتزاز" : "Vibration"}</span>
+              </button>
+            </div>
+
+            {/* ساعات السكون */}
+            <div className={`p-4 rounded-2xl border transition-all ${
+              notificationPrefs.quietHoursEnabled
+                ? "bg-indigo-50/70 dark:bg-indigo-950/30 border-indigo-100 dark:border-indigo-900"
+                : "bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800"
+            }`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <MoonStar size={20} className={`${notificationPrefs.quietHoursEnabled ? "text-indigo-500" : "text-slate-400"} shrink-0 mt-0.5`} />
+                  <div>
+                    <p className="font-black text-sm text-slate-800 dark:text-slate-100">{isRtl ? "الوضع الليلي الصامت" : "Silence nocturne"}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{isRtl ? "لا صوت ولا اهتزاز ليلاً — الإشعارات تصلك بصمت" : "Aucun son ni vibration la nuit — alertes silencieuses"}</p>
+                  </div>
+                </div>
+                <Toggle checked={notificationPrefs.quietHoursEnabled} onChange={(v) => setNotificationPref("quietHoursEnabled", v)} />
+              </div>
+              {notificationPrefs.quietHoursEnabled && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="overflow-hidden">
+                  <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-indigo-100 dark:border-indigo-900">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[10px] font-black text-slate-500">{isRtl ? "من" : "De"}</span>
+                      <input
+                        type="time"
+                        value={notificationPrefs.quietFrom}
+                        onChange={(e) => setNotificationPref("quietFrom", e.target.value)}
+                        className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-400"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[10px] font-black text-slate-500">{isRtl ? "إلى" : "À"}</span>
+                      <input
+                        type="time"
+                        value={notificationPrefs.quietTo}
+                        onChange={(e) => setNotificationPref("quietTo", e.target.value)}
+                        className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-400"
+                      />
+                    </label>
+                  </div>
+                </motion.div>
+              )}
             </div>
           </div>
         </SectionCard>
