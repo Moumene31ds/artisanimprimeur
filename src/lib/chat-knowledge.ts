@@ -235,26 +235,29 @@ export function buildChatSystemPrompt(options: ChatPromptOptions = {}): string {
     (p) => `- ${p.nameFr} / ${p.nameAr} : ${p.packPriceDZD} DA pour ${p.packSize} unités (${p.unitPriceDZD} DA/unité)`
   ).join('\n');
 
-  // سياسة اللغة: اختيار المشرف (لوحة التحكم) يتقدم على تلميح واجهة المستخدم
+  // سياسة اللغة: اختيار المشرف يتقدم، ثم كشف الخادم للغة آخر سؤال (مرآة صارمة)،
+  // وأخيراً تلميح لغة الواجهة كاحتياط.
   const adminLang = options.admin?.languagePolicy;
+  const detected = options.detectedUserLang;
+  const mirrorAr =
+    'The user\'s LAST message is in ARABIC. MANDATORY: reply ONLY in Arabic (Modern Standard with a natural friendly touch). Absolutely no French sentences — French product names may stay in parentheses.';
+  const mirrorFr =
+    'The user\'s LAST message is in FRENCH (Latin script). MANDATORY: reply ONLY in French. If they use casual Latin-script Algerian dialect (darija), mirror that same casual tone in Latin darija. Absolutely no Arabic-script sentences.';
   let langRule: string;
   if (adminLang === 'fr') {
     langRule = 'Reply in FRENCH always, even if the user writes in Arabic.';
   } else if (adminLang === 'ar') {
     langRule = 'Reply in ARABIC (Modern Standard) always, even if the user writes in French.';
+  } else if (detected === 'ar') {
+    langRule = `LANGUAGE RULE (HIGHEST PRIORITY): ${mirrorAr} This applies to EVERY reply.`;
+  } else if (detected === 'fr') {
+    langRule = `LANGUAGE RULE (HIGHEST PRIORITY): ${mirrorFr} This applies to EVERY reply.`;
   } else if (options.languageHint === 'ar') {
     langRule = 'Reply in ARABIC (Modern Standard, friendly and natural). Keep French terms in parentheses when useful.';
   } else if (options.languageHint === 'fr') {
     langRule = 'Reply in FRENCH. Keep Arabic terms in parentheses when useful.';
   } else {
-    const detected = options.detectedUserLang;
-    const mirror =
-      detected === 'ar'
-        ? 'The user\'s LAST message is in ARABIC. MANDATORY: reply ONLY in Arabic (Modern Standard with a natural friendly touch). Absolutely no French sentences — French product names may stay in parentheses.'
-        : detected === 'fr'
-          ? 'The user\'s LAST message is in FRENCH (Latin script). MANDATORY: reply ONLY in French. If they use casual Latin-script Algerian dialect (darija), mirror that same casual tone in Latin darija. Absolutely no Arabic-script sentences.'
-          : 'MANDATORY LANGUAGE MIRROR: detect the language of the user\'s LAST message and reply in EXACTLY that language. Arabic script → Arabic. Latin script → French (or casual Latin darija if they write darija). Never mix the two scripts in one sentence.';
-    langRule = `LANGUAGE RULE (HIGHEST PRIORITY, overrides everything else about wording): ${mirror} This applies to EVERY reply, including greetings, prices and tool explanations.`;
+    langRule = 'LANGUAGE RULE (HIGHEST PRIORITY): Mirror the language of the user\'s LAST message exactly — Arabic script → Arabic, Latin script → French or casual Latin darija. Never mix scripts in one sentence.';
   }
 
   const lengthRule =
