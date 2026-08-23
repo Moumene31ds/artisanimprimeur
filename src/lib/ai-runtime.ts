@@ -32,6 +32,34 @@ export interface AiRuntimeConfig {
   enabledChatbot: boolean;
   enabledOrders: boolean;
   enabledImageGen: boolean;
+  /** ===== Ollama بعيد (production) =====
+   * عنوان خادم Ollama (VPS/Docker...) يتجاوز OLLAMA_BASE_URL من البيئة.
+   * ملاحظة: هذه الوثيقة مقروءة للعموم — احمِ خادمك بمفتاح OLLAMA_API_KEY. */
+  ollamaBaseUrl: string;
+  /** ===== هوية المساعد في الواجهة ===== */
+  assistantName: string;
+  assistantEmoji: string;
+  welcomeMessageFr: string;
+  welcomeMessageAr: string;
+  /** اقتراحات سريعة تظهر كأزرار داخل الشات */
+  suggestedPromptsFr: string[];
+  suggestedPromptsAr: string[];
+  /** ===== التحويل لموظف بشري عبر واتساب ===== */
+  whatsappNumber: string;
+  handoffKeywords: string;
+  handoffMessageFr: string;
+  handoffMessageAr: string;
+  /** ===== أوقات العمل ===== */
+  workingHoursEnabled: boolean;
+  workingHoursStart: string;
+  workingHoursEnd: string;
+  outsideHoursNoteFr: string;
+  outsideHoursNoteAr: string;
+  /** ===== حدود ورسائل ===== */
+  /** حد رسائل الشات لكل IP/ساعة (0 = بلا حد) */
+  chatRateLimitPerHour: number;
+  unavailableMessageFr: string;
+  unavailableMessageAr: string;
 }
 
 export const DEFAULT_AI_CONFIG: AiRuntimeConfig = {
@@ -48,6 +76,25 @@ export const DEFAULT_AI_CONFIG: AiRuntimeConfig = {
   enabledChatbot: true,
   enabledOrders: true,
   enabledImageGen: true,
+  ollamaBaseUrl: '',
+  assistantName: '',
+  assistantEmoji: '',
+  welcomeMessageFr: '',
+  welcomeMessageAr: '',
+  suggestedPromptsFr: [],
+  suggestedPromptsAr: [],
+  whatsappNumber: '',
+  handoffKeywords: '',
+  handoffMessageFr: '',
+  handoffMessageAr: '',
+  workingHoursEnabled: false,
+  workingHoursStart: '08:00',
+  workingHoursEnd: '18:00',
+  outsideHoursNoteFr: '',
+  outsideHoursNoteAr: '',
+  chatRateLimitPerHour: 40,
+  unavailableMessageFr: '',
+  unavailableMessageAr: '',
 };
 
 /** تنظيف ودمج القيم القادمة من Firestore مع الافتراضيات (حماية من القيم الفاسدة). */
@@ -60,6 +107,14 @@ export function sanitizeAiConfig(raw: any): AiRuntimeConfig {
   };
   const str = (v: any, max = 4000) =>
     typeof v === 'string' ? v.slice(0, max) : '';
+  const strList = (v: any): string[] =>
+    Array.isArray(v)
+      ? v
+          .map((x: any) => (typeof x === 'string' ? x.trim().slice(0, 120) : ''))
+          .filter(Boolean)
+          .slice(0, 6)
+      : [];
+  const isTime = (v: any) => typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
   return {
     provider: ['auto', 'ollama', 'openrouter'].includes(raw.provider)
       ? raw.provider
@@ -80,6 +135,25 @@ export function sanitizeAiConfig(raw: any): AiRuntimeConfig {
     enabledChatbot: raw.enabledChatbot !== false,
     enabledOrders: raw.enabledOrders !== false,
     enabledImageGen: raw.enabledImageGen !== false,
+    ollamaBaseUrl: str(raw.ollamaBaseUrl, 300).trim(),
+    assistantName: str(raw.assistantName, 60).trim(),
+    assistantEmoji: str(raw.assistantEmoji, 8).trim(),
+    welcomeMessageFr: str(raw.welcomeMessageFr, 800),
+    welcomeMessageAr: str(raw.welcomeMessageAr, 800),
+    suggestedPromptsFr: strList(raw.suggestedPromptsFr),
+    suggestedPromptsAr: strList(raw.suggestedPromptsAr),
+    whatsappNumber: str(raw.whatsappNumber, 24).replace(/[^\d+]/g, ''),
+    handoffKeywords: str(raw.handoffKeywords, 300),
+    handoffMessageFr: str(raw.handoffMessageFr, 400),
+    handoffMessageAr: str(raw.handoffMessageAr, 400),
+    workingHoursEnabled: raw.workingHoursEnabled === true,
+    workingHoursStart: isTime(raw.workingHoursStart) ? raw.workingHoursStart : d.workingHoursStart,
+    workingHoursEnd: isTime(raw.workingHoursEnd) ? raw.workingHoursEnd : d.workingHoursEnd,
+    outsideHoursNoteFr: str(raw.outsideHoursNoteFr, 400),
+    outsideHoursNoteAr: str(raw.outsideHoursNoteAr, 400),
+    chatRateLimitPerHour: Math.round(num(raw.chatRateLimitPerHour, 0, 500, d.chatRateLimitPerHour)),
+    unavailableMessageFr: str(raw.unavailableMessageFr, 400),
+    unavailableMessageAr: str(raw.unavailableMessageAr, 400),
   };
 }
 

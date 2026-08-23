@@ -18,11 +18,33 @@ import {
 } from '@/lib/chat-knowledge';
 import { getCatalogProducts } from '@/lib/catalog';
 import { moderateMessage, MODERATION_VIOLATION_MESSAGE } from '@/lib/moderation';
-import { getAiRuntimeConfig } from '@/lib/ai-runtime';
+import { getAiRuntimeConfig, type AiRuntimeConfig } from '@/lib/ai-runtime';
+import { getClientIp } from '@/lib/security';
+import { SlidingWindowRateLimiter } from '@/lib/rate-limit';
 import { collection, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 export const maxDuration = 60;
+
+/** حد افتراضي احتياطي + مخزن محدودات حسب القيمة المختارة في اللوحة */
+const chatLimiter = new SlidingWindowRateLimiter(60 * 60 * 1000, 40);
+const chatLimiters = new Map<number, SlidingWindowRateLimiter>([[40, chatLimiter]]);
+
+/** هل نحن ضمن أوقات العمل المحددة في لوحة التحكم؟ (توقيت الجزائر UTC+1 دائماً) */
+function isWithinWorkingHours(start: string, end: string): boolean {
+  try {
+    const now = new Date(Date.now() + 60 * 60 * 1000); // UTC+1
+    const minutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    const s = sh * 60 + sm;
+    const e = eh * 60 + em;
+    if (s === e) return true; // نطاق كامل 24 ساعة
+    return s < e ? minutes >= s && minutes < e : minutes >= s || minutes < e; // يدعم الفترات الليلية
+  } catch {
+    return true;
+  }
+}
 
 const PRODUCT_KEYS = ['cartes', 'flyers', 'stickers', 'affiches', 'invitations'] as const;
 
@@ -114,9 +136,10 @@ export async function POST(req: Request) {
     return { role: m.role, content: stripUserContext(text) };
   });
 
+  // إعدادات المشرف الحيّة (متاحة أيضاً لكتلة الأخطاء أدناه)
+  let rt!: AiRuntimeConfig;
   try {
-    // إعدادات المشرف الحيّة: مفتاح تشغيل الشات + الشخصية + درجة الإبداع
-    const rt = await getAiRuntimeConfig();
+    rt = await getAiRuntimeConfig();
     if (!rt.enabledChatbot) {
       return NextResponse.json(
         {
@@ -126,6 +149,27 @@ export async function POST(req: Request) {
         },
         { status: 503 }
       );
+    }
+
+    // حد الاستخدام لكل IP (قابل للتخصيص من لوحة التحكم — 0 يعني بلا حد)
+    if (rt.chatRateLimitPerHour > 0) {
+      let limiter = chatLimiters.get(rt.chatRateLimitPerHour);
+      if (!limiter) {
+        limiter = new SlidingWindowRateLimiter(60 * 60 * 1000, rt.chatRateLimitPerHour);
+        chatLimiters.set(rt.chatRateLimitPerHour, limiter);
+      }
+      const rl = limiter.allow(`chat:${getClientIp(req as any)}`);
+      if (!rl.allowed) {
+        return NextResponse.json(
+          {
+            error:
+              'Vous avez atteint la limite de messages. Merci de réessayer un peu plus tard.',
+            rateLimited: true,
+            retryAfterSeconds: Math.ceil(rl.retryAfterMs / 1000),
+          },
+          { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } }
+        );
+      }
     }
 
     const toolsDef = {
@@ -282,6 +326,9 @@ export async function POST(req: Request) {
     const { model, providerName, modelId } = await resolveModel();
 
     const summary = buildConversationSummary(messages) ?? undefined;
+    const isOpenNow = rt.workingHoursEnabled
+      ? isWithinWorkingHours(rt.workingHoursStart, rt.workingHoursEnd)
+      : true;
     const system = buildChatSystemPrompt({
       languageHint: lang,
       page,
@@ -294,6 +341,21 @@ export async function POST(req: Request) {
         lengthPref: rt.lengthPref,
         languagePolicy: rt.languagePolicy,
         ordersEnabled: rt.enabledOrders,
+        assistantName: rt.assistantName,
+        workingHours: {
+          enabled: rt.workingHoursEnabled,
+          start: rt.workingHoursStart,
+          end: rt.workingHoursEnd,
+        },
+        outsideHoursNoteFr: rt.outsideHoursNoteFr,
+        outsideHoursNoteAr: rt.outsideHoursNoteAr,
+        handoff: {
+          whatsappNumber: rt.whatsappNumber,
+          keywords: rt.handoffKeywords,
+          messageFr: rt.handoffMessageFr,
+          messageAr: rt.handoffMessageAr,
+          isOpenNow,
+        },
       },
     });
 
@@ -320,9 +382,11 @@ export async function POST(req: Request) {
     return result.toUIMessageStreamResponse();
   } catch (error: any) {
     if (error instanceof AIUnavailableError) {
+      const isRtlMsg = lang === 'ar';
       return NextResponse.json(
         {
           error:
+            (isRtlMsg ? rt?.unavailableMessageAr : rt?.unavailableMessageFr) ||
             'Tous les fournisseurs IA sont temporairement saturés (limite de débit). Veuillez réessayer dans quelques minutes.',
           retryAfterSeconds: error.retryAfterSeconds,
         },

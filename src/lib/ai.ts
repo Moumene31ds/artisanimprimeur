@@ -31,6 +31,9 @@ export type ProviderName = 'ollama' | 'openrouter';
 const OLLAMA_BASE = () => (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace(/\/+$/, '');
 const OLLAMA_MODEL = () => process.env.OLLAMA_MODEL?.trim() || 'qwen3:8b';
 const OLLAMA_VISION_MODEL = () => process.env.OLLAMA_VISION_MODEL?.trim() || 'qwen3-vl:latest';
+/** مفتاح حماية خادم Ollama البعيد (يُرسل كـ Bearer token). اختياري لكن
+ *  ضروري في production إذا كان الخادم مكشوفاً على الإنترنت. */
+export const hasOllamaKey = () => !!process.env.OLLAMA_API_KEY?.trim();
 const OPENROUTER_KEY = () => process.env.OPENROUTER_API_KEY?.trim() || '';
 const OPENROUTER_MODEL = () => process.env.OPENROUTER_MODEL?.trim() || 'openrouter/free';
 const OPENROUTER_VISION_MODEL = () =>
@@ -44,11 +47,12 @@ export function hasOpenRouterKey(): boolean {
 // Provider factories
 // ---------------------------------------------------------------------------
 
-function ollamaProvider() {
+function ollamaProvider(baseUrl?: string) {
   return createOpenAICompatible({
     name: 'ollama',
-    baseURL: `${OLLAMA_BASE()}/v1`,
-    apiKey: 'ollama',
+    baseURL: `${(baseUrl || OLLAMA_BASE()).replace(/\/+$/, '')}/v1`,
+    // مفتاح اختياري لحماية خادم Ollama البعيد (Bearer token)
+    apiKey: process.env.OLLAMA_API_KEY?.trim() || 'ollama',
     transformRequestBody: (args) => {
       const body: Record<string, any> = { ...args };
       const isVision =
@@ -77,23 +81,98 @@ function openRouterProvider() {
 }
 
 // ---------------------------------------------------------------------------
-// Ollama health probe (cached to avoid hammering localhost)
+// Ollama health probe (cached to avoid hammering the server)
 // ---------------------------------------------------------------------------
 
-let ollamaProbe: { ok: boolean; at: number } | null = null;
+export interface OllamaProbe {
+  reachable: boolean;
+  /** زمن الاستجابة بالملي ثانية (عند النجاح) */
+  latencyMs: number;
+  /** الموديلات المثبتة على الخادم */
+  models: { name: string; sizeGB?: number }[];
+  /** العنوان الفعّال الذي فُحص (بعد دمج تجاوز لوحة التحكم) */
+  baseUrl: string;
+  error?: string;
+}
+
+interface ProbeCache {
+  key: string;
+  at: number;
+  result: OllamaProbe;
+}
+let probeCache: ProbeCache | null = null;
 const PROBE_TTL_MS = 5000;
 
-export async function isOllamaReachable(): Promise<boolean> {
-  if (ollamaProbe && Date.now() - ollamaProbe.at < PROBE_TTL_MS) return ollamaProbe.ok;
+/** العنوان الفعّال لخادم Ollama: تجاوز لوحة التحكم ثم متغير البيئة. */
+export async function effectiveOllamaBaseUrl(): Promise<string> {
   try {
-    const res = await fetch(`${OLLAMA_BASE()}/api/tags`, {
-      signal: AbortSignal.timeout(2000),
-    });
-    ollamaProbe = { ok: res.ok, at: Date.now() };
+    const rt = await getAiRuntimeConfig();
+    if (rt.ollamaBaseUrl?.trim()) return normalizeBase(rt.ollamaBaseUrl);
   } catch {
-    ollamaProbe = { ok: false, at: Date.now() };
+    /* الافتراضي */
   }
-  return ollamaProbe.ok;
+  return OLLAMA_BASE();
+}
+
+function normalizeBase(url: string): string {
+  return url.trim().replace(/\/+$/, '');
+}
+
+/**
+ * فحص شامل لخادم Ollama (محلي أو بعيد) مع قائمة الموديلات وزمن الاستجابة.
+ * النتيجة تُخزَّن 5 ثوانٍ إلا عند تمرير noCache.
+ */
+export async function probeOllama(opts?: { noCache?: boolean }): Promise<OllamaProbe> {
+  const baseUrl = await effectiveOllamaBaseUrl();
+  if (!opts?.noCache && probeCache && probeCache.key === baseUrl && Date.now() - probeCache.at < PROBE_TTL_MS) {
+    return probeCache.result;
+  }
+  const startedAt = Date.now();
+  let result: OllamaProbe;
+  try {
+    const headers: Record<string, string> = {};
+    const key = process.env.OLLAMA_API_KEY?.trim();
+    if (key) headers.Authorization = `Bearer ${key}`;
+    const res = await fetch(`${baseUrl}/api/tags`, {
+      headers,
+      signal: AbortSignal.timeout(2500),
+    });
+    const latencyMs = Date.now() - startedAt;
+    if (res.ok) {
+      let models: { name: string; sizeGB?: number }[] = [];
+      try {
+        const data: any = await res.json();
+        models = Array.isArray(data?.models)
+          ? data.models
+              .map((m: any) => ({
+                name: String(m?.name ?? ''),
+                sizeGB: typeof m?.size === 'number' ? Math.round(m.size / 1073741824 * 10) / 10 : undefined,
+              }))
+              .filter((m: any) => m.name)
+          : [];
+      } catch {
+        /* الخادم وصل لكن الرد غير متوقع */
+      }
+      result = { reachable: true, latencyMs, models, baseUrl };
+    } else {
+      result = { reachable: false, latencyMs, models: [], baseUrl, error: `HTTP ${res.status}` };
+    }
+  } catch (err: any) {
+    result = {
+      reachable: false,
+      latencyMs: Date.now() - startedAt,
+      models: [],
+      baseUrl,
+      error: err?.name === 'TimeoutError' || err?.code === 'ABORT_ERR' ? 'timeout' : String(err?.message ?? 'unreachable'),
+    };
+  }
+  probeCache = { key: baseUrl, at: Date.now(), result };
+  return result;
+}
+
+/** هل خادم Ollama (المفعّل حالياً) قابل للوصول؟ */
+export async function isOllamaReachable(): Promise<boolean> {
+  return (await probeOllama()).reachable;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,6 +313,8 @@ export const NO_PROVIDER_MESSAGE =
 interface ProviderEntry {
   name: ProviderName;
   modelId: string;
+  /** عنوان خادم Ollama الفعّال (تجاوز لوحة التحكم > البيئة) */
+  baseUrl?: string;
 }
 
 async function providerChain(vision: boolean): Promise<ProviderEntry[]> {
@@ -251,9 +332,11 @@ async function providerChain(vision: boolean): Promise<ProviderEntry[]> {
   const ollamaVisionModel = () => rt.ollamaVisionModel?.trim() || OLLAMA_VISION_MODEL();
   const openrouterModel = () => rt.openrouterModel?.trim() || OPENROUTER_MODEL();
   const openrouterVisionModel = () => rt.openrouterModel?.trim() || OPENROUTER_VISION_MODEL();
+  // عنوان خادم Ollama: تجاوز لوحة التحكم (production) ثم متغير البيئة
+  const ollamaBase = rt.ollamaBaseUrl?.trim() ? normalizeBase(rt.ollamaBaseUrl) : OLLAMA_BASE();
 
   if (configured === 'ollama') {
-    return [{ name: 'ollama', modelId: vision ? ollamaVisionModel() : ollamaModel() }];
+    return [{ name: 'ollama', modelId: vision ? ollamaVisionModel() : ollamaModel(), baseUrl: ollamaBase }];
   }
   if (configured === 'openrouter') {
     if (!hasOpenRouterKey()) throw new Error('OPENROUTER_API_KEY is not set.');
@@ -270,11 +353,11 @@ async function providerChain(vision: boolean): Promise<ProviderEntry[]> {
       chain.push({ name: 'openrouter', modelId: openrouterVisionModel() });
     }
     if (await isOllamaReachable()) {
-      chain.push({ name: 'ollama', modelId: ollamaVisionModel() });
+      chain.push({ name: 'ollama', modelId: ollamaVisionModel(), baseUrl: ollamaBase });
     }
   } else {
     if (await isOllamaReachable()) {
-      chain.push({ name: 'ollama', modelId: ollamaModel() });
+      chain.push({ name: 'ollama', modelId: ollamaModel(), baseUrl: ollamaBase });
     }
     if (hasOpenRouterKey()) {
       chain.push({ name: 'openrouter', modelId: openrouterModel() });
@@ -285,7 +368,7 @@ async function providerChain(vision: boolean): Promise<ProviderEntry[]> {
 }
 
 function buildProvider(entry: ProviderEntry) {
-  return entry.name === 'ollama' ? ollamaProvider() : openRouterProvider();
+  return entry.name === 'ollama' ? ollamaProvider(entry.baseUrl) : openRouterProvider();
 }
 
 // ---------------------------------------------------------------------------

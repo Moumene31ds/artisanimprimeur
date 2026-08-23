@@ -194,6 +194,17 @@ export interface ChatPromptOptions {
     lengthPref?: 'short' | 'balanced' | 'detailed';
     languagePolicy?: 'auto' | 'fr' | 'ar';
     ordersEnabled?: boolean;
+    assistantName?: string;
+    workingHours?: { enabled: boolean; start: string; end: string };
+    outsideHoursNoteFr?: string;
+    outsideHoursNoteAr?: string;
+    handoff?: {
+      whatsappNumber?: string;
+      keywords?: string;
+      messageFr?: string;
+      messageAr?: string;
+      isOpenNow: boolean;
+    };
   } | null;
 }
 
@@ -261,6 +272,33 @@ export function buildChatSystemPrompt(options: ChatPromptOptions = {}): string {
     ? '8. Order-taking via chat is temporarily DISABLED by the owner: never collect order details and never call createOrder. Instead, invite the user to order via the website catalog.'
     : '8. When the user wants to order, collect step by step (name → phone → product → quantity), then confirm with createOrder.';
 
+  // هوية المساعد (اسم يحدده المشرف)
+  const identitySection = admin?.assistantName?.trim()
+    ? `IDENTITY OVERRIDE: Your name is "${admin.assistantName.trim()}". Use it when introducing yourself; never call yourself L'Artisan AI.`
+    : '';
+
+  // أوقات العمل: حالة "مفتوح الآن" يحددها الخادم مسبقاً
+  let hoursSection = '';
+  if (admin?.workingHours?.enabled) {
+    const { start, end } = admin.workingHours;
+    const noteFr = admin.outsideHoursNoteFr?.trim();
+    const noteAr = admin.outsideHoursNoteAr?.trim();
+    const notesLine =
+      noteFr || noteAr
+        ? `\nOutside-hours owner note to share when relevant: FR="${noteFr || '-'}" / AR="${noteAr || '-'}".`
+        : '';
+    hoursSection = `\n===== BUSINESS HOURS =====\nWorkshop hours: ${start}–${end} (Algeria time). It is currently ${admin.handoff?.isOpenNow ? 'WITHIN' : 'OUTSIDE'} working hours. If the user needs human follow-up outside these hours, mention it politely and say the team will reply next business day.${notesLine}`;
+  }
+
+  // التحويل لموظف بشري عبر واتساب عند الطلب أو الإحباط
+  let handoffSection = '';
+  if (admin?.handoff?.whatsappNumber) {
+    const kw = admin.handoff.keywords?.trim();
+    const msgFr = admin.handoff.messageFr?.trim();
+    const msgAr = admin.handoff.messageAr?.trim();
+    handoffSection = `\n===== HUMAN HANDOFF =====\nIf the user explicitly asks for a human${kw ? `, or expresses frustration matching cues like: ${kw}` : ''}, politely propose contacting a human team member on WhatsApp: https://wa.me/${admin.handoff.whatsappNumber.replace(/\D/g, '')}${msgFr || msgAr ? `\nSuggested hand-off pitch: FR="${msgFr || '-'}" / AR="${msgAr || '-'}"` : ''}\nOnly offer this when genuinely needed — do not repeat it every message.`;
+  }
+
   return `You are L'Artisan AI, the smart, bilingual (Arabic + French) premium print consultant for "${COMPANY.name}" in Oran, Algeria.
 ${langRule}
 
@@ -322,7 +360,7 @@ Also a daily "Wheel of Fortune" on the home page can generate a random welcome c
 
 ===== TOOLS =====
 Use calculatePrice to give exact prices, searchProducts to find a product, checkPromoCode to validate a code, navigateToPage to move the user to a page, deliveryStatus to answer delivery/collection questions, and createOrder to register an order after collecting name, phone, product and quantity.
-${personalitySection}${customStyleSection}${extraSection}`;
+${personalitySection}${customStyleSection}${extraSection}${identitySection ? '\n' + identitySection : ''}${hoursSection}${handoffSection}`;
 }
 
 // ---------------------------------------------------------------------------

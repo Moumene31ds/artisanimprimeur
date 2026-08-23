@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import {
   Bot, Cpu, Cloud, RefreshCw, Play, Loader2, Sparkles, Zap, MessageSquare,
   ImageIcon, ShoppingBag, Thermometer, Languages, GaugeCircle, ShieldCheck,
-  CircleSlash, Activity, Wand2, Timer,
+  CircleSlash, Activity, Wand2, Timer, Clock, Phone, AlertTriangle, Globe2, KeyRound, X,
 } from "lucide-react";
 import {
   AI_PERSONALITY_PRESETS,
@@ -32,6 +32,16 @@ interface StatusInfo {
   ollamaReachable: boolean;
   openrouterKeyPresent: boolean;
   cooldownSeconds: number;
+  ollama?: {
+    reachable: boolean;
+    latencyMs: number;
+    models: { name: string; sizeGB?: number }[];
+    baseUrl: string;
+    error: string | null;
+    remote: boolean;
+    protectedBykey: boolean;
+  };
+  warnings?: string[];
 }
 
 export default function AdminAICenter({ isRtl }: AiCenterProps) {
@@ -61,7 +71,13 @@ export default function AdminAICenter({ isRtl }: AiCenterProps) {
       const res = await fetch("/api/admin/ai/status", { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
         const data = await res.json();
-        setStatus({ ollamaReachable: data.ollamaReachable, openrouterKeyPresent: data.openrouterKeyPresent, cooldownSeconds: data.cooldownSeconds });
+        setStatus({
+          ollamaReachable: data.ollamaReachable,
+          openrouterKeyPresent: data.openrouterKeyPresent,
+          cooldownSeconds: data.cooldownSeconds,
+          ollama: data.ollama,
+          warnings: data.warnings ?? [],
+        });
       } else toast.error(isRtl ? "فشل فحص الحالة" : "Échec du diagnostic");
     } catch {
       toast.error(isRtl ? "خطأ شبكة" : "Erreur réseau");
@@ -198,9 +214,33 @@ export default function AdminAICenter({ isRtl }: AiCenterProps) {
             <div className="flex items-center gap-2 mb-1">
               <Cpu size={16} className={status?.ollamaReachable ? 'text-emerald-500' : 'text-slate-400'} />
               <span className="text-xs font-black text-slate-700 dark:text-slate-200">Ollama</span>
+              {status?.ollama?.remote && (
+                <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 flex items-center gap-0.5">
+                  <Globe2 size={8} /> {isRtl ? "بعيد" : "remote"}
+                </span>
+              )}
               <span className={`ml-auto w-2.5 h-2.5 rounded-full ${probing ? 'bg-amber-400 animate-pulse' : status?.ollamaReachable ? 'bg-emerald-400' : 'bg-slate-300'}`} />
             </div>
-            <p className="text-[10px] font-bold text-slate-400">{status?.ollamaReachable ? (isRtl ? "متصل ومجاني 100%" : "En ligne — 100% gratuit") : (isRtl ? "غير متاح على هذا الخادم" : "Injoignable sur ce serveur")}</p>
+            {status?.ollamaReachable ? (
+              <>
+                <p className="text-[10px] font-bold text-slate-400">
+                  {status.ollama?.latencyMs}ms · {(status.ollama?.models.length ?? 0)} {isRtl ? "موديل مثبّت" : "modèles"}
+                </p>
+                {!!status.ollama?.models.length && (
+                  <p className="text-[9px] font-mono text-slate-400 truncate mt-1" title={status.ollama.models.map(m => m.name).join(', ')}>
+                    {status.ollama.models.slice(0, 3).map(m => m.name).join(' · ')}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-[10px] font-bold text-slate-400">
+                {status?.ollama?.error === 'timeout'
+                  ? (isRtl ? "انتهت المهلة — الخادم بطيء أو محجوب" : "Timeout — serveur lent ou bloqué")
+                  : status?.ollama?.baseUrl
+                    ? `${status.ollama.baseUrl.replace(/^https?:\/\//, '')} — ${isRtl ? "غير متاح" : "injoignable"}`
+                    : (isRtl ? "غير متاح على هذا الخادم" : "Injoignable sur ce serveur")}
+              </p>
+            )}
           </div>
           {/* OpenRouter */}
           <div className={`p-4 rounded-2xl border-2 transition-all ${status?.openrouterKeyPresent ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20' : 'border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20'}`}>
@@ -267,6 +307,43 @@ export default function AdminAICenter({ isRtl }: AiCenterProps) {
                 />
               </div>
             ))}
+
+            {/* Ollama بعيد — يجعل أولاما متاحاً في production عبر VPS/Docker */}
+            <div className={`p-4 rounded-2xl border-2 ${cfg.ollamaBaseUrl ? 'border-indigo-200 bg-indigo-50/60 dark:border-indigo-900 dark:bg-indigo-950/20' : 'border-slate-200 dark:border-slate-700'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <Globe2 size={15} className="text-indigo-500" />
+                <span className="text-xs font-black text-slate-700 dark:text-slate-200">{isRtl ? "خادم Ollama بعيد (production)" : "Serveur Ollama distant (production)"}</span>
+                <button onClick={probeStatus} disabled={probing} className="ml-auto p-1.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-50" title={isRtl ? "إعادة فحص الاتصال" : "Retester"}>
+                  {probing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                </button>
+              </div>
+              <input
+                dir="ltr"
+                type="text"
+                placeholder="https://ollama.mon-serveur.com  (vide = local)"
+                value={cfg.ollamaBaseUrl}
+                onChange={(e) => setCfg({ ...cfg, ollamaBaseUrl: e.target.value })}
+                onBlur={() => save({ ollamaBaseUrl: cfg.ollamaBaseUrl.trim() }, true)}
+                className="w-full p-3 bg-white/70 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-400 font-mono text-xs text-slate-800 dark:text-slate-100"
+              />
+              <p className="text-[10px] font-bold text-slate-400 leading-relaxed mt-2">
+                {isRtl
+                  ? "شغّل Ollama على VPS ثم ضع رابطه هنا ليصبح متاحاً في production فوراً وبلا إعادة نشر."
+                  : "Lancez Ollama sur un VPS puis collez son URL ici : il devient disponible en production, sans redéploiement."}
+              </p>
+              {cfg.ollamaBaseUrl && status?.ollama?.remote && (
+                status.ollama.protectedBykey ? (
+                  <p className="text-[10px] font-black text-emerald-600 flex items-center gap-1.5 mt-2">
+                    <KeyRound size={11} /> {isRtl ? "محمي بمفتاح Bearer ✓" : "Protégé par clé Bearer ✓"}
+                  </p>
+                ) : (
+                  <p className="text-[10px] font-black text-orange-500 flex items-start gap-1.5 mt-2 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 rounded-xl px-3 py-2 leading-relaxed">
+                    <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                    {isRtl ? "احمِ خادمك: أضف OLLAMA_API_KEY في متغيرات البيئة (الرابط مقروء للعموم)" : "Protégez-le : ajoutez OLLAMA_API_KEY dans les variables d'environnement"}
+                  </p>
+                )
+              )}
+            </div>
           </div>
         </section>
 
@@ -409,6 +486,292 @@ export default function AdminAICenter({ isRtl }: AiCenterProps) {
             className="w-full p-4 mt-1 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:border-accent transition-colors text-sm text-slate-800 dark:text-slate-100 resize-none"
           />
           <p className="text-[10px] font-bold text-slate-400 mt-1">{isRtl ? "تُحقن مباشرة في عقل المساعد بعد القواعد الصارمة." : "Injectées dans le system prompt juste après les règles strictes."}</p>
+        </div>
+      </section>
+
+      {/* ===== هوية المساعد في الواجهة ===== */}
+      <section className="premium-glass p-6 sm:p-8 rounded-[2rem] border border-white/60 dark:border-white/5 space-y-5">
+        <h4 className="font-black text-lg text-slate-800 dark:text-white flex items-center gap-2">
+          <Bot size={18} className="text-rose-500" /> {isRtl ? "هوية المساعد في الواجهة" : "Identité de l'assistant"}
+        </h4>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 ml-2">{isRtl ? "اسم المساعد" : "Nom de l'assistant"}</label>
+            <input
+              dir="auto"
+              type="text"
+              placeholder="L'Artisan AI"
+              value={cfg.assistantName}
+              onChange={(e) => setCfg({ ...cfg, assistantName: e.target.value })}
+              onBlur={() => save({ assistantName: cfg.assistantName.trim() }, true)}
+              className="w-full p-3 mt-1 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent font-bold text-sm text-slate-800 dark:text-slate-100"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 ml-2">{isRtl ? "إيموجي الأفاتار" : "Emoji avatar"}</label>
+            <input
+              type="text"
+              maxLength={4}
+              placeholder="✨"
+              value={cfg.assistantEmoji}
+              onChange={(e) => setCfg({ ...cfg, assistantEmoji: e.target.value })}
+              onBlur={() => save({ assistantEmoji: cfg.assistantEmoji.trim() }, true)}
+              className="w-full p-3 mt-1 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent text-center text-xl"
+            />
+          </div>
+          <div className="flex items-end">
+            <div className={`w-full p-3 rounded-xl flex items-center justify-center gap-2 ${cfg.assistantEmoji || cfg.assistantName ? 'bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900' : 'bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700'}`}>
+              <span className="text-xl">{cfg.assistantEmoji || '✨'}</span>
+              <span className="font-black text-sm text-slate-800 dark:text-white">{cfg.assistantName || "L'Artisan AI"}</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_currentColor]" />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 ml-2">🇫🇷 {isRtl ? "رسالة الترحيب (فرنسية)" : "Message d'accueil (français)"}</label>
+            <textarea
+              rows={3}
+              placeholder="Bonjour ! Je suis **L'Artisan AI**..."
+              value={cfg.welcomeMessageFr}
+              onChange={(e) => setCfg({ ...cfg, welcomeMessageFr: e.target.value })}
+              onBlur={() => save({ welcomeMessageFr: cfg.welcomeMessageFr }, true)}
+              className="w-full p-4 mt-1 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:border-accent text-sm text-slate-800 dark:text-slate-100 resize-none"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 ml-2">🇩🇿 {isRtl ? "رسالة الترحيب (عربية)" : "Message d'accueil (arabe)"}</label>
+            <textarea
+              rows={3}
+              dir="rtl"
+              placeholder="مرحباً بك! أنا **L'Artisan AI**..."
+              value={cfg.welcomeMessageAr}
+              onChange={(e) => setCfg({ ...cfg, welcomeMessageAr: e.target.value })}
+              onBlur={() => save({ welcomeMessageAr: cfg.welcomeMessageAr }, true)}
+              className="w-full p-4 mt-1 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:border-accent text-sm text-slate-800 dark:text-slate-100 resize-none"
+            />
+          </div>
+        </div>
+        <p className="text-[10px] font-bold text-slate-400 -mt-2">{isRtl ? "يدعم التنسيق: **عريض** و *مائل* — تظهر فوراً لكل الزوار." : "Markdown léger supporté : **gras**, *italique* — appliqué en direct."}</p>
+
+        {/* اقتراحات سريعة */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {([
+            { key: 'suggestedPromptsFr', flag: '🇫🇷', ph: "Combien coûtent 100 cartes de visite ?", rtl: false },
+            { key: 'suggestedPromptsAr', flag: '🇩🇿', ph: "كم سعر 100 بطاقة زيارة ؟", rtl: true },
+          ] as const).map(list => {
+            const items = (cfg[list.key] as string[]) ?? [];
+            const update = (next: string[]) => {
+              const cleaned = next.map(s => s.trim()).filter(Boolean).slice(0, 6);
+              setCfg({ ...cfg, [list.key]: cleaned } as any);
+              return cleaned;
+            };
+            return (
+              <div key={list.key} className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-700">
+                <p className="text-xs font-black text-slate-600 dark:text-slate-300 mb-3">
+                  {list.flag} {list.key.endsWith('Fr') ? (isRtl ? "اقتراحات سريعة (فرنسية)" : "Suggestions rapides (FR)") : (isRtl ? "اقتراحات سريعة (عربية)" : "Suggestions rapides (AR)")}
+                  <span className="text-[9px] font-bold text-slate-400 mr-2">{items.length}/6</span>
+                </p>
+                <div className="space-y-2">
+                  {items.map((item, i) => (
+                    <div key={i} className="flex gap-2">
+                      <input
+                        dir={list.rtl ? 'rtl' : 'ltr'}
+                        value={item}
+                        autoFocus={i === items.length - 1 && !item}
+                        onChange={(e) => {
+                          const next = [...items];
+                          next[i] = e.target.value;
+                          setCfg({ ...cfg, [list.key]: next } as any);
+                        }}
+                        onBlur={() => save({ [list.key]: update(items) } as any, true)}
+                        placeholder={list.ph}
+                        className="flex-grow p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent text-xs font-bold text-slate-800 dark:text-slate-100"
+                      />
+                      <button onClick={() => save({ [list.key]: update(items.filter((_, j) => j !== i)) } as any)} className="p-2 text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl cursor-pointer shrink-0">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {items.length < 6 && (
+                  <button
+                    onClick={() => {
+                      const next = [...items, ''];
+                      setCfg({ ...cfg, [list.key]: next } as any);
+                    }}
+                    className="mt-3 w-full p-2.5 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-xs font-black text-slate-400 hover:border-indigo-400 hover:text-indigo-500 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Sparkles size={12} /> {isRtl ? "إضافة اقتراح" : "Ajouter une suggestion"}
+                  </button>
+                )}
+                <p className="text-[9px] font-bold text-slate-400 mt-2">{isRtl ? "اضغط خارج الحقل للحفظ التلقائي" : "Cliquez ailleurs pour sauvegarder"}</p>
+              </div>
+            );
+          })}
+        </div>
+        {((cfg.suggestedPromptsFr?.length ?? 0) > 0 || (cfg.suggestedPromptsAr?.length ?? 0) > 0) && (
+          <p className="text-[10px] font-bold text-indigo-500 flex items-center gap-1.5">
+            <Zap size={11} /> {isRtl ? "ستحل هذه الاقتراحات محل الأزرار الافتراضية داخل الشات." : "Ces suggestions remplaceront les boutons par défaut du chat."}
+          </p>
+        )}
+      </section>
+
+      {/* ===== التحويل البشري وأوقات العمل والحدود ===== */}
+      <section className="premium-glass p-6 sm:p-8 rounded-[2rem] border border-white/60 dark:border-white/5 space-y-6">
+        <h4 className="font-black text-lg text-slate-800 dark:text-white flex items-center gap-2">
+          <Phone size={18} className="text-teal-500" /> {isRtl ? "التحويل البشري، أوقات العمل والحدود" : "Handoff humain, horaires & limites"}
+        </h4>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* واتساب */}
+          <div className="space-y-3">
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">{isRtl ? "تحويل لموظف عبر واتساب" : "Handoff WhatsApp"}</p>
+            <input
+              dir="ltr"
+              type="tel"
+              placeholder={isRtl ? "رقم واتساب — مثال: 213770123456" : "Numéro WhatsApp — ex: 213770123456"}
+              value={cfg.whatsappNumber}
+              onChange={(e) => setCfg({ ...cfg, whatsappNumber: e.target.value.replace(/[^\d+]/g, '') })}
+              onBlur={() => save({ whatsappNumber: cfg.whatsappNumber }, true)}
+              className="w-full p-3 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent font-mono text-sm text-slate-800 dark:text-slate-100"
+            />
+            <input
+              dir="auto"
+              type="text"
+              placeholder={isRtl ? "كلمات تحفيز التحويل (بفواصل): بشري، موظف، مكالمة..." : "Mots déclencheurs (virgules): humain, agent, appeler..."}
+              value={cfg.handoffKeywords}
+              onChange={(e) => setCfg({ ...cfg, handoffKeywords: e.target.value })}
+              onBlur={() => save({ handoffKeywords: cfg.handoffKeywords }, true)}
+              className="w-full p-3 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent text-xs font-bold text-slate-800 dark:text-slate-100"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                placeholder="FR: pitch transfert..."
+                value={cfg.handoffMessageFr}
+                onChange={(e) => setCfg({ ...cfg, handoffMessageFr: e.target.value })}
+                onBlur={() => save({ handoffMessageFr: cfg.handoffMessageFr }, true)}
+                className="w-full p-3 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent text-xs text-slate-800 dark:text-slate-100"
+              />
+              <input
+                dir="rtl"
+                type="text"
+                placeholder="AR: رسالة التحويل..."
+                value={cfg.handoffMessageAr}
+                onChange={(e) => setCfg({ ...cfg, handoffMessageAr: e.target.value })}
+                onBlur={() => save({ handoffMessageAr: cfg.handoffMessageAr }, true)}
+                className="w-full p-3 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent text-xs text-slate-800 dark:text-slate-100"
+              />
+            </div>
+            {cfg.whatsappNumber && (
+              <a href={`https://wa.me/${cfg.whatsappNumber.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[10px] font-black text-emerald-600 hover:underline">
+                <Phone size={10} /> wa.me/{cfg.whatsappNumber.replace(/\D/g, '')}
+              </a>
+            )}
+          </div>
+
+          {/* أوقات العمل */}
+          <div className="space-y-3">
+            <button
+              onClick={() => save({ workingHoursEnabled: !cfg.workingHoursEnabled })}
+              className={`w-full p-3.5 rounded-2xl border-2 flex items-center gap-3 transition-all cursor-pointer ${cfg.workingHoursEnabled ? 'border-teal-200 bg-teal-50/60 dark:border-teal-900 dark:bg-teal-950/20' : 'border-slate-200 dark:border-slate-700 opacity-75'}`}
+            >
+              <Clock size={18} className={cfg.workingHoursEnabled ? 'text-teal-500' : 'text-slate-400'} />
+              <span className="font-black text-sm text-slate-800 dark:text-white flex-grow text-right">{isRtl ? "أوقات العمل" : "Horaires d'ouverture"}</span>
+              <span className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${cfg.workingHoursEnabled ? 'bg-teal-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                <span className={`inline-block transform rounded-full bg-white shadow transition-transform ${cfg.workingHoursEnabled ? 'translate-x-6' : 'translate-x-1'}`} style={{ height: 18, width: 18 }} />
+              </span>
+            </button>
+            {cfg.workingHoursEnabled && (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="text-[10px] font-black text-slate-400 ml-1">{isRtl ? "من" : "De"}</span>
+                    <input
+                      dir="ltr" type="time"
+                      value={cfg.workingHoursStart}
+                      onChange={(e) => setCfg({ ...cfg, workingHoursStart: e.target.value })}
+                      onBlur={() => save({ workingHoursStart: cfg.workingHoursStart }, true)}
+                      className="w-full p-2.5 mt-0.5 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent text-sm font-bold text-slate-800 dark:text-slate-100"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] font-black text-slate-400 ml-1">{isRtl ? "إلى" : "À"}</span>
+                    <input
+                      dir="ltr" type="time"
+                      value={cfg.workingHoursEnd}
+                      onChange={(e) => setCfg({ ...cfg, workingHoursEnd: e.target.value })}
+                      onBlur={() => save({ workingHoursEnd: cfg.workingHoursEnd }, true)}
+                      className="w-full p-2.5 mt-0.5 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent text-sm font-bold text-slate-800 dark:text-slate-100"
+                    />
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="FR: note hors-horaires..."
+                    value={cfg.outsideHoursNoteFr}
+                    onChange={(e) => setCfg({ ...cfg, outsideHoursNoteFr: e.target.value })}
+                    onBlur={() => save({ outsideHoursNoteFr: cfg.outsideHoursNoteFr }, true)}
+                    className="w-full p-3 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent text-xs text-slate-800 dark:text-slate-100"
+                  />
+                  <input
+                    dir="rtl"
+                    type="text"
+                    placeholder="AR: ملاحظة خارج الوقت..."
+                    value={cfg.outsideHoursNoteAr}
+                    onChange={(e) => setCfg({ ...cfg, outsideHoursNoteAr: e.target.value })}
+                    onBlur={() => save({ outsideHoursNoteAr: cfg.outsideHoursNoteAr }, true)}
+                    className="w-full p-3 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent text-xs text-slate-800 dark:text-slate-100"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* حد الاستخدام */}
+            <div>
+              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 ml-2 flex items-center gap-1.5">
+                <GaugeCircle size={13} /> {isRtl ? "حد الرسائل / ساعة / زائر" : "Limite messages / heure / visiteur"}
+                <span className="font-mono text-indigo-500">{cfg.chatRateLimitPerHour === 0 ? (isRtl ? "بلا حد" : "illimité") : cfg.chatRateLimitPerHour}</span>
+              </label>
+              <input
+                dir="ltr" type="range" min={0} max={120} step={5}
+                value={Math.min(cfg.chatRateLimitPerHour, 120)}
+                onChange={(e) => setCfg({ ...cfg, chatRateLimitPerHour: Number(e.target.value) })}
+                onMouseUp={() => save({}, true)}
+                onTouchEnd={() => save({}, true)}
+                onKeyUp={() => save({}, true)}
+                className="w-full mt-2 accent-indigo-500 cursor-pointer"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* رسالة الانقطاع */}
+        <div>
+          <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">{isRtl ? "رسالة عند انقطاع الخدمة" : "Message si l'IA est indisponible"}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <input
+              type="text"
+              placeholder="FR: message de secours personnalisé..."
+              value={cfg.unavailableMessageFr}
+              onChange={(e) => setCfg({ ...cfg, unavailableMessageFr: e.target.value })}
+              onBlur={() => save({ unavailableMessageFr: cfg.unavailableMessageFr }, true)}
+              className="w-full p-3 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent text-xs text-slate-800 dark:text-slate-100"
+            />
+            <input
+              dir="rtl"
+              type="text"
+              placeholder="AR: رسالة بديلة مخصصة عند الانقطاع..."
+              value={cfg.unavailableMessageAr}
+              onChange={(e) => setCfg({ ...cfg, unavailableMessageAr: e.target.value })}
+              onBlur={() => save({ unavailableMessageAr: cfg.unavailableMessageAr }, true)}
+              className="w-full p-3 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent text-xs text-slate-800 dark:text-slate-100"
+            />
+          </div>
         </div>
       </section>
 

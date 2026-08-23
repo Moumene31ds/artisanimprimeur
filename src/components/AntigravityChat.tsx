@@ -18,6 +18,10 @@ import {
 import { nativeHaptic, nativeHapticSuccess, nativeSpeechRecognize, isNative } from "@/lib/native";
 import { OPEN_CHAT_EVENT, CHAT_CLEARED_EVENT, buildChatExportText, getChatHistory, saveChatHistory, clearChatHistory } from "@/lib/chat-storage";
 import { useAuth } from "@/context/AuthContext";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+// إعدادات المساعد الحيّة من لوحة التحكم (اسم، ترحيب، اقتراحات...) — بلا أسرار
+import { sanitizeAiConfig, DEFAULT_AI_CONFIG, type AiRuntimeConfig } from "@/lib/ai-runtime";
 
 interface ProductResult {
   id: string;
@@ -117,6 +121,15 @@ export default function AntigravityChat() {
   const [showExport, setShowExport] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  // هوية المساعد وتخصيصاته الحيّة من مركز الذكاء (لوحة الأدمن)
+  const [aiCfg, setAiCfg] = useState<AiRuntimeConfig>(DEFAULT_AI_CONFIG);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "ai"),
+      (snap) => setAiCfg(sanitizeAiConfig(snap.exists() ? snap.data() : null)),
+      () => {});
+    return unsub;
+  }, []);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -126,9 +139,10 @@ export default function AntigravityChat() {
 
   const isRtl = language === "ar";
 
+  // رسالة الترحيب: نص المشرف الحيّ إن وُجد، وإلا الافتراضي
   const welcomeText = isRtl
-    ? "مرحباً بك! أنا **L'Artisan AI**، مساعدك الذكي في مطبعة الحرفي. أعرف كل شيء عن أسعارنا وخدماتنا 🖨️، مثل **100 بطاقة زيارة = 2500 دج**. اسألني عن أي شيء! 🎨✨"
-    : "Bonjour ! Je suis **L'Artisan AI**, votre assistant intelligent chez L'Artisan Imprimeur. Je connais nos prix et services 🖨️, par exemple **100 cartes de visite = 2500 DA**. Demandez-moi n'importe quoi ! 🎨✨";
+    ? (aiCfg.welcomeMessageAr?.trim() || "مرحباً بك! أنا **L'Artisan AI**، مساعدك الذكي في مطبعة الحرفي. أعرف كل شيء عن أسعارنا وخدماتنا 🖨️، مثل **100 بطاقة زيارة = 2500 دج**. اسألني عن أي شيء! 🎨✨")
+    : (aiCfg.welcomeMessageFr?.trim() || "Bonjour ! Je suis **L'Artisan AI**, votre assistant intelligent chez L'Artisan Imprimeur. Je connais nos prix et services 🖨️, par exemple **100 cartes de visite = 2500 DA**. Demandez-moi n'importe quoi ! 🎨✨");
 
   const defaultWelcome = useMemo<any>(() => ({
     id: "welcome",
@@ -907,7 +921,9 @@ export default function AntigravityChat() {
     transition: { type: "spring" as const, stiffness: 380, damping: 30 }
   };
 
-  const quickPrompts = isRtl ? [
+  // اقتراحات المشرف الحيّة تتقدم على الافتراضية
+  const adminPrompts: string[] = (isRtl ? aiCfg.suggestedPromptsAr : aiCfg.suggestedPromptsFr) ?? [];
+  const defaultPrompts = isRtl ? [
     { text: "السلة", icon: <ArrowLeftRight size={13} />, prompt: "خذني إلى سلة المشتريات الخاصة بي." },
     { text: "سعر البطاقات", icon: <HelpCircle size={13} />, prompt: "كم سعر 100 بطاقة زيارة ؟" },
     { text: "الاستلام", icon: <Truck size={13} />, prompt: "كيف أستلم طلبي وهل التوصيل متاح ؟" },
@@ -918,6 +934,13 @@ export default function AntigravityChat() {
     { text: "Retrait", icon: <Truck size={13} />, prompt: "Où retirer ma commande ? La livraison est-elle disponible ?" },
     { text: "Paiement", icon: <BadgePercent size={13} />, prompt: "Quels sont les moyens de paiement disponibles ?" },
   ];
+  const quickPrompts = adminPrompts.length > 0
+    ? adminPrompts.map((p) => ({
+        text: p.length > 18 ? `${p.slice(0, 17)}…` : p,
+        icon: <HelpCircle size={13} />,
+        prompt: p,
+      }))
+    : defaultPrompts;
 
   const contextualPrompts = getContextualPrompts();
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant" && m.id !== "welcome");
@@ -977,11 +1000,15 @@ export default function AntigravityChat() {
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-500 text-white flex items-center justify-center shadow-md relative overflow-hidden">
                   <div className="absolute inset-0 bg-white/20 animate-pulse mix-blend-overlay"></div>
-                  <Sparkles size={18} />
+                  {aiCfg.assistantEmoji ? (
+                    <span className="text-xl leading-none">{aiCfg.assistantEmoji}</span>
+                  ) : (
+                    <Sparkles size={18} />
+                  )}
                 </div>
                 <div>
                   <h4 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-1.5">
-                    L'Artisan AI
+                    {aiCfg.assistantName || "L'Artisan AI"}
                     <span className={`w-2 h-2 rounded-full shadow-[0_0_8px_currentColor] ${!isOnline ? 'bg-red-500 text-red-500' : isLoading ? 'bg-amber-500 text-amber-500 animate-pulse' : 'bg-emerald-500 text-emerald-500'}`} />
                   </h4>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
