@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo, Suspense } from "react";
+import { useWakeLock } from "@/lib/wakelock";
 import { useAppStore } from "@/lib/store";
 import { TRANSLATIONS } from "@/lib/translations";
 import { useAuth } from "@/context/AuthContext";
@@ -420,6 +421,9 @@ export default function CustomizerPage() {
   const [arScale, setArScale] = useState(1);
   const [arError, setArError] = useState<string | null>(null);
 
+  // منع إطفاء الشاشة أثناء معاينة الواقع المعزز (Wake Lock API).
+  useWakeLock(isARActive);
+
   // References
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -435,6 +439,20 @@ export default function CustomizerPage() {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
+  }, []);
+
+  // استقبال صورة مشارَكة (Share Target / File Handling API → /share)
+  useEffect(() => {
+    try {
+      const shared = sessionStorage.getItem("pwa-shared-image");
+      if (shared) {
+        sessionStorage.removeItem("pwa-shared-image");
+        setLogoImageSrc(shared);
+        toast.info(isRtl ? "تم تحميل الصورة المشارَكة — تابع التخصيص!" : "Image partagée chargée — continuez la personnalisation !");
+      }
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   // Calculate customized price based on basePrice, quantity discount, and selections

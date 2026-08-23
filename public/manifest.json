@@ -17,6 +17,29 @@
   "launch_handler": {
     "client_mode": ["navigate-existing", "auto"]
   },
+  "edge_side_panel": {
+    "preferred_width": 480
+  },
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "file_handlers": [
+    {
+      "action": "/share",
+      "accept": {
+        "image/*": [".png", ".jpg", ".jpeg", ".webp", ".svg"]
+      },
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }],
+      "launch_type": "single-client"
+    }
+  ],
   "icons": [
     {
       "src": "/icons/icon.svg",
@@ -98,6 +121,20 @@
       "short_name": "Services",
       "description": "Tous nos services",
       "url": "/services",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "استوديو الذكاء الاصطناعي",
+      "short_name": "AI Studio",
+      "description": "تصميم بالذكاء الاصطناعي",
+      "url": "/ai-studio",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "مولّد رموز QR",
+      "short_name": "QR Maker",
+      "description": "أنشئ رمز QR بتصميمك",
+      "url": "/qr-maker",
       "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
     }
   ],

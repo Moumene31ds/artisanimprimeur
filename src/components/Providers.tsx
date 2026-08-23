@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import { AuthProvider } from "@/context/AuthContext"; // استيراد AuthProvider
 import SyncManager from "@/components/SyncManager";
 import PWALifecycle from "@/components/PWALifecycle";
+import OutboxManager from "@/components/OutboxManager";
 import NativeBootstrap from "@/components/NativeBootstrap";
 import LockManager from "@/components/LockManager";
 import { MotionConfig } from "framer-motion";
@@ -45,6 +46,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
       {/* دورة حياة PWA: تسجيل السيرفس ووركر + تحديثات + حالة الاتصال */}
       <PWALifecycle />
+
+      {/* طابور الإجراءات غير المتصلة: إعادة إرسال تلقائي عند عودة الشبكة */}
+      <OutboxManager />
 
       {/* إقلاع التطبيق الأصلي (أندرويد/iOS): شاشة البداية، الإشعارات، قفل البصمة */}
       <NativeBootstrap />

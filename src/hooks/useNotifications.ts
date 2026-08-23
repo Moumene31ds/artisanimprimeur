@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { useAppStore } from "@/lib/store";
 import { triggerHapticFeedback, playNotificationSound } from "@/lib/utils";
+import { setAppBadge, clearAppBadge } from "@/lib/pwa";
 import { toast } from "sonner";
 
 // -----------------------------------------------
@@ -73,6 +74,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
       setNotifications([]);
       setUnreadCount(0);
       setLoading(false);
+      clearAppBadge();
       knownIdsRef.current = new Set();
       announcedIdsRef.current = new Set();
       firstLoadRef.current = true;
@@ -97,7 +99,10 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
         const prevIds = knownIdsRef.current;
         knownIdsRef.current = new Set(list.map((n) => n.id));
         setNotifications(list);
-        setUnreadCount(list.filter((n) => !n.read).length);
+        const unread = list.filter((n) => !n.read).length;
+        setUnreadCount(unread);
+        // شارة أيقونة التطبيق (Badging API) بعدد الإشعارات غير المقروءة.
+        if (unread > 0) setAppBadge(unread); else clearAppBadge();
         setLoading(false);
 
         const isFirst = firstLoadRef.current;

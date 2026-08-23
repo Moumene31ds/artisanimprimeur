@@ -251,6 +251,45 @@ export function isOnline(): boolean {
   return typeof navigator === 'undefined' ? true : navigator.onLine;
 }
 
+// ---------------------------------------------------------------------------
+// Content Indexing — إتاحة الصفحات المخزّنة مؤقتاً في قائمة "من أجل لاحقاً"
+// بمتصفح كروم (يظهر المحتوى المتاح أوفلاين في قسم التنزيلات).
+// ---------------------------------------------------------------------------
+
+const CONTENT_INDEX_ITEMS = [
+  {
+    id: 'home',
+    url: '/',
+    title: "L'Artisan Imprimeur",
+    description: 'الرئيسية — Accueil',
+    icons: [{ src: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' }],
+  },
+  {
+    id: 'services',
+    url: '/services',
+    title: 'Nos services | خدماتنا',
+    description: 'كل خدمات الطباعة — Tous nos services',
+    icons: [{ src: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' }],
+  },
+];
+
+export async function registerContentIndex(): Promise<void> {
+  try {
+    if (!('serviceWorker' in navigator)) return;
+    const registration: any = await navigator.serviceWorker.ready;
+    if (!registration.index) return;
+    const existing = await registration.index.getAll();
+    const known = new Set((existing || []).map((d: any) => d.id));
+    for (const item of CONTENT_INDEX_ITEMS) {
+      if (!known.has(item.id)) {
+        await registration.index.add(item);
+      }
+    }
+  } catch (e) {
+    console.debug('Content Indexing unavailable:', e);
+  }
+}
+
 export async function requestNotificationPermission(): Promise<NotificationPermission | null> {
   if (!('Notification' in window)) return null;
   if (!('serviceWorker' in navigator)) return null;
@@ -309,6 +348,36 @@ export function isPWAInstalled(): boolean {
     window.matchMedia('(display-mode: standalone)').matches ||
     (window.navigator as any).standalone === true
   );
+}
+
+// ---------------------------------------------------------------------------
+// Badging API — شارة عدد الإشعارات غير المقروءة على أيقونة التطبيق
+// ---------------------------------------------------------------------------
+
+/** هل تدعم البيئة شارة التطبيق (Badging API)؟ */
+export function isBadgeSupported(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return "setAppBadge" in navigator && "clearAppBadge" in navigator;
+}
+
+/** تعيين شارة بعدد معيّن (مثل الإشعارات غير المقروءة). */
+export async function setAppBadge(count: number): Promise<void> {
+  try {
+    if (!isBadgeSupported() || count <= 0) return;
+    await (navigator as any).setAppBadge(Math.min(count, 99));
+  } catch {
+    /* غير مدعوم أو مرفوض */
+  }
+}
+
+/** إزالة شارة التطبيق. */
+export async function clearAppBadge(): Promise<void> {
+  try {
+    if (!isBadgeSupported()) return;
+    await (navigator as any).clearAppBadge();
+  } catch {
+    /* ignore */
+  }
 }
 
 // ---------------------------------------------------------------------------

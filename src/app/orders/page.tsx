@@ -15,6 +15,7 @@ import { createTranslator, getLanguageDirection, normalizeLanguage } from "@/lib
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import PullToRefresh from "@/components/PullToRefresh";
+import { fetchWithOutbox } from "@/lib/outbox";
 import {
   getStepIndex, isCompleted, isCancelled, isActive, statusLabel, formatDate, formatDateTime,
   type StatusHistoryEntry,
@@ -74,17 +75,32 @@ function CustomerBATApproval({ orderId, isRtl }: { orderId: string; isRtl: boole
   const batAction = async (payload: Record<string, unknown>) => {
     const token = user ? await user.getIdToken() : null;
     if (!token) throw new Error("unauthenticated");
-    return fetch("/api/orders/bat", {
+    // عند انقطاع الشبكة يُخزَّن القرار في طابور الأوفلاين ويُرسل تلقائياً
+    // عند عودة الاتصال (Background Sync) — لا يفقد المستخدم إجراءه.
+    return fetchWithOutbox("/api/orders/bat", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(payload),
-    }).then((res) => res.json());
+      outboxLabel: isRtl ? "قرار BAT" : "Décision BAT",
+    }).then((res) => {
+      if (res && "queued" in res) return { queuedOffline: true };
+      return res.json();
+    });
   };
 
   const handleApprove = async () => {
     setSubmitting(true);
     try {
       const data = await batAction({ orderId, action: "approve" });
+      if (data.queuedOffline) {
+        toast.info(
+          isRtl
+            ? "لا يوجد اتصال — سيُرسل اعتمادك تلقائياً فور عودة الشبكة ✓"
+            : "Hors-ligne — votre approbation sera envoyée au retour du réseau ✓"
+        );
+        setSubmitting(false);
+        return;
+      }
       if (data.success) {
         toast.success(isRtl ? "تم اعتماد التصميم ✓" : "Design approuvé ✓");
       } else if (data.error) {
@@ -109,6 +125,15 @@ function CustomerBATApproval({ orderId, isRtl }: { orderId: string; isRtl: boole
         action: "reject",
         data: { reason: comment.trim() },
       });
+      if (data.queuedOffline) {
+        toast.info(
+          isRtl
+            ? "لا يوجد اتصال — سيُرسل طلب التعديل تلقائياً فور عودة الشبكة ✓"
+            : "Hors-ligne — votre demande sera envoyée au retour du réseau ✓"
+        );
+        setSubmitting(false);
+        return;
+      }
       if (data.success) {
         toast.success(isRtl ? "تم رفض التصميم - سيتم التواصل معك" : "Design rejeté - Nous vous contacterons");
       } else if (data.error) {

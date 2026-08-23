@@ -18,6 +18,7 @@ import {
   getLastSeenBuild,
   markBuildSeen,
   registerPeriodicSync,
+  registerContentIndex,
   triggerSyncNow,
   isOnline,
   SHOW_UPDATE_EVENT,
@@ -128,9 +129,12 @@ export default function PWALifecycle() {
   }, []);
 
   useEffect(() => {
-    // 1) التسجيل + المزامنة الدورية
+    // 1) التسجيل + المزامنة الدورية + فهرسة المحتوى الأوفلاين
     registerServiceWorker().then((reg) => {
-      if (reg) registerPeriodicSync();
+      if (reg) {
+        registerPeriodicSync();
+        registerContentIndex();
+      }
     });
 
     // 2) كشف تحديث حقيقي: قارن نسخة الخادم مع آخر نسخة شوهدت.
