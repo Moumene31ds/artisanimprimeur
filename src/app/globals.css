@@ -767,3 +767,28 @@ section[id], [id^="section-"] {
 /* إخفاء شريط التمرير مع بقاء التمرير باللمس/العجلة — للأشرطة الأفقية */
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
+
+/* ==========================================================================
+   Window Controls Overlay (WCO) — التطبيق المثبّت على سطح المكتب
+   ==========================================================================
+   عند عرض التطبيق بوضع window-controls-overlay تصبح أزرار النافذة
+   (تصغير/إغلاق) داخل شريط العنوان الخاص بالتطبيق:
+   - ندفع الشريط العلوي أسفل منطقة العنوان عبر env(titlebar-area-*).
+   - نجعل شريط التنقل منطقة سحب للنافذة، مع إبقاء الأزرار/الروابط قابلة للنقر.
+   ========================================================================== */
+@media (display-mode: window-controls-overlay) {
+  .pwa-titlebar {
+    /* ادفع محتوى الشريط أسفل منطقة عنوان النافذة (أزرار التحكم) */
+    padding-top: max(0.5rem, calc(env(titlebar-area-height, 0px) + 0.25rem));
+    /* الشريط نفسه منطقة سحب للنافذة */
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+  .pwa-titlebar a,
+  .pwa-titlebar button,
+  .pwa-titlebar input,
+  .pwa-titlebar [role="button"] {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+}

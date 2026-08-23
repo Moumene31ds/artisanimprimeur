@@ -6,6 +6,7 @@ import { CloudOff, Wifi, Sparkles, Rocket, X, Check, Zap } from "lucide-react";
 import { toast } from "sonner";
 import BottomSheet from "@/components/BottomSheet";
 import { useAppStore } from "@/lib/store";
+import { auth } from "@/lib/firebase";
 import {
   registerServiceWorker,
   onServiceWorkerUpdate,
@@ -20,6 +21,7 @@ import {
   registerPeriodicSync,
   registerContentIndex,
   triggerSyncNow,
+  ensureFreshPushSubscription,
   isOnline,
   SHOW_UPDATE_EVENT,
   type BuildInfo,
@@ -126,6 +128,30 @@ export default function PWALifecycle() {
       /* ignore */
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // تجديد اشتراك Push تلقائياً عند انتهاء الصلاحية أو تغيّر مفتاح VAPID
+  // (صامت — لا يطلب إذناً ولا يعيد الاشتراك لمن لم يفعّل الإشعارات أصلاً).
+  useEffect(() => {
+    const renewPush = async () => {
+      try {
+        const fresh = await ensureFreshPushSubscription();
+        const user = auth.currentUser;
+        if (fresh && user) {
+          const token = await user.getIdToken();
+          await fetch("/api/push", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ userId: user.uid, subscription: fresh.toJSON() }),
+          });
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    renewPush();
+    const interval = setInterval(renewPush, 24 * 60 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {

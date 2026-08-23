@@ -39,11 +39,20 @@ export default function ShareHandler() {
   const [fileName, setFileName] = useState("");
 
   useEffect(() => {
-    // 1) معاملات Share Target (GET).
+    // 1) معاملات Share Target (GET) + معالج البروتوكول web+print://
     const params = new URLSearchParams(window.location.search);
     setSharedTitle(params.get("title") || "");
-    setSharedText(params.get("text") || "");
-    setSharedUrl(params.get("url") || "");
+    const text = params.get("text") || "";
+    let url = params.get("url") || "";
+    // web+print://<محتوى> → يصل هنا كـ ?print=<محتوى>
+    const proto = params.get("print");
+    if (proto && !url && !text) {
+      if (/^https?:\/\//i.test(proto)) url = proto;
+      else setSharedText(proto);
+    } else if (proto) {
+      setSharedText((prev) => prev || proto);
+    }
+    setSharedText((prev) => prev || text);
 
     // 2) ملفات File Handling API (فتح صورة بالتطبيق).
     if ("launchQueue" in window) {

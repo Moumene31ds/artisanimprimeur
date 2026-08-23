@@ -7,7 +7,8 @@ import { doc, getDoc } from "firebase/firestore";
 import {
   Crown, Gift, Loader2, Star, CheckCircle,
   ArrowLeft, Zap, Trophy, Ticket, RefreshCw, HelpCircle, History,
-  Flame, CalendarDays, MessageSquare, Share2, Copy, Check, Coins, Medal, Gem
+  Flame, CalendarDays, MessageSquare, Share2, Copy, Check, Coins, Medal, Gem,
+  Users, X
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
@@ -16,6 +17,7 @@ import { toast } from "sonner";
 import { GlobalLoader } from "@/components/GlobalLoader";
 import confetti from "canvas-confetti";
 import { LOYALTY_TIERS, LoyaltyTier, getPointsForAmount } from "@/lib/loyalty";
+import { isContactPickerSupported, pickContacts } from "@/lib/capabilities";
 
 // --- Spin the Wheel Prizes ---
 const SPIN_PRIZES = [
@@ -58,6 +60,39 @@ export default function RewardsPage() {
 
   // --- Referral ---
   const [copied, setCopied] = useState(false);
+  // جهات الاتصال المختارة للدعوة (Contact Picker API)
+  const [invitedContacts, setInvitedContacts] = useState<{ name: string; tel: string }[]>([]);
+
+  /** فتح منتقي جهات الاتصال وتجهيز دعوات واتساب جاهزة للإرسال. */
+  const handleInviteContacts = async () => {
+    try {
+      const contacts = await pickContacts(["name", "tel"], true);
+      const mapped = (contacts || [])
+        .filter((c) => c.tel?.[0])
+        .map((c) => ({
+          name: c.name?.[0] || "",
+          tel: (c.tel as string[])[0].replace(/[^+\d]/g, ""),
+        }));
+      if (mapped.length === 0) {
+        toast.info(isRtl ? "لا توجد أرقام هاتف في جهات الاتصال المختارة" : "Aucun numéro dans les contacts sélectionnés");
+        return;
+      }
+      setInvitedContacts(mapped.slice(0, 20));
+    } catch (err: any) {
+      if (err?.message !== "unsupported" && err?.name !== "AbortError") {
+        toast.error(isRtl ? "تعذّر فتح جهات الاتصال" : "Impossible d'ouvrir les contacts");
+      }
+    }
+  };
+
+  /** بناء رابط واتساب لدعوة جهة اتصال برقم محلي جزائري. */
+  const inviteLink = (contact: { name: string; tel: string }) => {
+    const intl = contact.tel.startsWith("+") ? contact.tel.slice(1) : contact.tel.replace(/^0/, "213");
+    const msg = isRtl
+      ? `مرحباً ${contact.name || ""}! 👋 أنصحك بتجربة L'Artisan Imprimeur لكل أعمال الطباعة — سجّل من رابطي واحصل على عرض ترحيبي: ${referralLink}`
+      : `Salut ${contact.name || ""} ! 👋 Je te recommande L'Artisan Imprimeur pour tous vos travaux d'impression — inscris-toi avec mon lien et profite de l'offre de bienvenue : ${referralLink}`;
+    return `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`;
+  };
 
   // --- Check-in ---
   const [checkingIn, setCheckingIn] = useState(false);
@@ -487,21 +522,33 @@ export default function RewardsPage() {
                 : `+${settings?.config?.referralBonus ?? 100} points quand un ami passe sa 1ère commande 💌`}
             </p>
             {profile?.referralCode ? (
-              <div className="flex gap-2 w-full">
-                <button
-                  onClick={() => copyText(profile.referralCode, isRtl ? "تم نسخ الكود!" : "Code copié !")}
-                  className="flex-1 p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-mono font-black text-sm tracking-widest hover:bg-emerald-200 cursor-pointer border border-emerald-200 dark:border-emerald-900"
-                >
-                  {profile.referralCode}
-                </button>
-                <button
-                  onClick={() => copyText(referralLink, isRtl ? "تم نسخ رابط الدعوة!" : "Lien copié !")}
-                  className="px-3 py-2 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 transition-colors cursor-pointer"
-                  title={isRtl ? "نسخ رابط الدعوة" : "Copier le lien"}
-                >
-                  {copied ? <Check size={14} /> : <Copy size={14} />}
-                </button>
-              </div>
+              <>
+                <div className="flex gap-2 w-full">
+                  <button
+                    onClick={() => copyText(profile.referralCode, isRtl ? "تم نسخ الكود!" : "Code copié !")}
+                    className="flex-1 p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-mono font-black text-sm tracking-widest hover:bg-emerald-200 cursor-pointer border border-emerald-200 dark:border-emerald-900"
+                  >
+                    {profile.referralCode}
+                  </button>
+                  <button
+                    onClick={() => copyText(referralLink, isRtl ? "تم نسخ رابط الدعوة!" : "Lien copié !")}
+                    className="px-3 py-2 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 transition-colors cursor-pointer"
+                    title={isRtl ? "نسخ رابط الدعوة" : "Copier le lien"}
+                  >
+                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                  </button>
+                </div>
+                {/* دعوة جهات الاتصال مباشرة (Contact Picker API) */}
+                {isContactPickerSupported() && (
+                  <button
+                    onClick={handleInviteContacts}
+                    className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-500 text-white font-black text-[11px] hover:bg-blue-600 transition-colors cursor-pointer"
+                  >
+                    <Users size={13} />
+                    {isRtl ? "دعوة من جهات الاتصال" : "Inviter vos contacts"}
+                  </button>
+                )}
+              </>
             ) : (
               <span className="text-[10px] font-bold text-slate-400">{isRtl ? "افتح حساباً لتحصل على كودك" : "Créez un compte pour votre code"}</span>
             )}
@@ -527,6 +574,73 @@ export default function RewardsPage() {
           </div>
         </div>
       </section>
+
+      {/* لوحة إرسال الدعوات لجهات الاتصال المختارة */}
+      <AnimatePresence>
+        {invitedContacts.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+            onClick={() => setInvitedContacts([])}
+          >
+            <motion.div
+              initial={{ y: 60, opacity: 0, scale: 0.97 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 60, opacity: 0, scale: 0.97 }}
+              transition={{ type: "spring", damping: 26, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+                <div>
+                  <h3 className="font-black text-slate-900 dark:text-white text-sm">
+                    {isRtl ? "إرسال الدعوات" : "Envoyer les invitations"}
+                  </h3>
+                  <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                    {isRtl
+                      ? `${invitedContacts.length} جهة اتصال — أرسل عبر واتساب`
+                      : `${invitedContacts.length} contact(s) — envoi via WhatsApp`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setInvitedContacts([])}
+                  className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  aria-label={isRtl ? "إغلاق" : "Fermer"}
+                >
+                  <X size={16} className="text-slate-400" />
+                </button>
+              </div>
+              <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                {invitedContacts.map((contact, i) => (
+                  <a
+                    key={`${contact.tel}-${i}`}
+                    href={inviteLink(contact)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 px-5 py-3.5 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/20 transition-colors"
+                  >
+                    <span className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 font-black text-xs">
+                      {(contact.name || contact.tel).slice(0, 2)}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[12px] font-black text-slate-800 dark:text-white truncate">
+                        {contact.name || contact.tel}
+                      </span>
+                      <span className="block text-[10px] font-bold text-slate-400" dir="ltr">{contact.tel}</span>
+                    </span>
+                    <MessageSquare size={15} className="text-emerald-500 shrink-0" />
+                  </a>
+                ))}
+              </div>
+              <p className="px-5 py-3 text-[9px] font-bold text-slate-400 bg-slate-50 dark:bg-slate-950/40">
+                {isRtl
+                  ? "تُفتح المحادثات عبر واتساب — لا نصل إلى رسائلك أبداً."
+                  : "Les conversations s'ouvrent via WhatsApp — nous n'accédons jamais à vos messages."}
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Promocode successfully generated */}
       <AnimatePresence>

@@ -13,6 +13,13 @@
   "categories": ["business", "shopping", "lifestyle"],
   "prefer_related_applications": false,
   "scope": "/",
+  "handle_links": "preferred",
+  "protocol_handlers": [
+    {
+      "protocol": "web+print",
+      "url": "/share?print=%s"
+    }
+  ],
   "display_override": ["window-controls-overlay", "standalone", "browser"],
   "launch_handler": {
     "client_mode": ["navigate-existing", "auto"]

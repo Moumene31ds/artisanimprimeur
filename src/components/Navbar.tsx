@@ -133,7 +133,7 @@ export default function Navbar() {
   if (!mounted) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-6 lg:px-8 pt-[calc(1rem+env(safe-area-inset-top))] pointer-events-none">
+    <div className="pwa-titlebar fixed top-0 left-0 right-0 z-50 px-4 sm:px-6 lg:px-8 pt-[calc(1rem+env(safe-area-inset-top))] pointer-events-none">
       <nav className={`w-full max-w-7xl mx-auto rounded-[2rem] transition-all duration-500 pointer-events-auto ${
         isScrolled 
           ? "deep-glass shadow-[0_12px_40px_rgba(0,0,0,0.08)] py-3 px-6" 

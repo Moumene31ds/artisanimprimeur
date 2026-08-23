@@ -8,8 +8,17 @@ import { useAuth } from "@/context/AuthContext";
 import { 
   Sparkles, Upload, Download, ShoppingCart, Camera, RotateCcw, 
   Type, Image as ImageIcon, Settings, Layers, Trash2, Plus, 
-  Minus, Palette, Check, ArrowLeft, RefreshCw, Eye
+  Minus, Palette, Check, ArrowLeft, RefreshCw, Eye,
+  Share2, Pipette, Save
 } from "lucide-react";
+import {
+  isEyeDropperSupported,
+  pickScreenColor,
+  shareFile,
+  canShareFiles,
+  canSaveToFileSystem,
+  saveBlobToFile,
+} from "@/lib/capabilities";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -664,6 +673,83 @@ export default function CustomizerPage() {
     );
   };
 
+  // ------------------------- قدرات PWA المتقدمة -------------------------
+
+  const [designBusy, setDesignBusy] = useState(false);
+
+  /** تصدير لوحة التصميم الحالية كصورة PNG. */
+  const getDesignBlob = (): Promise<Blob | null> => {
+    const canvas = canvasRef.current;
+    if (!canvas) return Promise.resolve(null);
+    return new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/png"));
+  };
+
+  /** تنزيل احتياطي عبر رابط (للمتصفحات بدون File System Access / Share). */
+  const downloadBlobFallback = (blob: Blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `artisan-design-${Date.now()}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  };
+
+  /** مشاركة التصميم كملف صورة (Web Share Level 2) مع احتياطي التنزيل. */
+  const handleShareDesign = async () => {
+    if (designBusy) return;
+    setDesignBusy(true);
+    try {
+      const blob = await getDesignBlob();
+      if (!blob) return;
+      if (canShareFiles()) {
+        const result = await shareFile(blob, `artisan-design.png`, "L'Artisan Imprimeur", isRtl ? "تصميمي المخصص 🎨" : "Mon design personnalisé 🎨");
+        if (result === "shared") toast.success(isRtl ? "تمت مشاركة التصميم ✓" : "Design partagé ✓");
+      } else {
+        downloadBlobFallback(blob);
+        toast.info(isRtl ? "تم تنزيل الصورة — شاركها من معرض صورك" : "Image téléchargée — partagez-la depuis votre galerie");
+      }
+    } catch (err: any) {
+      if (err?.name !== "AbortError") toast.error(isRtl ? "تعذّرت مشاركة التصميم" : "Partage impossible");
+    } finally {
+      setDesignBusy(false);
+    }
+  };
+
+  /** حفظ التصميم مباشرة في ملف على الجهاز (File System Access API). */
+  const handleSaveDesign = async () => {
+    if (designBusy) return;
+    setDesignBusy(true);
+    try {
+      const blob = await getDesignBlob();
+      if (!blob) return;
+      if (canSaveToFileSystem()) {
+        const name = await saveBlobToFile(blob, `artisan-design-${Date.now()}.png`);
+        toast.success(isRtl ? `تم حفظ التصميم (${name}) ✓` : `Design enregistré (${name}) ✓`);
+      } else {
+        downloadBlobFallback(blob);
+        toast.success(isRtl ? "تم تنزيل التصميم ✓" : "Design téléchargé ✓");
+      }
+    } catch (err: any) {
+      if (err?.name !== "AbortError") toast.error(isRtl ? "تعذّر حفظ التصميم" : "Enregistrement impossible");
+    } finally {
+      setDesignBusy(false);
+    }
+  };
+
+  /** التقاط لون من الشاشة (EyeDropper API) وتطبيقه عبر دالة ضبط. */
+  const handlePickColor = async (apply: (hex: string) => void) => {
+    try {
+      const hex = await pickScreenColor();
+      apply(hex);
+      toast.success(isRtl ? `تم التقاط اللون ${hex}` : `Couleur capturée : ${hex}`);
+    } catch (err: any) {
+      // إلغاء المستخدم للقطارة → لا إزعاج.
+      if (err?.message !== "unsupported" && err?.name !== "AbortError") {
+        toast.error(isRtl ? "تعذّر فتح القطارة" : "Sélecteur indisponible");
+      }
+    }
+  };
+
   // Helpers to update text layers
   const updateSelectedText = (field: string, value: any) => {
     setTextLayers(prev => prev.map(t => {
@@ -840,6 +926,26 @@ export default function CustomizerPage() {
                 <div className="absolute top-4 left-4 bg-black/80 backdrop-blur-md px-3 py-1.5 rounded-2xl text-[10px] font-black text-emerald-400 border border-white/10">
                   {isRtl ? selectedProduct.nameAr : selectedProduct.nameFr}
                 </div>
+              </div>
+
+              {/* مشاركة/حفظ التصميم (Web Share L2 + File System Access) */}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={handleShareDesign}
+                  disabled={designBusy}
+                  className="flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98] disabled:opacity-60"
+                >
+                  <Share2 size={15} />
+                  {isRtl ? "مشاركة التصميم" : "Partager le design"}
+                </button>
+                <button
+                  onClick={handleSaveDesign}
+                  disabled={designBusy}
+                  className="flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-black text-xs border border-slate-200 dark:border-slate-700 transition-all active:scale-[0.98] disabled:opacity-60"
+                >
+                  <Save size={15} />
+                  {isRtl ? "حفظ كصورة" : "Enregistrer"}
+                </button>
               </div>
 
               {/* Step 1: Select Core Product Grid */}
@@ -1063,6 +1169,16 @@ export default function CustomizerPage() {
                           onChange={(e) => updateSelectedText("color", e.target.value)}
                           className="w-10 h-10 rounded-xl cursor-pointer border border-slate-200 dark:border-slate-800 bg-transparent p-0 overflow-hidden"
                         />
+                        {isEyeDropperSupported() && (
+                          <button
+                            onClick={() => handlePickColor((hex) => updateSelectedText("color", hex))}
+                            className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
+                            title={isRtl ? "التقاط لون من الشاشة" : "Capturer une couleur à l'écran"}
+                            aria-label={isRtl ? "قطارة الألوان" : "Pipette de couleurs"}
+                          >
+                            <Pipette size={15} />
+                          </button>
+                        )}
                         <input 
                           type="text" 
                           value={currentTextLayer.color}
@@ -1277,6 +1393,16 @@ export default function CustomizerPage() {
                           onChange={(e) => setBgSolidColor(e.target.value)}
                           className="w-12 h-12 rounded-xl cursor-pointer border border-slate-200 dark:border-slate-800 bg-transparent p-0 overflow-hidden"
                         />
+                        {isEyeDropperSupported() && (
+                          <button
+                            onClick={() => handlePickColor(setBgSolidColor)}
+                            className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
+                            title={isRtl ? "التقاط لون من الشاشة" : "Capturer une couleur à l'écran"}
+                            aria-label={isRtl ? "قطارة الألوان" : "Pipette de couleurs"}
+                          >
+                            <Pipette size={16} />
+                          </button>
+                        )}
                         <div className="flex-1">
                           <input 
                             type="text"

@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { Loader2, Printer, ArrowLeft, CheckCircle, MessageCircle, AlertCircle, Share2 } from "lucide-react";
+import { Loader2, Printer, ArrowLeft, CheckCircle, MessageCircle, AlertCircle, Share2, FileDown } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import Barcode from "react-barcode";
 import { toast } from "sonner";
 import { nativeShare } from "@/lib/native";
+import { canShareFiles, shareFile, canSaveToFileSystem, saveBlobToFile } from "@/lib/capabilities";
 
 interface OrderItem {
   name: { fr?: string } | string;
@@ -132,6 +133,56 @@ export default function InvoicePage() {
 
   const handlePrint = () => window.print();
 
+  /** توليد الفاتورة كملف PDF (تحميل كسول للمكتبات لتخفيف الحزمة). */
+  const buildInvoicePdf = async (): Promise<Blob | null> => {
+    const paper = document.querySelector(".invoice-paper");
+    if (!paper) return null;
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+      import("html2canvas"),
+      import("jspdf"),
+    ]);
+    const canvas = await html2canvas(paper as HTMLElement, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+    });
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, pdfWidth, Math.min(pdfHeight, pdf.internal.pageSize.getHeight()));
+    return pdf.output("blob");
+  };
+
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  /** حفظ PDF في ملف يختاره المستخدم (File System Access API) مع تنزيل احتياطي. */
+  const handleSavePdf = async () => {
+    if (pdfBusy) return;
+    setPdfBusy(true);
+    try {
+      toast.info("جارٍ تجهيز ملف الـ PDF… / Préparation du PDF…", { duration: 2500 });
+      const blob = await buildInvoicePdf();
+      if (!blob) throw new Error("no paper");
+      const filename = `facture-${invoiceNumber}.pdf`;
+      if (canSaveToFileSystem()) {
+        const name = await saveBlobToFile(blob, filename);
+        toast.success(`تم حفظ الفاتورة (${name}) ✓`);
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        toast.success("تم تنزيل الفاتورة ✓");
+      }
+    } catch (err: any) {
+      if (err?.name !== "AbortError") toast.error("تعذّر إنشاء الـ PDF — استخدم زر الطباعة كبديل.");
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
   const handleWhatsAppShare = () => {
     const message = `Bonjour ${order.customerName},\n\nVoici le résumé de votre commande chez L'Artisan :\n- Facture N°: ${order.id.slice(-8).toUpperCase()}\n- Montant Total: ${order.total.toLocaleString()} DA\n- Statut: ${order.status}\n\nLien de la facture: ${currentUrl}\n\nMerci pour votre confiance !`;
     const whatsappUrl = `https://wa.me/${order.phone.replace(/^0/, "+213")}?text=${encodeURIComponent(message)}`;
@@ -139,6 +190,22 @@ export default function InvoicePage() {
   };
 
   const handleNativeShare = async () => {
+    // 1) محاولة مشاركة ملف PDF حقيقي (Web Share Level 2).
+    if (canShareFiles()) {
+      try {
+        const blob = await buildInvoicePdf();
+        if (blob) {
+          const result = await shareFile(blob, `facture-${invoiceNumber}.pdf`, `Facture ${invoiceNumber}`);
+          if (result === "shared") {
+            toast.success("تمت مشاركة الفاتورة ✓");
+            return;
+          }
+        }
+      } catch {
+        /* نُكمل بالمشاركة النصية أدناه */
+      }
+    }
+    // 2) المشاركة النظامية للرابط.
     const ok = await nativeShare({
       title: `Facture ${invoiceNumber}`,
       text: `Facture ${invoiceNumber} — ${order.customerName} — ${order.total.toLocaleString()} DA`,
@@ -197,6 +264,13 @@ export default function InvoicePage() {
             className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-[#25D366] text-white px-5 py-2.5 rounded-xl shadow-md hover:bg-[#1ebd5c] transition-all font-medium"
           >
             <MessageCircle size={18} /> WhatsApp
+          </button>
+          <button
+            onClick={handleSavePdf}
+            disabled={pdfBusy}
+            className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-xl shadow-md hover:bg-emerald-700 transition-all font-medium disabled:opacity-60"
+          >
+            {pdfBusy ? <Loader2 size={18} className="animate-spin" /> : <FileDown size={18} />} PDF
           </button>
           <button
             onClick={handlePrint}

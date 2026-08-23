@@ -23,6 +23,7 @@ import { WILAYAS } from "@/lib/constants";
 import SecurityVerification from "@/components/SecurityVerification";
 import SmartCartUpsell from "@/components/SmartCartUpsell";
 import PullToRefresh from "@/components/PullToRefresh";
+import { startBackgroundUpload, useBackgroundUploadResult } from "@/lib/background-fetch";
 import { buildStatusHistory } from "@/lib/order-status";
 
 export default function CartPage() {
@@ -113,6 +114,24 @@ export default function CartPage() {
       console.error("Error refreshing settings from Firestore:", err);
     }
   }, []);
+
+  // متابعة نتائج الرفع الخلفي (Background Fetch): تطبيق الرابط عند الاكتمال
+  useBackgroundUploadResult(async (_id, data, meta) => {
+    const rtl = language === "ar";
+    if (data?.url) {
+      setUploadedFileUrl(data.url);
+      setFileStatus('good');
+      toast.success(rtl ? "اكتمل رفع ملف التصميم بالخلفية ✓" : "Upload en arrière-plan terminé ✓");
+      await runPreflightCheck(
+        data.url,
+        (meta?.width as number) ?? undefined,
+        (meta?.height as number) ?? undefined
+      );
+    } else if (_id) {
+      setFileStatus('error');
+      toast.error(rtl ? "فشل الرفع الخلفي — جرّب مرة أخرى." : "Échec de l'upload en arrière-plan.");
+    }
+  });
 
   useEffect(() => {
     setMounted(true);
@@ -310,21 +329,39 @@ export default function CartPage() {
     reader.readAsDataURL(selectedFile);
     reader.onloadend = async () => {
       const uploadAndPreflight = async (w?: number, h?: number) => {
+        // 1) محاولة رفع مباشر.
         try {
           const response = await fetch('/api/upload', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ file: reader.result }),
           });
+          if (!response.ok) {
+            let serverError = '';
+            try { serverError = (await response.json())?.error || ''; } catch { /* ignore */ }
+            throw Object.assign(new Error(serverError || "Upload failed"), { isNetworkError: false });
+          }
           const data = await response.json();
-          
-          if (response.ok) {
-            setUploadedFileUrl(data.url);
-            setFileStatus('good');
-            toast.success(isRtl ? "تم رفع ملف التصميم سحابياً بنجاح!" : "Fichier téléchargé sur le cloud avec succès !");
-            await runPreflightCheck(data.url, w, h);
-          } else throw new Error(data.error);
-        } catch (error) {
+          setUploadedFileUrl(data.url);
+          setFileStatus('good');
+          toast.success(isRtl ? "تم رفع ملف التصميم سحابياً بنجاح!" : "Fichier téléchargé sur le cloud avec succès !");
+          await runPreflightCheck(data.url, w, h);
+        } catch (error: any) {
+          // 2) فشل بسبب الشبكة → رفع خلفي يستمر حتى لو أُغلق التبويب.
+          const isNetworkError = !navigator.onLine || /fetch|network/i.test(error?.message || "");
+          if (isNetworkError) {
+            const bgId = await startBackgroundUpload(reader.result as string, { width: w, height: h });
+            if (bgId) {
+              setFileStatus('uploading');
+              toast.info(
+                isRtl
+                  ? "الاتصال ضعيف — سيستمر الرفع في الخلفية ويكتمل تلقائياً 📡"
+                  : "Connexion faible — l'upload continue en arrière-plan et se terminera automatiquement 📡",
+                { duration: 7000 }
+              );
+              return;
+            }
+          }
           setFileStatus('error');
           toast.error(isRtl ? "فشل رفع الملف، يرجى المحاولة لاحقاً." : "Échec de l'upload.");
         }

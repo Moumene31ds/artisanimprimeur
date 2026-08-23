@@ -462,6 +462,60 @@ self.addEventListener('sync', (event) => {
   }
 });
 
+/* ---------- الرفع بالخلفية (Background Fetch API) ---------- */
+
+const BGFETCH_CACHE = `artisan-bgfetch-${CACHE_VERSION}`;
+
+/**
+ * نجاح رفع/تنزيل خلفي: نحفظ الاستجابة في ذاكرة خاصة ونبلّغ كل النوافذ
+ * (تُقرأ النتيجة لاحقاً حتى لو كانت الصفحة مغلقة لحظة الاكتمال).
+ */
+self.addEventListener('backgroundfetchsuccess', (event) => {
+  event.waitUntil((async () => {
+    try {
+      const cache = await caches.open(BGFETCH_CACHE);
+      const records = await event.registration.matchedRecords();
+      for (const record of records) {
+        try {
+          const response = await record.responseReady;
+          if (response && response.ok) {
+            await cache.put(`/__bgfetch/${event.registration.id}`, response.clone());
+          }
+        } catch (e) { /* ignore */ }
+      }
+      await broadcastMessage({ type: 'BG_FETCH_DONE', id: event.registration.id, ok: true });
+    } catch (e) {
+      await broadcastMessage({ type: 'BG_FETCH_DONE', id: event.registration.id, ok: false });
+    }
+  })());
+});
+
+self.addEventListener('backgroundfetchfail', (event) => {
+  event.waitUntil(
+    broadcastMessage({ type: 'BG_FETCH_DONE', id: event.registration.id, ok: false })
+  );
+});
+
+self.addEventListener('backgroundfetchabort', (event) => {
+  event.waitUntil(
+    broadcastMessage({ type: 'BG_FETCH_ABORTED', id: event.registration.id })
+  );
+});
+
+// تقدم الرفع/التنزيل → بثّه للواجهة لعرض شريط تقدم.
+self.addEventListener('backgroundfetchclick', (event) => {
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) return client.focus();
+    })
+  );
+});
+
+async function broadcastMessage(message) {
+  const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  for (const client of clientList) client.postMessage(message);
+}
+
 async function syncOrders() {
   const cache = await caches.open(API_CACHE);
   const requests = await cache.keys();

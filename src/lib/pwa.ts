@@ -9,6 +9,9 @@ export async function registerServiceWorker() {
   try {
     const registration = await navigator.serviceWorker.register('/sw.js', {
       scope: '/',
+      // لا تخزين sw.js نفسه في الكاش: كل فحص تحديث يسحب النسخة الحية مباشرة
+      // (يمنع تعثر اكتشاف التحديثات بسبب HTTP cache).
+      updateViaCache: 'none',
     });
     return registration;
   } catch (error) {
@@ -339,6 +342,58 @@ export async function unsubscribeFromPushNotifications(): Promise<boolean> {
     return false;
   } catch {
     return false;
+  }
+}
+
+/**
+ * ضمان صلاحية اشتراك Push (تجديد تلقائي صامت):
+ *  - انتهت الصلاحية (expirationTime قريبة) → إعادة اشتراك.
+ *  - تغيّر مفتاح VAPID للخادم → إعادة اشتراك بالمفتاح الحالي.
+ * يعيد الاشتراك الجديد عند حدوث تجديد، وnull إذا لم يكن هناك شيء لفعله
+ * (لا اشتراك سابق — التسجيل يبقى اختيار المستخدم من زر الإشعارات).
+ */
+export async function ensureFreshPushSubscription(): Promise<PushSubscription | null> {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+    const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
+    if (!vapidKey) return null;
+
+    const registration = await navigator.serviceWorker.ready;
+    const existing = await registration.pushManager.getSubscription();
+    if (!existing) return null;
+
+    // 1) فحص انتهاء الصلاحية (قبلها بأسبوع احتياطاً).
+    const expiresSoon =
+      !!existing.expirationTime && existing.expirationTime - Date.now() < 7 * 24 * 60 * 60 * 1000;
+
+    // 2) فحص تطابق مفتاح VAPID.
+    let keyChanged = false;
+    try {
+      const currentKey = urlBase64ToUint8Array(vapidKey);
+      const storedKey = existing.options.applicationServerKey;
+      if (storedKey) {
+        const a = new Uint8Array(currentKey);
+        const b = new Uint8Array(storedKey as ArrayBuffer);
+        keyChanged = a.length !== b.length || a.some((v, i) => v !== b[i]);
+      } else {
+        keyChanged = true;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    if (!expiresSoon && !keyChanged) return null;
+
+    // تجديد: ألغِ القديم واشترك من جديد بنفس النطاق.
+    const oldEndpoint = existing.endpoint;
+    await existing.unsubscribe();
+    const fresh = await subscribeToPushNotifications();
+    if (fresh && fresh.endpoint !== oldEndpoint) {
+      return fresh;
+    }
+    return fresh;
+  } catch {
+    return null;
   }
 }
 
