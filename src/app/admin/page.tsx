@@ -12,7 +12,7 @@ import {
   ShoppingBag, Settings, LayoutDashboard, Package, 
   ShieldCheck, Download, Tag, ScanLine, X, CheckCircle, Sparkles, Megaphone,
   Printer, FileImage, BarChart3, HandCoins, Crown, User, Loader2, Plus, Phone, Mail,
-  Users as UsersIcon, Star, ShieldAlert, Database, Power, Store
+  Users as UsersIcon, Star, ShieldAlert, Database, Power, Store, Bot
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -51,6 +51,11 @@ import AdminUsers from "@/components/admin/AdminUsers";
 import AdminReviews from "@/components/admin/AdminReviews";
 import AdminNewsletter from "@/components/admin/AdminNewsletter";
 import AdminSecurity from "@/components/admin/AdminSecurity";
+// مركز الذكاء الاصطناعي (recharts يُحمَّل ديناميكياً داخل المكوّن)
+const AdminAICenter = dynamic(
+  () => import("@/components/admin/AdminAICenter"),
+  { ssr: false, loading: () => <GlobalLoader /> }
+);
 
 
 export default function AdminPage() {
@@ -587,6 +592,8 @@ export default function AdminPage() {
           { id: 'reviews', icon: Star, label: isRtl ? 'التقييمات' : 'Avis' },
           { id: 'newsletter', icon: Mail, label: 'Newsletter' },
           { id: 'security', icon: ShieldAlert, label: isRtl ? 'الأمان' : 'Sécurité' },
+
+          { id: 'ai', icon: Bot, label: isRtl ? 'مركز الذكاء' : 'AI Studio' },
           { id: 'settings', icon: Settings, label: 'Site' }
         ].map(t => (
           <button 
@@ -958,6 +965,13 @@ export default function AdminPage() {
               <p className="text-slate-500">{isRtl ? 'مراقبة تسجيلات الدخول والنشاطات المشبوهة' : 'Connexions et activités suspectes en direct'}</p>
             </div>
             <AdminSecurity isRtl={isRtl} />
+          </motion.div>
+        )}
+
+        {/* ==================== AI CONTROL CENTER TAB ==================== */}
+        {tab === 'ai' && (
+          <motion.div key="ai" initial={{opacity:0, y:15}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-15}}>
+            <AdminAICenter isRtl={isRtl} />
           </motion.div>
         )}
 

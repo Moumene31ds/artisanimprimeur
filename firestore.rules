@@ -198,10 +198,24 @@ service cloud.firestore {
     // 7. إعدادات المنصة (Settings)
     match /settings/{docId} {
       // السماح للجميع بقراءة وثيقة إعدادات الواجهة (settings/ui) وإعدادات الولاء (settings/loyalty)
-      // وإعدادات التسويق (settings/marketing) ليتسنى عرض العروض والهدايا في واجهات الزبائن
-      allow get: if docId == 'ui' || docId == 'loyalty' || docId == 'marketing';
+      // وإعدادات التسويق (settings/marketing) ووثيقة الذكاء الاصطناعي (settings/ai — بلا أسرار،
+      // المفاتيح تبقى في متغيرات البيئة) ليتسنى للخادم تطبيق إعدادات المشرف الحيّة
+      allow get: if docId == 'ui' || docId == 'loyalty' || docId == 'marketing' || docId == 'ai';
       // الإضافة والتعديل والسرد محصور بالمشرف
       allow list, write: if isAdmin();
+    }
+
+    // 7-bis. سجلات استخدام الذكاء الاصطناعي (AI Usage Logs)
+    match /ai_logs/{logId} {
+      // السماح للخادم فقط بتسجيل الاستخدام (حقول محددة وأحجام صارمة)
+      allow create: if request.resource.data.keys().hasOnly(['day', 'provider', 'model', 'latencyMs', 'ok', 'createdAt'])
+        && request.resource.data.day is string && request.resource.data.day.size() == 10
+        && request.resource.data.provider is string && request.resource.data.provider.size() <= 40
+        && request.resource.data.model is string && request.resource.data.model.size() <= 120
+        && request.resource.data.latencyMs is int && request.resource.data.latencyMs >= 0
+        && request.resource.data.ok is bool;
+      // القراءة والإدارة حصرية للمشرف (لوحة تحليلات الذكاء الاصطناعي)
+      allow read, update, delete: if isAdmin();
     }
 
     // 8. مشتركو الصيانة (Maintenance Subscribers)

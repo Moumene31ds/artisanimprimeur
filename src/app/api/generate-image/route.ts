@@ -23,6 +23,20 @@ cloudinary.config({
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
+  // مفتاح التشغيل من لوحة الأدمن (مركز الذكاء الاصطناعي)
+  try {
+    const { getAiRuntimeConfig } = await import('@/lib/ai-runtime');
+    const rt = await getAiRuntimeConfig();
+    if (!rt.enabledImageGen) {
+      return NextResponse.json(
+        { error: 'La génération d\'images IA est temporairement désactivée par la boutique.', disabledByOwner: true },
+        { status: 503 }
+      );
+    }
+  } catch {
+    /* في حال فشل جلب الإعدادات نكمل بالوضع الافتراضي (مُفعّل) */
+  }
+
   const rl = imageGenLimiter.allow(`ip:${getClientIp(req as NextRequest)}`);
   if (!rl.allowed) {
     return NextResponse.json(

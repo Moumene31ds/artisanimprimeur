@@ -18,10 +18,35 @@ import {
 } from '@/lib/chat-knowledge';
 import { getCatalogProducts } from '@/lib/catalog';
 import { moderateMessage, MODERATION_VIOLATION_MESSAGE } from '@/lib/moderation';
+import { getAiRuntimeConfig } from '@/lib/ai-runtime';
+import { collection, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 export const maxDuration = 60;
 
 const PRODUCT_KEYS = ['cartes', 'flyers', 'stickers', 'affiches', 'invitations'] as const;
+
+/** تسجيل استخدام الذكاء الاصطناعي (أفضل جهد — لا يكسر الشات أبداً). */
+function logAiUsage(data: {
+  provider: string;
+  modelId: string;
+  latencyMs: number;
+  ok: boolean;
+}) {
+  try {
+    const day = new Date().toISOString().slice(0, 10);
+    setDoc(doc(collection(db, 'ai_logs')), {
+      day,
+      provider: String(data.provider).slice(0, 40),
+      model: String(data.modelId).slice(0, 120),
+      latencyMs: Math.max(0, Math.round(data.latencyMs)),
+      ok: data.ok,
+      createdAt: serverTimestamp(),
+    }).catch(() => {});
+  } catch {
+    /* تجاهل */
+  }
+}
 
 export async function POST(req: Request) {
   let messages: any[];
@@ -90,6 +115,19 @@ export async function POST(req: Request) {
   });
 
   try {
+    // إعدادات المشرف الحيّة: مفتاح تشغيل الشات + الشخصية + درجة الإبداع
+    const rt = await getAiRuntimeConfig();
+    if (!rt.enabledChatbot) {
+      return NextResponse.json(
+        {
+          error:
+            'L\'assistant IA est temporairement désactivé par la boutique. Contactez-nous via WhatsApp !',
+          disabledByOwner: true,
+        },
+        { status: 503 }
+      );
+    }
+
     const toolsDef = {
       calculatePrice: tool({
         description:
@@ -235,25 +273,48 @@ export async function POST(req: Request) {
       }),
     };
 
+    // مفتاح تشغيل "الطلبات عبر المحادثة" — يُزال أداة إنشاء الطلب عند التعطيل
+    if (!rt.enabledOrders) {
+      delete (toolsDef as Record<string, unknown>).createOrder;
+    }
+
     // Pick the healthiest provider (Ollama locally, OpenRouter free in the cloud).
     const { model, providerName, modelId } = await resolveModel();
 
     const summary = buildConversationSummary(messages) ?? undefined;
-    const system = buildChatSystemPrompt({ languageHint: lang, page, summary, user });
+    const system = buildChatSystemPrompt({
+      languageHint: lang,
+      page,
+      summary,
+      user,
+      admin: {
+        personality: rt.personality,
+        customStyle: rt.customStyle,
+        extraInstructions: rt.extraInstructions,
+        lengthPref: rt.lengthPref,
+        languagePolicy: rt.languagePolicy,
+        ordersEnabled: rt.enabledOrders,
+      },
+    });
 
+    const startedAt = Date.now();
     const result = streamText({
       model,
       messages: cleanedMessages,
       system,
-      temperature: 0.4,
+      temperature: rt.temperature,
       tools: toolsDef,
       stopWhen: stepCountIs(5),
       maxRetries: 2,
       onError: (err: any) => {
         console.warn(`[chat] stream error on ${providerName} (${modelId}):`, err?.message ?? err);
         recordProviderFailure(providerName, err);
+        logAiUsage({ provider: providerName, modelId, latencyMs: Date.now() - startedAt, ok: false });
       },
-      onFinish: () => recordProviderSuccess(providerName),
+      onFinish: () => {
+        recordProviderSuccess(providerName);
+        logAiUsage({ provider: providerName, modelId, latencyMs: Date.now() - startedAt, ok: true });
+      },
     });
 
     return result.toUIMessageStreamResponse();

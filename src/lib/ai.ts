@@ -1,5 +1,6 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { generateText, type LanguageModel } from 'ai';
+import { getAiRuntimeConfig, type AiRuntimeConfig, DEFAULT_AI_CONFIG } from '@/lib/ai-runtime';
 
 /**
  * Free AI provider layer (no Gemini, no paid APIs).
@@ -236,14 +237,27 @@ interface ProviderEntry {
 }
 
 async function providerChain(vision: boolean): Promise<ProviderEntry[]> {
-  const configured = (process.env.AI_PROVIDER || 'auto').toLowerCase();
+  // إعدادات المشرف الحيّة (لوحة التحكم) تتقدم على متغيرات البيئة
+  let rt: AiRuntimeConfig = DEFAULT_AI_CONFIG;
+  try {
+    rt = await getAiRuntimeConfig();
+  } catch {
+    /* الافتراضي */
+  }
+  const envProvider = (process.env.AI_PROVIDER || 'auto').toLowerCase();
+  const configured = (rt.provider && rt.provider !== 'auto' ? rt.provider : envProvider);
+
+  const ollamaModel = () => rt.ollamaModel?.trim() || OLLAMA_MODEL();
+  const ollamaVisionModel = () => rt.ollamaVisionModel?.trim() || OLLAMA_VISION_MODEL();
+  const openrouterModel = () => rt.openrouterModel?.trim() || OPENROUTER_MODEL();
+  const openrouterVisionModel = () => rt.openrouterModel?.trim() || OPENROUTER_VISION_MODEL();
 
   if (configured === 'ollama') {
-    return [{ name: 'ollama', modelId: vision ? OLLAMA_VISION_MODEL() : OLLAMA_MODEL() }];
+    return [{ name: 'ollama', modelId: vision ? ollamaVisionModel() : ollamaModel() }];
   }
   if (configured === 'openrouter') {
     if (!hasOpenRouterKey()) throw new Error('OPENROUTER_API_KEY is not set.');
-    return [{ name: 'openrouter', modelId: vision ? OPENROUTER_VISION_MODEL() : OPENROUTER_MODEL() }];
+    return [{ name: 'openrouter', modelId: vision ? openrouterVisionModel() : openrouterModel() }];
   }
 
   // auto
@@ -253,17 +267,17 @@ async function providerChain(vision: boolean): Promise<ProviderEntry[]> {
   // then OOM). Text stays on Ollama first for free local inference.
   if (vision) {
     if (hasOpenRouterKey()) {
-      chain.push({ name: 'openrouter', modelId: OPENROUTER_VISION_MODEL() });
+      chain.push({ name: 'openrouter', modelId: openrouterVisionModel() });
     }
     if (await isOllamaReachable()) {
-      chain.push({ name: 'ollama', modelId: OLLAMA_VISION_MODEL() });
+      chain.push({ name: 'ollama', modelId: ollamaVisionModel() });
     }
   } else {
     if (await isOllamaReachable()) {
-      chain.push({ name: 'ollama', modelId: OLLAMA_MODEL() });
+      chain.push({ name: 'ollama', modelId: ollamaModel() });
     }
     if (hasOpenRouterKey()) {
-      chain.push({ name: 'openrouter', modelId: OPENROUTER_MODEL() });
+      chain.push({ name: 'openrouter', modelId: openrouterModel() });
     }
   }
   if (chain.length === 0) throw new Error(NO_PROVIDER_MESSAGE);

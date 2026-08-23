@@ -3,6 +3,15 @@
 // about the store. The /api/chat route builds its system prompt from here, so
 // product prices, payment and FAQ data never drift from the real site.
 
+import { getPresetById } from '@/lib/ai-runtime';
+
+/** يرجع تعليمات أسلوب الشخصية المختارة من لوحة التحكم (نص فارغ إن لم وجد). */
+function getPersonalityInstructions(presetId: string): string {
+  const preset = getPresetById(presetId);
+  if (!preset) return '';
+  return `\n===== PERSONALITY (configured by the shop owner — follow it) =====\n${preset.instructions}`;
+}
+
 export interface ChatProduct {
   key: string;
   nameFr: string;
@@ -177,6 +186,15 @@ export interface ChatPromptOptions {
     email?: string | null;
     isGuest?: boolean;
   } | null;
+  /** ====== إعدادات المشرف الحيّة (لوحة التحكم → مركز الذكاء) ====== */
+  admin?: {
+    personality?: string;
+    customStyle?: string;
+    extraInstructions?: string;
+    lengthPref?: 'short' | 'balanced' | 'detailed';
+    languagePolicy?: 'auto' | 'fr' | 'ar';
+    ordersEnabled?: boolean;
+  } | null;
 }
 
 export function buildChatSystemPrompt(options: ChatPromptOptions = {}): string {
@@ -184,12 +202,27 @@ export function buildChatSystemPrompt(options: ChatPromptOptions = {}): string {
     (p) => `- ${p.nameFr} / ${p.nameAr} : ${p.packPriceDZD} DA pour ${p.packSize} unités (${p.unitPriceDZD} DA/unité)`
   ).join('\n');
 
-  const langRule =
-    options.languageHint === 'ar'
-      ? 'Reply in ARABIC (Modern Standard, friendly and natural). Keep French terms in parentheses when useful.'
-      : options.languageHint === 'fr'
-        ? 'Reply in FRENCH. Keep Arabic terms in parentheses when useful.'
-        : 'Reply in the SAME language the user writes in (Arabic or French).';
+  // سياسة اللغة: اختيار المشرف (لوحة التحكم) يتقدم على تلميح واجهة المستخدم
+  const adminLang = options.admin?.languagePolicy;
+  let langRule: string;
+  if (adminLang === 'fr') {
+    langRule = 'Reply in FRENCH always, even if the user writes in Arabic.';
+  } else if (adminLang === 'ar') {
+    langRule = 'Reply in ARABIC (Modern Standard) always, even if the user writes in French.';
+  } else if (options.languageHint === 'ar') {
+    langRule = 'Reply in ARABIC (Modern Standard, friendly and natural). Keep French terms in parentheses when useful.';
+  } else if (options.languageHint === 'fr') {
+    langRule = 'Reply in FRENCH. Keep Arabic terms in parentheses when useful.';
+  } else {
+    langRule = 'Reply in the SAME language the user writes in (Arabic or French).';
+  }
+
+  const lengthRule =
+    options.admin?.lengthPref === 'short'
+      ? 'LENGTH: Keep every reply under ~40 words. Ultra-concise.'
+      : options.admin?.lengthPref === 'detailed'
+        ? 'LENGTH: You may give richer, well-structured answers with sections and bullet lists when it helps the customer.'
+        : '';
 
   const pageContext = options.page
     ? `\nThe user is currently browsing the page "${options.page}". Use this to give contextual help (e.g. on /cart talk about the cart, on /orders about their orders).`
@@ -211,6 +244,23 @@ export function buildChatSystemPrompt(options: ChatPromptOptions = {}): string {
     ? `\n===== CONVERSATION SUMMARY (earlier turns, keep it consistent) =====\n${options.summary}`
     : '';
 
+  // قسم شخصية المساعد الذي يتحكم به المشرف من لوحة التحكم
+  const admin = options.admin;
+  const personalitySection =
+    admin?.personality && admin.personality !== 'custom'
+      ? getPersonalityInstructions(admin.personality)
+      : '';
+  const customStyleSection = admin?.customStyle
+    ? `\n===== OWNER STYLE DIRECTIVE (from the shop owner — follow it) =====\n${admin.customStyle}`
+    : '';
+  const extraSection = admin?.extraInstructions
+    ? `\n===== OWNER EXTRA INSTRUCTIONS (highest priority after STRICT RULES) =====\n${admin.extraInstructions}`
+    : '';
+
+  const ordersRule = admin?.ordersEnabled === false
+    ? '8. Order-taking via chat is temporarily DISABLED by the owner: never collect order details and never call createOrder. Instead, invite the user to order via the website catalog.'
+    : '8. When the user wants to order, collect step by step (name → phone → product → quantity), then confirm with createOrder.';
+
   return `You are L'Artisan AI, the smart, bilingual (Arabic + French) premium print consultant for "${COMPANY.name}" in Oran, Algeria.
 ${langRule}
 
@@ -222,10 +272,10 @@ ${langRule}
 5. Do NOT promise home delivery or quote delivery prices/times to other wilayas — it does not exist yet.
 6. Do NOT claim online card payment is available — it is not.
 7. Keep answers concise and scannable: short lines, **bold** for prices/quantities, bullet lists, no long paragraphs.
-8. When the user wants to order, collect step by step (name → phone → product → quantity), then confirm with createOrder.
+${ordersRule}
 9. When the user says something like "خذني إلى..." or "amène-moi à...", use navigateToPage.
 10. When the user asks about delivery status (livraison, التوصيل, الاستلام), call deliveryStatus. Never quote delivery times or fees to other wilayas.
-${pageContext}
+${lengthRule}${pageContext}
 ${userContext}
 
 ===== COMPANY =====
@@ -271,7 +321,8 @@ Also a daily "Wheel of Fortune" on the home page can generate a random welcome c
 - Contact: WhatsApp ${COMPANY.phone}.
 
 ===== TOOLS =====
-Use calculatePrice to give exact prices, searchProducts to find a product, checkPromoCode to validate a code, navigateToPage to move the user to a page, deliveryStatus to answer delivery/collection questions, and createOrder to register an order after collecting name, phone, product and quantity.`;
+Use calculatePrice to give exact prices, searchProducts to find a product, checkPromoCode to validate a code, navigateToPage to move the user to a page, deliveryStatus to answer delivery/collection questions, and createOrder to register an order after collecting name, phone, product and quantity.
+${personalitySection}${customStyleSection}${extraSection}`;
 }
 
 // ---------------------------------------------------------------------------
