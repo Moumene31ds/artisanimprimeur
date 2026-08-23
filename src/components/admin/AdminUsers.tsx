@@ -12,6 +12,7 @@ import {
   Ban, CheckCircle2, Mail, Phone, CalendarDays,
 } from "lucide-react";
 import { toast } from "sonner";
+import { exportCsv } from "@/lib/csv-export";
 import { useAuth } from "@/context/AuthContext";
 
 interface AdminUsersProps {
@@ -122,11 +123,7 @@ export default function AdminUsers({ orders, isRtl }: AdminUsersProps) {
         "Total Dépensé (DA)": statsByUser[u.id]?.spend || 0,
         Inscription: u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString("fr-CA") : "N/A",
       }));
-      const XLSX = await import('xlsx');
-      const ws = XLSX.utils.json_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Clients");
-      XLSX.writeFile(wb, `LArtisan_Clients_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      exportCsv(`LArtisan_Clients_${new Date().toISOString().slice(0, 10)}`, data);
       toast.success("Fichier Excel généré !");
     } catch {
       toast.error("Échec de l'export");

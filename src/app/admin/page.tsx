@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { exportCsv } from "@/lib/csv-export";
 import { useAuth } from "@/context/AuthContext";
 import dynamic from "next/dynamic";
 import { GlobalLoader } from "@/components/GlobalLoader";
@@ -513,12 +514,7 @@ export default function AdminPage() {
       Status: o.status,
       Date: o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('fr-CA') : 'N/A'
     }));
-    // xlsx (~430KB) يُحمَّل عند الطلب فقط عند الضغط على زر التصدير.
-    const XLSX = await import('xlsx');
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Commandes");
-    XLSX.writeFile(wb, `LArtisan_Orders_${new Date().toISOString().slice(0,10)}.xlsx`);
+    exportCsv(`LArtisan_Orders_${new Date().toISOString().slice(0,10)}`, data);
     toast.success("Fichier Excel généré !");
   };
 

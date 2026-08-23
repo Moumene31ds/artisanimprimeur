@@ -5,6 +5,7 @@ import { base64ToBuffer, isValidUploadType } from '@/lib/file-validate';
 import { getClientIp } from '@/lib/security';
 import { uploadLimiter } from '@/lib/rate-limit';
 import { logSecurityEvent } from '@/lib/audit';
+import { verifyAppCheck } from '@/lib/app-check';
 import { ok, fail, ApiError } from '@/lib/security';
 
 // ✅ Fixed: Use CLOUDINARY_CLOUD_NAME (server-side) — works in API routes
@@ -59,6 +60,21 @@ export async function POST(request: NextRequest) {
   const contentLength = Number(request.headers.get('content-length') || 0);
   if (contentLength > MAX_REQUEST_BYTES) {
     return fail(new ApiError(413, 'Request body too large.'));
+  }
+
+  // Security: Firebase App Check — إثبات أن الطلب يأتي من تطبيقنا الحقيقي
+  // (وليس روبوتات/سكربتات) عند تفعيل الحماية في المشروع؛ شفاف بدون تفعيل.
+  const appCheck = await verifyAppCheck(request);
+  if (!appCheck.valid) {
+    logSecurityEvent({
+      type: 'upload:app-check-failed',
+      ip: getClientIp(request),
+      details: 'Upload rejected: invalid or missing App Check token.',
+    });
+    return NextResponse.json(
+      { error: 'App Check verification failed.' },
+      { status: 403 }
+    );
   }
 
   try {

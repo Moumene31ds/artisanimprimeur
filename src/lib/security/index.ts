@@ -394,6 +394,9 @@ export function defaultCsp(): string {
     "object-src": ["'none'"],
     "base-uri": ["'self'"],
     "form-action": ["'self'"],
+    // تقارير الانتهاك: إنذار مبكر لمحاولات XSS (تُسجَّل في securityLogs).
+    "report-uri": ["/api/security/csp-report"],
+    "report-to": ["csp-endpoint"],
     "upgrade-insecure-requests": [],
   });
 }
@@ -406,6 +409,10 @@ export function isApiRequest(request: NextRequest): boolean {
 export function applySecurityHeaders(response: NextResponse) {
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set('X-Content-Type-Options', 'nosniff');
+  // إيقاف مدقق XSS القديم — توصية OWASP الحديثة (يمنع استغلال المدقق نفسه).
+  response.headers.set('X-XSS-Protection', '0');
+  // عزل نطاق العنقود لكل موقع — يقلل من أثر هجمات Spectre عبر المواقع.
+  response.headers.set('Origin-Agent-Cluster', '?1');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), payment=()');
   response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
@@ -413,6 +420,11 @@ export function applySecurityHeaders(response: NextResponse) {
   response.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
   response.headers.set('X-DNS-Prefetch-Control', 'off');
   response.headers.set('X-Permitted-Cross-Domain-Policies', 'none');
+  // نقطة استلام تقارير المتصفحات (CSP وغيرها) وفق مواصفة Reporting API.
+  response.headers.set(
+    'Reporting-Endpoints',
+    'csp-endpoint="/api/security/csp-report"'
+  );
   response.headers.set('Content-Security-Policy', defaultCsp());
   return response;
 }

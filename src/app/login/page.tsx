@@ -290,11 +290,39 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
+      // حارس الدخول الخادمي: قفل مرجعي ضد التخمين (لا يمكن تجاوزه بمسح التخزين).
+      if (authMode === "login") {
+        try {
+          const guard = await fetch("/api/auth/login-guard", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "check", email: email.trim() }),
+          });
+          const guardData = await guard.json().catch(() => ({ locked: false }));
+          if (guardData?.locked) {
+            const minutes = Math.max(1, Math.ceil((guardData.retryAfterSeconds || 60) / 60));
+            const msg = isRtl
+              ? `تم قفل محاولات الدخول مؤقتاً من الخادم — أعد المحاولة بعد ${minutes} دقيقة.`
+              : `Connexion temporairement verrouillée côté serveur — réessayez dans ${minutes} min.`;
+            setFormMessage(msg);
+            toast.error(msg);
+            return;
+          }
+        } catch {
+          // تعذر الوصول للحارس → نكمل (القفل المحلي يبقى فعالاً).
+        }
+      }
+
       if (authMode === "login") {
         await signInWithEmailAndPassword(auth, email.trim(), password);
-        
+
         localStorage.removeItem("login_failed_attempts");
         localStorage.removeItem("login_lockout_until");
+        fetch("/api/auth/login-guard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "reset", email: email.trim() }),
+        }).catch(() => {});
         setFormMessage("");
 
         await addDoc(collection(db, "securityLogs"), {
@@ -339,6 +367,13 @@ export default function LoginPage() {
       if (authMode === "login") {
         const attempts = Number(localStorage.getItem("login_failed_attempts") || 0) + 1;
         localStorage.setItem("login_failed_attempts", attempts.toString());
+
+        // إبلاغ الخادم بالفشل — يبني سجل القفل المرجعي (بريد + IP).
+        fetch("/api/auth/login-guard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "fail", email: email.trim() }),
+        }).catch(() => {});
 
         await addDoc(collection(db, "securityLogs"), {
           event: "login_failed",

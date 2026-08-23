@@ -8,6 +8,7 @@ import {
   FileText
 } from "lucide-react";
 import { toast } from "sonner";
+import { exportCsv } from "@/lib/csv-export";
 
 interface AdminSettingsProps {
   uiConfig: any;
@@ -129,12 +130,7 @@ export default function AdminSettings({
         Statut: log.status || "N/A",
         Details: log.details || ""
       }));
-      // xlsx (~430KB) يُحمَّل عند الطلب فقط عند الضغط على زر التصدير.
-      const XLSX = await import('xlsx');
-      const ws = XLSX.utils.json_to_sheet(logsToExport);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Security Logs");
-      XLSX.writeFile(wb, "ArtisanImprimeur_Security_Logs.xlsx");
+      exportCsv("ArtisanImprimeur_Security_Logs", logsToExport);
       toast.success("Sujets de sécurité exportés avec succès !");
     } catch (e) {
       toast.error("Erreur lors de l'exportation");
