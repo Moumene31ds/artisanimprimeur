@@ -120,7 +120,7 @@ export default function OutboxManager() {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 24, scale: 0.9 }}
           onClick={tryReplay}
-          className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] start-4 z-40 flex items-center gap-2 px-3.5 py-2 rounded-full bg-amber-500/95 text-white shadow-lg shadow-amber-500/30 backdrop-blur text-[11px] font-black"
+          className="kb-hide fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] start-4 z-40 flex items-center gap-2 px-3.5 py-2 rounded-full bg-amber-500/95 text-white shadow-lg shadow-amber-500/30 backdrop-blur text-[11px] font-black"
           aria-label={isRtl ? "إجراءات بانتظار الاتصال" : "Actions en attente de connexion"}
         >
           <CloudUpload size={14} className="shrink-0" />
@@ -135,7 +135,7 @@ export default function OutboxManager() {
           initial={{ opacity: 0, y: 24, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 24, scale: 0.9 }}
-          className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] start-4 z-40 flex items-center gap-2 px-3.5 py-2 rounded-full bg-blue-600/95 text-white shadow-lg shadow-blue-500/30 backdrop-blur text-[11px] font-black"
+          className="kb-hide fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] start-4 z-40 flex items-center gap-2 px-3.5 py-2 rounded-full bg-blue-600/95 text-white shadow-lg shadow-blue-500/30 backdrop-blur text-[11px] font-black"
           role="status"
         >
           <Loader2 size={14} className="shrink-0 animate-spin" />

@@ -64,6 +64,13 @@ export default function Navbar() {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // إغلاق كل القوائم عند تغيير الصفحة (تنقّل بالزر الخلفي للهاتف مثلاً).
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+    setIsNotificationsOpen(false);
+    setIsProfileDropdownOpen(false);
+  }, [pathname]);
+
   // مزامنة ملف المستخدم عند أول دخول.
   useEffect(() => {
     if (!isLoggedIn || !user) return;
@@ -352,7 +359,7 @@ export default function Navbar() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.95 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="lg:hidden absolute top-[110%] left-0 right-0 mx-4 p-5 deep-glass rounded-[2rem] shadow-2xl border border-white/20 dark:border-white/10 flex flex-col gap-2 z-50 overflow-hidden pointer-events-auto"
+              className="lg:hidden navbar-menu absolute top-[110%] left-0 right-0 mx-4 p-5 deep-glass rounded-[2rem] shadow-2xl border border-white/20 dark:border-white/10 flex flex-col gap-2 z-50 overflow-hidden pointer-events-auto"
             >
                <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-slate-700 dark:text-slate-200 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors">{isRtl ? 'الرئيسية' : 'Accueil'}</Link>
                <Link href="/services" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-slate-700 dark:text-slate-200 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors">{isRtl ? 'خدماتنا' : 'Services'}</Link>

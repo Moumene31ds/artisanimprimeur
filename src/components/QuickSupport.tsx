@@ -19,7 +19,7 @@ export default function QuickSupport() {
   if (!mounted) return null;
 
   return (
-    <div className={`fixed bottom-[calc(10rem+env(safe-area-inset-bottom))] left-6 z-50`} dir={isRtl ? "rtl" : "ltr"}>
+    <div className={`kb-hide fixed bottom-[calc(10rem+env(safe-area-inset-bottom))] left-6 z-50`} dir={isRtl ? "rtl" : "ltr"}>
       <div
         className={`absolute bottom-14 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl p-5 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 w-64 md:w-72 space-y-4 mb-2 transition-all duration-300 ease-in-out transform ${
           isOpen 

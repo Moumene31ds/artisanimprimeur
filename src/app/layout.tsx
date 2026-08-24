@@ -22,6 +22,8 @@ import WelcomeOfferPopup from "@/components/WelcomeOfferPopup";
 
 import PWAPrompt from "@/components/PWAPrompt";
 import CartReminder from "@/components/CartReminder";
+import ScrollToTop from "@/components/ScrollToTop";
+import MobileUXEnhancer from "@/components/MobileUXEnhancer";
 
 import SettingsManager from "@/components/SettingsManager";
 
@@ -136,7 +138,58 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   maximumScale: 5,
   colorScheme: "light dark",
+  // Android Chrome: المحتوى يُعاد قياسه عند ظهور الكيبورد بدلاً من التمرير فوقه
+  // (يتكامل مع useKeyboard/MobileUXEnhancer لتجربة إدخال سليمة على الهاتف).
+  interactiveWidget: "resizes-content",
 };
+
+/**
+ * شاشات إقلاع iOS — تُعرض لحظة فتح التطبيق المثبّت من الشاشة الرئيسية
+ * قبل جاهزية الـ WebView (تجربة إقلاع أصلية بلا وميض أبيض).
+ * تُولَّد الملفات عبر: node scripts/generate-ios-splash.mjs
+ */
+const IOS_SPLASHES: { w: number; h: number; media: string }[] = [
+  {
+    w: 1290, h: 2796,
+    media: "(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)",
+  },
+  {
+    w: 1284, h: 2778,
+    media: "(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)",
+  },
+  {
+    w: 1242, h: 2688,
+    media: "(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3)",
+  },
+  {
+    w: 1179, h: 2556,
+    media: "(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)",
+  },
+  {
+    w: 1170, h: 2532,
+    media: "(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)",
+  },
+  {
+    w: 1125, h: 2436,
+    media: "(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)",
+  },
+  {
+    w: 750, h: 1334,
+    media: "(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)",
+  },
+  {
+    w: 2048, h: 2732,
+    media: "(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)",
+  },
+  {
+    w: 1668, h: 2388,
+    media: "(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2)",
+  },
+  {
+    w: 1668, h: 2224,
+    media: "(device-width: 834px) and (device-height: 1112px) and (-webkit-device-pixel-ratio: 2)",
+  },
+];
 
 export default function RootLayout({
   children,
@@ -149,6 +202,15 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* شاشات إقلاع iOS — لكل جهاز صورة بمقاسه الدقيق */}
+        {IOS_SPLASHES.map(({ w, h, media }) => (
+          <link
+            key={`${w}x${h}`}
+            rel="apple-touch-startup-image"
+            media={media}
+            href={`/splash/apple-splash-${w}x${h}.png`}
+          />
+        ))}
       </head>
       <body className="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased selection:bg-accent selection:text-white transition-colors duration-300 min-h-dvh overflow-x-hidden relative">
         
@@ -167,6 +229,7 @@ export default function RootLayout({
             </a>
 
             <SettingsManager />
+            <MobileUXEnhancer />
             <PWAPrompt />
             <CartReminder />
             <AnnouncementBar />
@@ -177,7 +240,7 @@ export default function RootLayout({
             <LiveSales />
             <Navbar />
             
-            <main id="main-content" className="min-h-dvh max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[calc(6rem+env(safe-area-inset-top))] pb-28 md:pb-12 relative z-10">
+            <main id="main-content" className="min-h-dvh max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[calc(6rem+env(safe-area-inset-top))] pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:pb-12 relative z-10">
               {children}
             </main>
             
@@ -185,6 +248,7 @@ export default function RootLayout({
             <AntigravityChat />
             <WhatsAppButton />
             <StickyCartBar />
+            <ScrollToTop />
             <BottomNav />
             <WelcomeOfferPopup />
             

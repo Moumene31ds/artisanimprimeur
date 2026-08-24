@@ -314,8 +314,10 @@ section[id], [id^="section-"] {
   }
 }
 
-/* 🎯 وضع الأداء للهواتف الضعيفة: إيقاف كل الحركات الثقيلة والتأثيرات */
-[data-perf="true"] *, [data-perf="true"] *::before, [data-perf="true"] *::after {
+/* 🎯 وضع الأداء للهواتف الضعيفة + الوضع الاقتصادي التلقائي للشبكة البطيئة:
+   إيقاف كل الحركات الثقيلة والتأثيرات */
+[data-perf="true"] *, [data-perf="true"] *::before, [data-perf="true"] *::after,
+[data-net="slow"] *, [data-net="slow"] *::before, [data-net="slow"] *::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
@@ -324,16 +326,23 @@ section[id], [id^="section-"] {
   -webkit-backdrop-filter: none !important;
 }
 [data-perf="true"] .decor-blob,
-[data-perf="true"] .animate-blob {
+[data-perf="true"] .animate-blob,
+[data-net="slow"] .decor-blob,
+[data-net="slow"] .animate-blob {
   display: none !important;
 }
-[data-perf="true"] .noise-overlay {
+[data-perf="true"] .noise-overlay,
+[data-net="slow"] .noise-overlay {
   display: none !important;
 }
 [data-perf="true"] .glass-spotlight::after,
 [data-perf="true"] .btn-shine::after,
 [data-perf="true"] .btn-shimmer::before,
-[data-perf="true"] .animated-border::after {
+[data-perf="true"] .animated-border::after,
+[data-net="slow"] .glass-spotlight::after,
+[data-net="slow"] .btn-shine::after,
+[data-net="slow"] .btn-shimmer::before,
+[data-net="slow"] .animated-border::after {
   animation: none !important;
   opacity: 0 !important;
 }
@@ -790,5 +799,121 @@ section[id], [id^="section-"] {
   .pwa-titlebar [role="button"] {
     -webkit-app-region: no-drag;
     app-region: no-drag;
+  }
+}
+
+/* ==========================================================================
+   📱 لوحة المفاتيح الافتراضية (VisualViewport) — إدارة ذكية للعناصر العائمة
+   ==========================================================================
+   عندما تفتح الكيبورد على الهاتف تُضبط data-keyboard="open" على <html>
+   (عبر useKeyboard) و--kb-offset بارتفاعها. النتيجة:
+   - العناصر العائمة السفلية (.kb-hide) تنسحب للخلف بسلاسة بدل أن
+     تغطي حقول الإدخال أو تبقى معلقة فوق الكيبورد.
+   - المتغير --kb-offset متاح لأي حاوية تحتاج دفع محتواها فوق الكيبورد.
+   ========================================================================== */
+html[data-keyboard="open"] .kb-hide {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(calc(var(--kb-offset, 0px) * 0.06 + 10px));
+}
+.kb-hide {
+  transition: opacity 0.22s ease, visibility 0.22s ease, transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+}
+/* أداة: دفع عنصر ثابت فوق الكيبورد مباشرة (مثل شريط إدخال المحادثة) */
+.kb-above {
+  bottom: var(--kb-offset, 0px);
+}
+/* أداة: مسافة سفلية تتقلص تلقائياً بقدر ارتفاع الكيبورد */
+.kb-pad-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), var(--kb-offset, 0px));
+}
+
+/* ==========================================================================
+   📱 وضع Landscape للهواتف — شريط تنقّل مدمج يوفّر ارتفاع الشاشة الضيق
+   ========================================================================== */
+/* شريط التنقل السفلي: بلا تحديد نص بالضغط المطوّل (iOS) وبلا سحب تفاعلي */
+.mobile-nav {
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-x;
+}
+
+/* ==========================================================================
+   📋 قائمة الجوال المنسدلة (Navbar) — تمرير آمن داخل الشاشة الصغيرة
+   ==========================================================================
+   القائمة تحتوي روابط كثيرة؛ على الهواتف القصيرة أو في الوضع الأفقي كانت
+   تفيض خارج الشاشة. الآن ارتفاعها محدود مع تمرير داخلي ناعم ومسافة
+   أمان سفلية لشريط الإيماءة/الـ Home indicator. */
+.navbar-menu {
+  max-height: 34rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  /* مسافة إيماءة العودة السفلية (iPhone) */
+  margin-bottom: env(safe-area-inset-bottom);
+}
+@supports (height: 100dvh) {
+  .navbar-menu {
+    max-height: min(74dvh, 40rem);
+  }
+}
+
+/* ==========================================================================
+   📱 PWA المثبّت (standalone): شريط حالة شفاف — وضوح عناصر النظام
+   ==========================================================================
+   مع apple-mobile-web-app-status-bar-style=black-translucent يمتد المحتوى
+   تحت ساعة/بطارية iPhone. هذا التدرج الخافت خلف منطقة الأمان العلوية
+   يحافظ على قراءة عناصر النظام في الوضعين الفاتح والداكن دون كسر
+   الشفافية الزجاجية للتصميم. */
+@media (display-mode: standalone) {
+  .pwa-titlebar::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: max(env(safe-area-inset-top), 0px);
+    background: linear-gradient(
+      to bottom,
+      rgba(248, 250, 252, 0.92) 35%,
+      rgba(248, 250, 252, 0)
+    );
+    pointer-events: none;
+    z-index: -1;
+  }
+  html.dark .pwa-titlebar::before {
+    background: linear-gradient(
+      to bottom,
+      rgba(2, 6, 23, 0.92) 35%,
+      rgba(2, 6, 23, 0)
+    );
+  }
+}
+
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  .mobile-nav.mobile-nav {
+    /* الارتفاع الكلي يشمل منطقة أمان الإيماءة السفلية */
+    height: calc(58px + env(safe-area-inset-bottom));
+  }
+  .mobile-nav .nav-icon {
+    width: 20px;
+    height: 20px;
+  }
+  .mobile-nav .nav-label {
+    display: none; /* الأيقونات وحدها تكفي في الوضع الأفقي الضيق */
+  }
+
+  /* الشريط العلوي: تقليص المساحة العلوية + تفادي النوتش الجانبي
+     (iPhone في الوضع الأفقي يحفر النوتش داخل الحافة الطولية) */
+  .pwa-titlebar.pwa-titlebar {
+    padding-top: max(0.25rem, env(safe-area-inset-top));
+  }
+  .pwa-titlebar {
+    padding-left: calc(env(safe-area-inset-left) + 1rem);
+    padding-right: calc(env(safe-area-inset-right) + 1rem);
+  }
+
+  /* مسافة المحتوى الرئيسي من الأعلى تتبع الشريط المدمج */
+  #main-content {
+    padding-top: calc(4.5rem + env(safe-area-inset-top));
   }
 }

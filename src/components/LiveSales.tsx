@@ -102,7 +102,7 @@ export default function LiveSales() {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 20, scale: 0.9 }}
         transition={{ type: "spring", stiffness: 260, damping: 20 }}
-        className={`fixed bottom-[76px] md:bottom-6 ${
+        className={`kb-hide fixed bottom-[76px] md:bottom-6 ${
           isRtl ? "left-4" : "right-4"
         } z-[999] max-w-sm w-[calc(100dvw-2rem)] ios-glass border border-white/40 dark:border-white/10 rounded-[2rem] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.15)] flex items-center gap-4`}
         dir={isRtl ? "rtl" : "ltr"}

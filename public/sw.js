@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v9';
+const CACHE_VERSION = 'v10';
 const CACHE_NAME = `artisan-print-${CACHE_VERSION}`;
 const STATIC_CACHE = `artisan-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `artisan-dynamic-${CACHE_VERSION}`;
@@ -8,7 +8,7 @@ const META_CACHE = `artisan-meta-${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline';
 
 // إصدار البناء — يُحدَّث عند كل إصدار جديد ليتمكّن العملاء من التحقق منه.
-const BUILD_ID = 'v9';
+const BUILD_ID = 'v10';
 
 const STATIC_ASSETS = [
   '/offline',
@@ -98,7 +98,7 @@ self.addEventListener('fetch', (event) => {
 
   // تنقّل بين الصفحات — network-first مع الاحتياط للأوفلاين.
   if (isPageRequest(request)) {
-    event.respondWith(networkFirstWithFallback(request, OFFLINE_URL));
+    event.respondWith(networkFirstWithFallback(request, OFFLINE_URL, event));
     return;
   }
 
@@ -170,10 +170,28 @@ async function networkFirst(request) {
   }
 }
 
-async function networkFirstWithFallback(request, fallbackUrl) {
+/**
+ * تنقّل الصفحات: network-first مع استغلال Navigation Preload.
+ * يبدأ المتصفح طلب التنقل بالتوازي مع إقلاع السيرفس ووركر — ننتظر نتيجته
+ * أولاً (event.preloadResponse) بدل إطلاق طلب جديد مكرر، فتقل مدة
+ * "أول رسم للمحتوى" بوضوح على شبكات الهاتف البطيئة.
+ */
+async function networkFirstWithFallback(request, fallbackUrl, event) {
   try {
-    const response = await fetch(request);
-    if (response.ok) {
+    let response = null;
+    if (event && event.preloadResponse) {
+      try {
+        // مهلة احتياطية: إن تعثر الـ preload نكمل بطلب عادي دون انتظار طويل.
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('preload-timeout')), 4000)
+        );
+        response = await Promise.race([event.preloadResponse, timeout]);
+      } catch (e) { /* نُكمل بالطلب العادي */ }
+    }
+    if (!response || !response.ok) {
+      response = await fetch(request);
+    }
+    if (response && response.ok) {
       await safePut(DYNAMIC_CACHE, request, response, DYNAMIC_MAX_ENTRIES);
       return response;
     }

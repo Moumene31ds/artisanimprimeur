@@ -965,7 +965,7 @@ export default function AntigravityChat() {
         aria-label="Toggle AI Chat"
         whileHover={shouldReduceMotion ? {} : { scale: 1.05 }}
         whileTap={shouldReduceMotion ? {} : { scale: 0.95 }}
-        className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-slate-900 to-indigo-950 dark:from-indigo-600 dark:to-indigo-800 text-white flex items-center justify-center shadow-[0_10px_30px_rgba(79,70,229,0.3)] relative border border-white/20 cursor-pointer group transition-shadow"
+        className={`w-14 h-14 rounded-2xl bg-gradient-to-tr from-slate-900 to-indigo-950 dark:from-indigo-600 dark:to-indigo-800 text-white flex items-center justify-center shadow-[0_10px_30px_rgba(79,70,229,0.3)] relative border border-white/20 cursor-pointer group transition-shadow ${!isOpen ? 'kb-hide' : ''}`}
       >
         {isOpen ? <X size={24} /> : <MessageSquareCode size={24} className={shouldReduceMotion ? "" : "group-hover:animate-pulse"} />}
         {!isOpen && unreadCount > 0 && (
