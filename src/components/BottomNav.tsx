@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, PlaySquare, Clapperboard, FolderOpen, Plus } from "lucide-react";
+import { Home, Printer, Box, User, Plus } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useNotifications } from "@/hooks/useNotifications";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
@@ -52,9 +52,9 @@ export default function BottomNav() {
 
   const navItems: NavItem[] = [
     { icon: Home, label: isRtl ? "الرئيسية" : "Accueil", href: "/" },
-    { icon: PlaySquare, label: isRtl ? "ريلز" : "Reels", href: "/services" },
-    { icon: Clapperboard, label: isRtl ? "فيديوهات" : "Vidéos", href: "/showroom" },
-    { icon: FolderOpen, label: isRtl ? "المكتبة" : "Bibliothèque", href: "/profile", badge: unreadCount },
+    { icon: Printer, label: isRtl ? "خدماتنا" : "Services", href: "/services" },
+    { icon: Box, label: isRtl ? "المعرض" : "Showroom", href: "/showroom" },
+    { icon: User, label: isRtl ? "حسابي" : "Profil", href: "/profile", badge: unreadCount },
   ];
 
   const handleTap = useCallback(() => {
@@ -65,16 +65,19 @@ export default function BottomNav() {
 
   return (
     <motion.nav
-      initial={prefersReducedMotion ? false : { y: 80, opacity: 0 }}
-      animate={{ y: hidden ? 80 : 0, opacity: hidden ? 0 : 1 }}
-      transition={{ type: "spring", stiffness: 340, damping: 28 }}
+      initial={prefersReducedMotion ? false : { y: 100, opacity: 0 }}
+      animate={{ y: hidden ? 100 : 0, opacity: hidden ? 0 : 1 }}
+      transition={{ type: "spring", stiffness: 320, damping: 30 }}
       dir={isRtl ? "rtl" : "ltr"}
       role="navigation"
       aria-label={isRtl ? "التنقل الرئيسي" : "Navigation principale"}
-      className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50"
+      className="md:hidden fixed z-50
+        bottom-[max(1rem,env(safe-area-inset-bottom))]
+        left-1/2 -translate-x-1/2
+        w-[calc(100%-2rem)] max-w-[24rem]"
     >
-      <div className="glass-bottom-nav flex items-center gap-1 p-1.5 rounded-full">
-        {navItems.map((item, i) => {
+      <div className="glass-bottom-nav flex items-center justify-between gap-1 px-2 py-1.5 rounded-full">
+        {navItems.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
           const hasBadge = typeof item.badge === "number" && item.badge > 0;
@@ -86,7 +89,7 @@ export default function BottomNav() {
               aria-current={isActive ? "page" : undefined}
               aria-label={`${item.label}${hasBadge ? ` — ${item.badge} ${isRtl ? "جديد" : "nouveau"}` : ""}`}
               onClick={handleTap}
-              className="relative flex flex-col items-center justify-center w-14 h-14 rounded-full transition-colors duration-200 active:scale-95 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+              className="relative flex flex-col items-center justify-center min-w-[3.25rem] h-12 px-2 rounded-full transition-colors duration-200 active:scale-95 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
             >
               <AnimatePresence>
                 {isActive && (
@@ -102,7 +105,7 @@ export default function BottomNav() {
                 whileTap={prefersReducedMotion ? undefined : { scale: 0.82 }}
                 animate={isActive ? { y: -1 } : { y: 0 }}
                 transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                className={`relative z-10 flex flex-col items-center justify-center gap-0.5 ${
+                className={`relative z-10 flex flex-col items-center justify-center gap-px ${
                   isActive
                     ? "text-slate-900 dark:text-white"
                     : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
@@ -114,12 +117,12 @@ export default function BottomNav() {
                     strokeWidth={isActive ? 2.4 : 1.8}
                   />
                   {hasBadge && (
-                    <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 flex items-center justify-center bg-red-500 text-white text-[8px] font-black rounded-full shadow-md ring-1.5 ring-white dark:ring-slate-900 animate-pulse">
+                    <span className="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 flex items-center justify-center bg-red-500 text-white text-[8px] font-black rounded-full shadow-md ring-1.5 ring-white dark:ring-slate-900 animate-pulse">
                       {item.badge! > 99 ? "99+" : item.badge}
                     </span>
                   )}
                 </span>
-                <span className={`text-[9px] leading-none font-semibold transition-opacity duration-200 ${
+                <span className={`text-[10px] leading-none font-semibold transition-opacity duration-200 ${
                   isActive ? "opacity-100" : "opacity-70"
                 }`}>
                   {item.label}
@@ -129,15 +132,15 @@ export default function BottomNav() {
           );
         })}
 
-        <div className="w-px h-8 bg-gradient-to-b from-transparent via-slate-900/10 to-transparent dark:via-white/10 mx-0.5" />
+        <div className="w-px h-7 bg-gradient-to-b from-transparent via-slate-900/10 to-transparent dark:via-white/10" />
 
         <motion.button
           whileTap={prefersReducedMotion ? undefined : { scale: 0.88 }}
-          aria-label={isRtl ? "إجراء جديد" : "Nouvelle action"}
+          aria-label={isRtl ? "طلب جديد" : "Nouvelle commande"}
           onClick={handleTap}
-          className="glass-bottom-nav-fab relative flex items-center justify-center w-11 h-11 rounded-full select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+          className="glass-bottom-nav-fab flex items-center justify-center w-10 h-10 rounded-full select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent shrink-0"
         >
-          <Plus size={22} strokeWidth={2.8} className="text-white relative z-10" />
+          <Plus size={20} strokeWidth={2.8} className="text-white relative z-10" />
         </motion.button>
       </div>
     </motion.nav>
