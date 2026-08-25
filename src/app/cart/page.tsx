@@ -1153,7 +1153,7 @@ export default function CartPage() {
 
                 <div className="flex justify-between items-end pt-4">
                   <span className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">{t.total}</span>
-                  <span className="text-4xl font-black text-accent">{finalTotal} <span className="text-lg text-slate-500">{t.currency}</span></span>
+                  <span className="text-2xl font-black text-accent">{finalTotal} <span className="text-sm text-slate-500">{t.currency}</span></span>
                 </div>
               </div>
 

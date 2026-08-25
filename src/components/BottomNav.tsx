@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Printer, Box, User, Plus, Gift } from "lucide-react";
+import { Home, Printer, Box, User, Plus, Gift, CreditCard } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useNotifications } from "@/hooks/useNotifications";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
@@ -55,6 +55,7 @@ export default function BottomNav() {
     { icon: Printer, label: isRtl ? "خدماتنا" : "Services", href: "/services" },
     { icon: Box, label: isRtl ? "المعرض" : "Showroom", href: "/showroom" },
     { icon: Gift, label: isRtl ? "مزايا" : "Récompenses", href: "/rewards" },
+    { icon: CreditCard, label: isRtl ? "تأكيد الدفع" : "Paiement", href: "/payment-verify" },
     { icon: User, label: isRtl ? "حسابي" : "Profil", href: "/profile", badge: unreadCount },
   ];
 
