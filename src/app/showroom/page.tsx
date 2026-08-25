@@ -22,7 +22,7 @@ const PRESETS = [
 ];
 
 type MaterialType = 'matte' | 'glossy' | 'holographic' | 'gold';
-type ModelType = 'mug' | 'tshirt' | 'box' | 'poster';
+type ModelType = 'mug' | 'tshirt' | 'box' | 'poster' | 'card';
 
 // Helper component to enable canvas export
 function CanvasCaptureHelper({ triggerCapture, onCaptureComplete }: { triggerCapture: boolean; onCaptureComplete: (url: string) => void }) {
@@ -218,6 +218,48 @@ function ShowroomPoster({ designUrl, material, modelColor }: { designUrl: string
   );
 }
 
+// 5. Carte de Visite (Business Card) Model
+function ShowroomCard({ designUrl, material, modelColor }: { designUrl: string; material: MaterialType; modelColor: string }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const texture = designUrl ? useTexture(designUrl) : null;
+
+  const materialProps = {
+    color: material === 'gold' ? "#D4AF37" : modelColor,
+    roughness: material === 'matte' ? 0.9 : material === 'glossy' ? 0.05 : material === 'gold' ? 0.2 : 0.1,
+    metalness: material === 'gold' ? 0.85 : material === 'holographic' ? 0.75 : 0.02,
+    clearcoat: material === 'glossy' ? 1.0 : 0,
+    clearcoatRoughness: 0.1,
+  };
+
+  useFrame((state, delta) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y += delta * 0.12;
+    }
+  });
+
+  return (
+    <group ref={groupRef} rotation={[0.15, 0, 0.05]}>
+      {/* Card body — standard 85×55mm proportions */}
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[2.55, 1.65, 0.04]} />
+        <meshPhysicalMaterial {...materialProps} />
+      </mesh>
+      {/* Front face design */}
+      {texture && (
+        <mesh position={[0, 0, 0.021]}>
+          <planeGeometry args={[2.55, 1.65]} />
+          <meshPhysicalMaterial
+            map={texture}
+            transparent
+            roughness={material === 'glossy' ? 0.05 : 0.8}
+            metalness={material === 'gold' ? 0.8 : 0}
+          />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
 export default function ShowroomPage() {
   const { language } = useAppStore();
   const isRtl = language === 'ar';
@@ -242,7 +284,7 @@ export default function ShowroomPage() {
     try {
       const params = new URLSearchParams(window.location.search);
       const m = params.get("model");
-      if (m === "mug" || m === "tshirt" || m === "box" || m === "poster") setModelType(m);
+      if (m === "mug" || m === "tshirt" || m === "box" || m === "poster" || m === "card") setModelType(m);
       const mat = params.get("material");
       if (mat === "matte" || mat === "glossy" || mat === "holographic" || mat === "gold") setMaterial(mat);
       const color = params.get("color");
@@ -386,6 +428,7 @@ export default function ShowroomPage() {
                   {modelType === 'box' && <ShowroomBox designUrl={designUrl} material={material} modelColor={modelColor} />}
                   {modelType === 'tshirt' && <ShowroomTshirt designUrl={designUrl} material={material} modelColor={modelColor} />}
                   {modelType === 'poster' && <ShowroomPoster designUrl={designUrl} material={material} modelColor={modelColor} />}
+                  {modelType === 'card' && <ShowroomCard designUrl={designUrl} material={material} modelColor={modelColor} />}
                 </Center>
                 
                 {/* Dynamically adjust environment map reflection */}
@@ -443,12 +486,13 @@ export default function ShowroomPage() {
                 <Package size={14} className="text-indigo-500" />
                 {isRtl ? "1. اختر مجسم المنتج :" : "1. Choisir le produit :"}
               </h3>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-3 gap-2.5">
                 {[
                   { id: 'mug', label: isRtl ? 'كوب سحري' : 'Mug', icon: "☕" },
-                  { id: 'box', label: isRtl ? 'علبة كرتون' : 'Packaging Box', icon: "📦" },
+                  { id: 'box', label: isRtl ? 'علبة كرتون' : 'Packaging', icon: "📦" },
                   { id: 'tshirt', label: isRtl ? 'قميص قطني' : 'T-Shirt', icon: "👕" },
-                  { id: 'poster', label: isRtl ? 'ملصق مع إطار' : 'Poster Frame', icon: "🖼️" }
+                  { id: 'poster', label: isRtl ? 'ملصق مع إطار' : 'Poster', icon: "🖼️" },
+                  { id: 'card', label: isRtl ? 'كارت فيزيت' : 'Carte Visite', icon: "💳" }
                 ].map(item => (
                   <button
                     key={item.id}
