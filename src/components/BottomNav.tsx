@@ -71,9 +71,8 @@ export default function BottomNav() {
       dir={isRtl ? "rtl" : "ltr"}
       role="navigation"
       aria-label={isRtl ? "التنقل الرئيسي" : "Navigation principale"}
-      className="md:hidden fixed z-50
-        bottom-[max(1rem,env(safe-area-inset-bottom))]
-        left-1/2 -translate-x-1/2"
+      className="md:hidden fixed z-50 left-0 right-0 mx-auto w-fit
+        bottom-[max(1rem,env(safe-area-inset-bottom))]"
     >
       <div className="glass-bottom-nav flex items-center gap-1 px-2 py-1.5 rounded-full">
         {navItems.map((item) => {
