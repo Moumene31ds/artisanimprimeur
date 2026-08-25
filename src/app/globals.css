@@ -502,6 +502,100 @@ html[data-font-size="xl"] { font-size: 125%; }
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
 
+/* ==========================================
+   Glassmorphic Floating Bottom Navigation
+   iOS-inspired • Capsule • Blur • Glow
+   ========================================== */
+
+.glass-bottom-nav {
+  background: rgba(255, 255, 255, 0.32);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  will-change: transform;
+}
+
+.dark .glass-bottom-nav {
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02);
+}
+
+/* Active pill — floating glass indicator behind the selected tab */
+.glass-bottom-nav-active-pill {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass-bottom-nav-active-pill {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* FAB — vibrant red gradient with breathing glow */
+.glass-bottom-nav-fab {
+  background: linear-gradient(135deg, #dc2626, #f87171);
+  box-shadow:
+    0 8px 20px rgba(239, 68, 68, 0.4),
+    0 2px 6px rgba(239, 68, 68, 0.2);
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1),
+              box-shadow 0.2s ease;
+  animation: fab-glow 3s ease-in-out infinite;
+}
+
+.glass-bottom-nav-fab:active {
+  transform: scale(0.9);
+  box-shadow:
+    0 4px 12px rgba(239, 68, 68, 0.5),
+    0 1px 4px rgba(239, 68, 68, 0.3);
+  animation: none;
+}
+
+@keyframes fab-glow {
+  0%, 100% {
+    box-shadow:
+      0 8px 20px rgba(239, 68, 68, 0.4),
+      0 2px 6px rgba(239, 68, 68, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 8px 28px rgba(239, 68, 68, 0.55),
+      0 2px 10px rgba(239, 68, 68, 0.3);
+  }
+}
+
+/* iOS safe area padding */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .glass-bottom-nav {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .glass-bottom-nav-fab {
+    animation: none;
+  }
+}
+
 /* Anchored sections (#products, ...) must not hide behind the fixed navbar */
 section[id], [id^="section-"] {
   scroll-margin-top: 6rem;
