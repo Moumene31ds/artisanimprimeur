@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Printer, Box, User, Plus, Gift, CreditCard } from "lucide-react";
+import { Home, Printer, Box, User, Gift, CreditCard } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useNotifications } from "@/hooks/useNotifications";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
@@ -131,17 +131,6 @@ export default function BottomNav() {
             </Link>
           );
         })}
-
-        <div className="w-px h-7 bg-gradient-to-b from-transparent via-slate-900/10 to-transparent dark:via-white/10" />
-
-        <motion.button
-          whileTap={prefersReducedMotion ? undefined : { scale: 0.88 }}
-          aria-label={isRtl ? "طلب جديد" : "Nouvelle commande"}
-          onClick={handleTap}
-          className="glass-bottom-nav-fab flex items-center justify-center w-10 h-10 rounded-full select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent shrink-0"
-        >
-          <Plus size={20} strokeWidth={2.8} className="text-white relative z-10" />
-        </motion.button>
       </div>
     </motion.nav>
   );
