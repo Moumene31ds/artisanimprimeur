@@ -25,7 +25,7 @@ const DEFAULT_CARD: BusinessCardData = {
   title: "Directeur Commercial",
   phone: "+212 6 00 00 00 00",
   email: "contact@artisanimprimeur.com",
-  address: "Casablanca, Maroc",
+  address: "Oran, Algérie",
   website: "https://artisanimprimeur.vercel.app",
   companyName: "L'Artisan Imprimeur",
 };
