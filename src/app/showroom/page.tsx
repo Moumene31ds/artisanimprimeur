@@ -6,13 +6,14 @@ import { useTexture, OrbitControls, Environment, ContactShadows, Center } from '
 import * as THREE from 'three';
 import { 
   Sparkles, Upload, Camera, RotateCw, Lightbulb, 
-  Layers, Package, Check, RefreshCw, Smartphone
+  Layers, Package, Check, RefreshCw, Smartphone, CreditCard
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import { useAppStore } from "@/lib/store";
+import ShowroomBusinessCard from "@/components/ShowroomBusinessCard";
 
 // Preset textures for testing
 const PRESETS = [
@@ -615,6 +616,16 @@ export default function ShowroomPage() {
         </div>
 
       </div>
+
+      {/* ========= Premium Business Card Section ========= */}
+      <section className="mt-16 mb-8">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-indigo-500/5 to-transparent rounded-[3rem] pointer-events-none" />
+          <div className="premium-glass p-8 md:p-12 rounded-[3rem] border border-white/60 dark:border-slate-800 shadow-2xl">
+            <ShowroomBusinessCard />
+          </div>
+        </div>
+      </section>
 
       {/* AR Modal simulation overlay */}
       <AnimatePresence>
