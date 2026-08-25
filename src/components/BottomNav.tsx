@@ -73,10 +73,9 @@ export default function BottomNav() {
       aria-label={isRtl ? "التنقل الرئيسي" : "Navigation principale"}
       className="md:hidden fixed z-50
         bottom-[max(1rem,env(safe-area-inset-bottom))]
-        left-1/2 -translate-x-1/2
-        w-[calc(100%-2rem)] max-w-[24rem]"
+        left-1/2 -translate-x-1/2"
     >
-      <div className="glass-bottom-nav flex items-center justify-between gap-1 px-2 py-1.5 rounded-full">
+      <div className="glass-bottom-nav flex items-center gap-1 px-2 py-1.5 rounded-full">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
