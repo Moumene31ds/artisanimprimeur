@@ -1,5 +1,12 @@
 import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
+import { generateImage, providerLabel } from '@/lib/image-gen';
+import { getClientIp } from '@/lib/security';
+import { SlidingWindowRateLimiter } from '@/lib/rate-limit';
+
+// توليد الصور مكلف (AI + تخزين Cloudinary) — حد صارم لكل IP.
+const imageGenLimiter = new SlidingWindowRateLimiter(60 * 60 * 1000, 15);
 
 // ✅ Fixed: Use CLOUDINARY_CLOUD_NAME (server-side) with fallback
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -13,9 +20,31 @@ cloudinary.config({
   secure: true,
 });
 
-export const maxDuration = 40;
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
+  // مفتاح التشغيل من لوحة الأدمن (مركز الذكاء الاصطناعي)
+  try {
+    const { getAiRuntimeConfig } = await import('@/lib/ai-runtime');
+    const rt = await getAiRuntimeConfig();
+    if (!rt.enabledImageGen) {
+      return NextResponse.json(
+        { error: 'La génération d\'images IA est temporairement désactivée par la boutique.', disabledByOwner: true },
+        { status: 503 }
+      );
+    }
+  } catch {
+    /* في حال فشل جلب الإعدادات نكمل بالوضع الافتراضي (مُفعّل) */
+  }
+
+  const rl = imageGenLimiter.allow(`ip:${getClientIp(req as NextRequest)}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Too many generations. Please try again later.', retryAfterSeconds: Math.ceil(rl.retryAfterMs / 1000) },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    );
+  }
+
   // Guard: Validate Cloudinary credentials
   if (!cloudName || !apiKey || !apiSecret) {
     return NextResponse.json(
@@ -32,27 +61,38 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { prompt, style } = await req.json();
+    const { prompt, style, seed, width, height } = await req.json();
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
       return NextResponse.json({ error: 'A valid prompt is required.' }, { status: 400 });
+    }
+    if (prompt.length > 500) {
+      return NextResponse.json({ error: 'Prompt is too long (max 500 characters).' }, { status: 400 });
     }
 
     const styleSuffix =
       style === 'pro'
         ? 'professional premium vector logo graphic style'
         : style === 'creative'
-        ? 'artistic creative graphic design concept'
-        : 'minimalist clean layout design';
+          ? 'artistic creative graphic design concept'
+          : 'minimalist clean layout design';
 
     const finalPrompt = `${prompt.trim()}, ${styleSuffix}, isolated on solid background, printable high resolution, design prototype`;
 
-    // Free image generation via Pollinations.ai (no API key required).
-    const seed = Math.floor(Math.random() * 100000);
-    const uploadTarget = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?width=800&height=600&nologo=true&seed=${seed}`;
+    // Clamp dimensions to safe print/generation bounds.
+    const genWidth = Math.min(Math.max(Number(width) || 1024, 256), 2048);
+    const genHeight = Math.min(Math.max(Number(height) || 1024, 256), 2048);
+
+    // Generate via the FLUX.1 / Pollinations provider chain (auto fallback).
+    const generated = await generateImage({
+      prompt: finalPrompt,
+      width: genWidth,
+      height: genHeight,
+      seed: typeof seed === 'number' ? seed : undefined,
+    });
 
     // 3. Upload result to Cloudinary for a permanent, fast-loading URL
-    const uploadResponse = await cloudinary.uploader.upload(uploadTarget, {
+    const uploadResponse = await cloudinary.uploader.upload(generated.imageUrl, {
       folder: 'lartisan-ai-studio',
       resource_type: 'image',
       access_mode: 'public',
@@ -61,8 +101,12 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       imageUrl: uploadResponse.secure_url,
-      fallback: true,
+      fallback: generated.fallback,
+      provider: generated.provider,
+      providerLabel: providerLabel(generated.provider),
       publicId: uploadResponse.public_id,
+      width: genWidth,
+      height: genHeight,
     });
 
   } catch (error: any) {

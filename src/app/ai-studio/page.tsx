@@ -9,7 +9,6 @@ const ThreeDPreview = dynamic(() => import("@/components/ThreeDPreview"), { ssr:
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import html2canvas from "html2canvas";
 import { toast } from "sonner";
 import { loadOptionalFonts } from "@/lib/fonts";
 
@@ -27,6 +26,7 @@ export default function AIStudioPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [generatedProvider, setGeneratedProvider] = useState<string | null>(null);
 
   interface DesignHistoryItem {
     id: string;
@@ -203,7 +203,7 @@ export default function AIStudioPage() {
     
     setIsSavingCustom(true);
     try {
-      const canvas = await html2canvas(element, {
+      const canvas = await (await import("html2canvas")).default(element, {
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
@@ -333,6 +333,7 @@ export default function AIStudioPage() {
     setIsGenerating(true);
     setGeneratedImage(null);
     setErrorMsg("");
+    setGeneratedProvider(null);
     
     try {
       const response = await fetch('/api/generate-image', {
@@ -340,11 +341,34 @@ export default function AIStudioPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, style: selectedStyle }),
       });
-      
+
+      if (!response.ok) {
+        const text = await response.text();
+        let message = text || `HTTP ${response.status}`;
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed?.error) message = parsed.error;
+        } catch {
+          // plain-text error (rate limit / CSRF) — keep raw text
+        }
+        if (response.status === 429) {
+          throw new Error(isRtl
+            ? "طلبات كثيرة جداً. انتظر قليلاً ثم أعد المحاولة."
+            : "Trop de requêtes. Attendez un instant puis réessayez.");
+        }
+        throw new Error(message);
+      }
+
       const data = await response.json();
       
       if (data.imageUrl) {
         setGeneratedImage(data.imageUrl);
+        setGeneratedProvider(data.providerLabel || null);
+        if (data.fallback && data.provider === 'pollinations') {
+          setErrorMsg(isRtl
+            ? "تم التوليد عبر مزوّد مجاني (Pollinations). أضف TOGETHER_API_KEY لتوليد FLUX.1 بجودة أعلى."
+            : "Généré via le fournisseur gratuit (Pollinations). Ajoutez TOGETHER_API_KEY pour une qualité FLUX.1 supérieure.");
+        }
         const newItem: DesignHistoryItem = {
           id: `design-${Date.now()}`,
           prompt,
@@ -352,16 +376,13 @@ export default function AIStudioPage() {
           timestamp: Date.now(),
         };
         setDesignHistory(prev => [newItem, ...prev].slice(0, 5));
-        if (data.fallback) {
-          setErrorMsg(isRtl ? "مفتاح API غير مفعل. هذه صورة افتراضية للتجربة." : "Clé API non configurée. Image par défaut affichée.");
-        }
+        toast.success(isRtl ? "تم توليد التصميم بنجاح!" : "Design généré avec succès !");
       } else {
         throw new Error(data.error || "Generation failed");
       }
     } catch (error) {
       console.error(error);
       setErrorMsg(isRtl ? "حدث خطأ أثناء التوليد. يرجى المحاولة لاحقاً." : "Erreur lors de la génération. Veuillez réessayer.");
-      setGeneratedImage("https://images.unsplash.com/photo-1626785774573-4b799315345d?w=800&q=80");
     } finally {
       setIsGenerating(false);
     }
@@ -886,6 +907,13 @@ export default function AIStudioPage() {
                     ref={containerRef}
                     className="relative w-full max-w-[480px] aspect-[4/3] rounded-2xl overflow-hidden shadow-2xl bg-black border border-slate-350 dark:border-slate-800 select-none"
                   >
+                    {generatedProvider && (
+                      <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 px-2.5 py-1 bg-black/60 backdrop-blur rounded-full text-[10px] font-black text-white border border-white/20">
+                        <Sparkles size={10} className="text-purple-400" />
+                        {generatedProvider}
+                      </div>
+                    )}
+
                     {generatedImage && (
                       <img 
                         src={generatedImage} 

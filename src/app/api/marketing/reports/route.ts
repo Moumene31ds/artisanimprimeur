@@ -1,8 +1,15 @@
+// src/app/api/marketing/reports/route.ts
+// تقارير الحملات التسويقية — للمشرف فقط.
 import { NextRequest, NextResponse } from 'next/server';
 import { generateCampaignReport } from '@/lib/marketing-service';
+import { requireAdmin } from '@/lib/admin-auth';
+import { ApiError } from '@/lib/security/api-error';
 
 export async function GET(request: NextRequest) {
   try {
+    const admin = await requireAdmin(request);
+    if (!admin) throw new ApiError(401, 'Admin authentication required');
+
     const { searchParams } = new URL(request.url);
     const campaignId = searchParams.get('campaignId');
 

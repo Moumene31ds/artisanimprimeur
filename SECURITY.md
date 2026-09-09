@@ -66,7 +66,27 @@ CSP_POLICY=default-src 'self'; object-src 'none'; ...
 
 # تفعيل فرض CSRF الكامل (يتطلب إرسال x-csrf-token من العميل)
 ENFORCE_CSRF_TOKEN=false
+
+# Firebase App Check (اختياري — حماية الروبوتات، reCAPTCHA v3 مجاني)
+NEXT_PUBLIC_RECAPTCHA_SITE_KEY=
+REQUIRE_APP_CHECK=false          # true = رفض صارم للطلبات بلا رمز App Check
+
+# توقيع ويب هوك WhatsApp (X-Hub-Secret-256) — يُنصح به بشدة في الإنتاج
+WHATSAPP_APP_SECRET=
+
+# رمز تصحيح App Check للتطوير المحلي فقط
+NEXT_PUBLIC_APPCHECK_DEBUG_TOKEN=
 ```
+
+### 2.1 الطبقات الأمنية الجديدة (2026-08)
+
+| الطبقة | الموقع | ملاحظات |
+|---|---|---|
+| توقيع Meta HMAC (timing-safe) | `whatsapp-service.ts` + webhook route | فعّل `WHATSAPP_APP_SECRET` لرفض الأحداث المنتحلة |
+| قفل دخول خادمي تصاعدي | `/api/auth/login-guard` + `authLockouts` | مرجعي عبر firebase-admin — لا يمكن تجاوزه بمسح التخزين |
+| تقارير انتهاكات CSP | `/api/security/csp-report` → `securityLogs` | إنذار مبكر لمحاولات XSS؛ تظهر في Firestore |
+| Firebase App Check | `firebase.ts` (عميل) + `app-check.ts` (خادم) | شفاف بدون ضبط؛ `REQUIRE_APP_CHECK=true` للتشديد |
+| حماية حقن CSV/Excel | `csv-export.ts` (بديل xlsx) | أزالت مكتبة SheetJS الثغرة (1 critical) نهائياً |
 
 ---
 

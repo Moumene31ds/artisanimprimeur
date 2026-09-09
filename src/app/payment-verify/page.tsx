@@ -224,12 +224,12 @@ export default function PaymentVerifyPage() {
     const type = res.headers.get("content-type") || "";
     if (!type.includes("application/json")) {
       const text = await res.text();
-      return { error: text?.slice(0, 160) || "Réponse inattendue du serveur." };
+      return { error: text?.slice(0, 160) || (isRtl ? "رد غير متوقع من الخادم." : "Réponse inattendue du serveur.") };
     }
     try {
       return await res.json();
     } catch {
-      return { error: "Réponse serveur invalide. Veuillez réessayer." };
+      return { error: isRtl ? "رد الخادم غير صالح. يرجى المحاولة مجدداً." : "Réponse serveur invalide. Veuillez réessayer." };
     }
   };
 
@@ -689,7 +689,7 @@ export default function PaymentVerifyPage() {
                       <div className="flex justify-between items-center">
                         <span>{isRtl ? "رقم العملية :" : "ID Transaction :"}</span>
                         <div className="flex flex-col items-end">
-                          <span className="font-mono text-[10px]">{aiReport.extractedTxId || "Non détecté"}</span>
+                          <span className="font-mono text-[10px]">{aiReport.extractedTxId || (isRtl ? "غير مكتشف" : "Non détecté")}</span>
                           {aiReport.extractedTxId && aiReport.extractedTxId.trim() !== txId.trim() && (
                             <button 
                               onClick={() => setTxId(aiReport.extractedTxId)}

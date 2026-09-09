@@ -15,12 +15,18 @@ export const firebaseConfig = {
   measurementId: config.firebase.measurementId,
 };
 
-// إعادة استخدام التطبيق إن سبق تهيئته (يمنع الخطأ الشهير "already initialized")
-export const app: FirebaseApp = !getApps().length
-  ? initializeApp(firebaseConfig)
-  : getApp();
+// بدون مفاتيح صالحة لا يُهيَّأ Firebase حتى لا ينكسر `next build`
+// (عند النشر على Vercel تكون المفاتيح موجودة فيعمل كل شيء طبيعياً).
+const configured = Boolean(config.firebase.apiKey && config.firebase.projectId);
 
-export const auth: Auth = getAuth(app);
+// إعادة استخدام التطبيق إن سبق تهيئته (يمنع الخطأ الشهير "already initialized")
+export const app: FirebaseApp = configured
+  ? !getApps().length
+    ? initializeApp(firebaseConfig)
+    : getApp()
+  : (undefined as unknown as FirebaseApp);
+
+export const auth: Auth = configured ? getAuth(app) : (undefined as unknown as Auth);
 
 // عنصر حاوية reCAPTCHA الخفي المستخدم في كل إرسال رمز
 export const RECAPTCHA_CONTAINER_ID = "recaptcha-container";

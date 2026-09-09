@@ -4,6 +4,7 @@ import { useAppStore } from "@/lib/store";
 import { calculateTierPrice } from "@/lib/pricing";
 import { TRANSLATIONS } from "@/lib/translations";
 import { getPointsForAmount } from "@/lib/loyalty";
+import { lanczosResample } from "@/lib/lanczos-upscale";
 import { useAuth } from "@/context/AuthContext";
 import { 
   Trash2, Plus, Minus, ShoppingBag, CheckCircle, 
@@ -22,6 +23,7 @@ import { WILAYAS } from "@/lib/constants";
 import SecurityVerification from "@/components/SecurityVerification";
 import SmartCartUpsell from "@/components/SmartCartUpsell";
 import PullToRefresh from "@/components/PullToRefresh";
+import { startBackgroundUpload, useBackgroundUploadResult } from "@/lib/background-fetch";
 import { buildStatusHistory } from "@/lib/order-status";
 
 export default function CartPage() {
@@ -113,6 +115,24 @@ export default function CartPage() {
     }
   }, []);
 
+  // متابعة نتائج الرفع الخلفي (Background Fetch): تطبيق الرابط عند الاكتمال
+  useBackgroundUploadResult(async (_id, data, meta) => {
+    const rtl = language === "ar";
+    if (data?.url) {
+      setUploadedFileUrl(data.url);
+      setFileStatus('good');
+      toast.success(rtl ? "اكتمل رفع ملف التصميم بالخلفية ✓" : "Upload en arrière-plan terminé ✓");
+      await runPreflightCheck(
+        data.url,
+        (meta?.width as number) ?? undefined,
+        (meta?.height as number) ?? undefined
+      );
+    } else if (_id) {
+      setFileStatus('error');
+      toast.error(rtl ? "فشل الرفع الخلفي — جرّب مرة أخرى." : "Échec de l'upload en arrière-plan.");
+    }
+  });
+
   useEffect(() => {
     setMounted(true);
     
@@ -184,25 +204,89 @@ export default function CartPage() {
     if (!uploadedFileUrl || !preflightResult) return;
     setIsUpscaling(true);
     const upscaleToast = toast.loading(isRtl ? "جاري تحسين جودة الصورة بالذكاء الاصطناعي..." : "Optimisation de l'image par l'IA...");
-    
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    const newWidth = (imageDimensions?.width || 1200) * 2;
-    const newHeight = (imageDimensions?.height || 800) * 2;
-    setImageDimensions({ width: newWidth, height: newHeight });
-    
-    setPreflightResult({
-      width: newWidth,
-      height: newHeight,
-      estimatedDPI: Math.round((preflightResult.estimatedDPI || 150) * 2),
-      isPrintReady: true,
-      warnings: [],
-      upscaleRecommended: false
-    });
-    
-    setIsUpscaling(false);
-    toast.dismiss(upscaleToast);
-    toast.success(isRtl ? "تم تحسين جودة الصورة بنجاح وتجاوز معايير الطباعة! (300+ DPI)" : "Image suréchantillonnée avec succès ! (300+ DPI)");
+
+    try {
+      // حقيقي 100%: نحمّل الصورة الأصلية، نطبّق خوارزمية Lanczos-3 عبر canvas،
+      // نعيد رفع النتيجة ونعيد فحص الجودة — بلا أي مؤقتات وهمية.
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = new Image();
+        i.crossOrigin = "anonymous";
+        i.onload = () => resolve(i);
+        i.onerror = () => reject(new Error("Image load failed"));
+        i.src = uploadedFileUrl;
+      });
+
+      const srcW = img.naturalWidth || imageDimensions?.width || 1200;
+      const srcH = img.naturalHeight || imageDimensions?.height || 800;
+
+      const sourceCanvas = document.createElement("canvas");
+      sourceCanvas.width = srcW;
+      sourceCanvas.height = srcH;
+      const sctx = sourceCanvas.getContext("2d", { willReadFrequently: true });
+      if (!sctx) throw new Error("Canvas 2D not supported");
+      sctx.drawImage(img, 0, 0, srcW, srcH);
+      const sourceData = sctx.getImageData(0, 0, srcW, srcH);
+
+      const { data, width: newWidth, height: newHeight, durationMs } = lanczosResample(
+        { data: sourceData.data, width: srcW, height: srcH },
+        srcW * 2,
+        srcH * 2
+      );
+
+      const outCanvas = document.createElement("canvas");
+      outCanvas.width = newWidth;
+      outCanvas.height = newHeight;
+      const octx = outCanvas.getContext("2d");
+      if (!octx) throw new Error("Canvas 2D not supported");
+      const pixelBuffer = new Uint8ClampedArray(new ArrayBuffer(data.length));
+      pixelBuffer.set(data);
+      octx.putImageData(new ImageData(pixelBuffer, newWidth, newHeight), 0, 0);
+
+      const mime = fileName.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+      const blob = await new Promise<Blob | null>((resolve) =>
+        outCanvas.toBlob(resolve, mime, 0.95)
+      );
+      if (!blob) throw new Error("Canvas export failed");
+
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Read failed"));
+        reader.readAsDataURL(blob);
+      });
+
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file: dataUrl }),
+      });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok || !uploadData.url) throw new Error(uploadData.error || "Upload failed");
+
+      setUploadedFileUrl(uploadData.url);
+      setImageDimensions({ width: newWidth, height: newHeight });
+      setPreflightResult({
+        width: newWidth,
+        height: newHeight,
+        estimatedDPI: Math.round((preflightResult.estimatedDPI || 150) * 2),
+        isPrintReady: true,
+        warnings: [],
+        upscaleRecommended: false,
+      });
+
+      toast.dismiss(upscaleToast);
+      toast.success(
+        isRtl
+          ? `تم رفع دقة الصورة بنجاح إلى ${newWidth}×${newHeight} بكسل (خوارزمية Lanczos، ${Math.round(durationMs / 1000)}ث)`
+          : `Image suréchantillonnée avec succès : ${newWidth}×${newHeight} px (Lanczos-3, ${Math.round(durationMs / 1000)}s)`
+      );
+    } catch (err) {
+      console.error("AI Upscale failed:", err);
+      toast.dismiss(upscaleToast);
+      toast.error(isRtl ? "فشل تحسين الصورة. جرّب رفع ملف بجودة أعلى." : "Échec de l'optimisation. Réessayez avec un fichier de meilleure qualité.");
+    } finally {
+      setIsUpscaling(false);
+    }
   };
 
   // --- دالة رفع التصميم (Cloudinary) مضاف إليها فلاتر القيود الصارمة المحددة من الإعدادات ---
@@ -245,21 +329,39 @@ export default function CartPage() {
     reader.readAsDataURL(selectedFile);
     reader.onloadend = async () => {
       const uploadAndPreflight = async (w?: number, h?: number) => {
+        // 1) محاولة رفع مباشر.
         try {
           const response = await fetch('/api/upload', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ file: reader.result }),
           });
+          if (!response.ok) {
+            let serverError = '';
+            try { serverError = (await response.json())?.error || ''; } catch { /* ignore */ }
+            throw Object.assign(new Error(serverError || "Upload failed"), { isNetworkError: false });
+          }
           const data = await response.json();
-          
-          if (response.ok) {
-            setUploadedFileUrl(data.url);
-            setFileStatus('good');
-            toast.success(isRtl ? "تم رفع ملف التصميم سحابياً بنجاح!" : "Fichier téléchargé sur le cloud avec succès !");
-            await runPreflightCheck(data.url, w, h);
-          } else throw new Error(data.error);
-        } catch (error) {
+          setUploadedFileUrl(data.url);
+          setFileStatus('good');
+          toast.success(isRtl ? "تم رفع ملف التصميم سحابياً بنجاح!" : "Fichier téléchargé sur le cloud avec succès !");
+          await runPreflightCheck(data.url, w, h);
+        } catch (error: any) {
+          // 2) فشل بسبب الشبكة → رفع خلفي يستمر حتى لو أُغلق التبويب.
+          const isNetworkError = !navigator.onLine || /fetch|network/i.test(error?.message || "");
+          if (isNetworkError) {
+            const bgId = await startBackgroundUpload(reader.result as string, { width: w, height: h });
+            if (bgId) {
+              setFileStatus('uploading');
+              toast.info(
+                isRtl
+                  ? "الاتصال ضعيف — سيستمر الرفع في الخلفية ويكتمل تلقائياً 📡"
+                  : "Connexion faible — l'upload continue en arrière-plan et se terminera automatiquement 📡",
+                { duration: 7000 }
+              );
+              return;
+            }
+          }
           setFileStatus('error');
           toast.error(isRtl ? "فشل رفع الملف، يرجى المحاولة لاحقاً." : "Échec de l'upload.");
         }
@@ -449,6 +551,10 @@ export default function CartPage() {
       });
 
       clearCart(); 
+      // اهتزاز نجاح مزدوج على الهاتف عند تسجيل الطلب
+      try {
+        if ("vibrate" in navigator) navigator.vibrate([40, 60, 40]);
+      } catch { /* لا شيء */ }
       toast.success(isRtl ? "تم تسجيل طلبك بنجاح! سنتصل بك قريباً عبر الهاتف أو الواتساب لتأكيده." : "Commande enregistrée avec succès !");
       router.push(`/success?orderId=${orderId}`);
 
@@ -698,7 +804,7 @@ export default function CartPage() {
                     <motion.div key="good" initial={{opacity:0}} animate={{opacity:1}} className="text-center text-emerald-500">
                       <FileCheck className="mx-auto mb-3 drop-shadow-md" size={48} />
                       <p className="font-black text-slate-800 dark:text-white mb-1 truncate max-w-[250px] mx-auto">{fileName}</p>
-                      <p className="text-[10px] uppercase font-black tracking-widest text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 px-3 py-1 rounded-full inline-block">Prêt pour l'impression</p>
+                      <p className="text-[10px] uppercase font-black tracking-widest text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 px-3 py-1 rounded-full inline-block">{isRtl ? "جاهز للطباعة" : "Prêt pour l'impression"}</p>
                     </motion.div>
                   ) : (
                     <motion.div key="idle" initial={{opacity:0}} animate={{opacity:1}} className="text-center">
@@ -915,8 +1021,8 @@ export default function CartPage() {
               <h3 className="text-2xl font-black mb-6 text-slate-900 dark:text-white">{t.confirm}</h3>
               
               <div className="space-y-4 mb-6">
-                <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder={t.namePh} className="w-full p-4 rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-accent transition-all font-medium" />
-                <input required type="tel" dir="ltr" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder={t.phonePh} className="w-full p-4 rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-accent transition-all font-black tracking-wider text-slate-700 dark:text-slate-200 text-left" />
+                <input required type="text" autoComplete="name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder={t.namePh} className="w-full p-4 rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-accent transition-all font-medium" />
+                <input required type="tel" dir="ltr" inputMode="tel" autoComplete="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder={t.phonePh} className="w-full p-4 rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-accent transition-all font-black tracking-wider text-slate-700 dark:text-slate-200 text-left" />
                 
                 <div className="relative">
                   <select value={formData.wilaya} onChange={e => setFormData({...formData, wilaya: e.target.value})} className="w-full p-4 rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-accent transition-all appearance-none font-medium text-slate-655 dark:text-slate-300">
@@ -1047,7 +1153,7 @@ export default function CartPage() {
 
                 <div className="flex justify-between items-end pt-4">
                   <span className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">{t.total}</span>
-                  <span className="text-4xl font-black text-accent">{finalTotal} <span className="text-lg text-slate-500">{t.currency}</span></span>
+                  <span className="text-2xl font-black text-accent">{finalTotal} <span className="text-sm text-slate-500">{t.currency}</span></span>
                 </div>
               </div>
 

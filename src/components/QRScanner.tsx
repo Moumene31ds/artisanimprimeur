@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { Camera, Loader2, RefreshCw, Zap, ScanLine, Smartphone } from "lucide-react";
 import { isNative, scanQrWithNativeCamera } from "@/lib/native";
+import { useWakeLock } from "@/lib/wakelock";
 
 interface QRScannerProps {
   onScanSuccess: (decodedText: string) => void;
@@ -32,6 +33,9 @@ export default function QRScanner({ onScanSuccess }: QRScannerProps) {
   const [boxPct, setBoxPct] = useState(68);
   const [scanningNative, setScanningNative] = useState(false);
   const isNativeApp = isNative();
+
+  // منع إطفاء الشاشة أثناء المسح (Wake Lock API).
+  useWakeLock(started && !error);
 
   const computeBox = useCallback((containerWidth: number) => {
     return Math.min(Math.max(containerWidth * BOX_RATIO, MIN_BOX), MAX_BOX);

@@ -9,6 +9,9 @@ export async function registerServiceWorker() {
   try {
     const registration = await navigator.serviceWorker.register('/sw.js', {
       scope: '/',
+      // لا تخزين sw.js نفسه في الكاش: كل فحص تحديث يسحب النسخة الحية مباشرة
+      // (يمنع تعثر اكتشاف التحديثات بسبب HTTP cache).
+      updateViaCache: 'none',
     });
     return registration;
   } catch (error) {
@@ -251,6 +254,45 @@ export function isOnline(): boolean {
   return typeof navigator === 'undefined' ? true : navigator.onLine;
 }
 
+// ---------------------------------------------------------------------------
+// Content Indexing — إتاحة الصفحات المخزّنة مؤقتاً في قائمة "من أجل لاحقاً"
+// بمتصفح كروم (يظهر المحتوى المتاح أوفلاين في قسم التنزيلات).
+// ---------------------------------------------------------------------------
+
+const CONTENT_INDEX_ITEMS = [
+  {
+    id: 'home',
+    url: '/',
+    title: "L'Artisan Imprimeur",
+    description: 'الرئيسية — Accueil',
+    icons: [{ src: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' }],
+  },
+  {
+    id: 'services',
+    url: '/services',
+    title: 'Nos services | خدماتنا',
+    description: 'كل خدمات الطباعة — Tous nos services',
+    icons: [{ src: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' }],
+  },
+];
+
+export async function registerContentIndex(): Promise<void> {
+  try {
+    if (!('serviceWorker' in navigator)) return;
+    const registration: any = await navigator.serviceWorker.ready;
+    if (!registration.index) return;
+    const existing = await registration.index.getAll();
+    const known = new Set((existing || []).map((d: any) => d.id));
+    for (const item of CONTENT_INDEX_ITEMS) {
+      if (!known.has(item.id)) {
+        await registration.index.add(item);
+      }
+    }
+  } catch (e) {
+    console.debug('Content Indexing unavailable:', e);
+  }
+}
+
 export async function requestNotificationPermission(): Promise<NotificationPermission | null> {
   if (!('Notification' in window)) return null;
   if (!('serviceWorker' in navigator)) return null;
@@ -303,12 +345,94 @@ export async function unsubscribeFromPushNotifications(): Promise<boolean> {
   }
 }
 
+/**
+ * ضمان صلاحية اشتراك Push (تجديد تلقائي صامت):
+ *  - انتهت الصلاحية (expirationTime قريبة) → إعادة اشتراك.
+ *  - تغيّر مفتاح VAPID للخادم → إعادة اشتراك بالمفتاح الحالي.
+ * يعيد الاشتراك الجديد عند حدوث تجديد، وnull إذا لم يكن هناك شيء لفعله
+ * (لا اشتراك سابق — التسجيل يبقى اختيار المستخدم من زر الإشعارات).
+ */
+export async function ensureFreshPushSubscription(): Promise<PushSubscription | null> {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+    const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
+    if (!vapidKey) return null;
+
+    const registration = await navigator.serviceWorker.ready;
+    const existing = await registration.pushManager.getSubscription();
+    if (!existing) return null;
+
+    // 1) فحص انتهاء الصلاحية (قبلها بأسبوع احتياطاً).
+    const expiresSoon =
+      !!existing.expirationTime && existing.expirationTime - Date.now() < 7 * 24 * 60 * 60 * 1000;
+
+    // 2) فحص تطابق مفتاح VAPID.
+    let keyChanged = false;
+    try {
+      const currentKey = urlBase64ToUint8Array(vapidKey);
+      const storedKey = existing.options.applicationServerKey;
+      if (storedKey) {
+        const a = new Uint8Array(currentKey);
+        const b = new Uint8Array(storedKey as ArrayBuffer);
+        keyChanged = a.length !== b.length || a.some((v, i) => v !== b[i]);
+      } else {
+        keyChanged = true;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    if (!expiresSoon && !keyChanged) return null;
+
+    // تجديد: ألغِ القديم واشترك من جديد بنفس النطاق.
+    const oldEndpoint = existing.endpoint;
+    await existing.unsubscribe();
+    const fresh = await subscribeToPushNotifications();
+    if (fresh && fresh.endpoint !== oldEndpoint) {
+      return fresh;
+    }
+    return fresh;
+  } catch {
+    return null;
+  }
+}
+
 export function isPWAInstalled(): boolean {
   if (typeof window === 'undefined') return false;
   return (
     window.matchMedia('(display-mode: standalone)').matches ||
     (window.navigator as any).standalone === true
   );
+}
+
+// ---------------------------------------------------------------------------
+// Badging API — شارة عدد الإشعارات غير المقروءة على أيقونة التطبيق
+// ---------------------------------------------------------------------------
+
+/** هل تدعم البيئة شارة التطبيق (Badging API)؟ */
+export function isBadgeSupported(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return "setAppBadge" in navigator && "clearAppBadge" in navigator;
+}
+
+/** تعيين شارة بعدد معيّن (مثل الإشعارات غير المقروءة). */
+export async function setAppBadge(count: number): Promise<void> {
+  try {
+    if (!isBadgeSupported() || count <= 0) return;
+    await (navigator as any).setAppBadge(Math.min(count, 99));
+  } catch {
+    /* غير مدعوم أو مرفوض */
+  }
+}
+
+/** إزالة شارة التطبيق. */
+export async function clearAppBadge(): Promise<void> {
+  try {
+    if (!isBadgeSupported()) return;
+    await (navigator as any).clearAppBadge();
+  } catch {
+    /* ignore */
+  }
 }
 
 // ---------------------------------------------------------------------------

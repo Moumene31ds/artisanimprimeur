@@ -112,6 +112,20 @@ export async function fsCreate(
   return name.split('/').pop() ?? '';
 }
 
+/** DELETE a document. Rules are evaluated as the token's user. */
+export async function fsDelete(token: string, docPath: string): Promise<void> {
+  if (!PROJECT()) throw new Error('FIREBASE_PROJECT_ID is not set.');
+  const res = await fetch(`${BASE()}/${docPath}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text();
+    throw new Error(`fsDelete ${docPath} failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+}
+
 /**
  * RUN a structured query authenticated as the user (must satisfy rules for
  * `list`). `structuredQuery.from` may use `allDescendants` to reach

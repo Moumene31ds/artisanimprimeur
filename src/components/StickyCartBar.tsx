@@ -68,7 +68,7 @@ export default function StickyCartBar() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 90, opacity: 0 }}
           transition={{ type: "spring", damping: 26, stiffness: 320 }}
-          className="fixed left-3 right-3 z-40 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-6 md:left-auto md:right-6 md:max-w-md"
+          className="kb-hide fixed left-3 right-3 z-40 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-6 md:left-auto md:right-6 md:max-w-md"
         >
           <button
             onClick={() => router.push("/cart")}

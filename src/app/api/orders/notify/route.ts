@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import {
   sendOrderConfirmation,
   sendOrderStatusUpdate,
@@ -9,7 +10,25 @@ import { sendSimpleEmail, sendOrderStatusEmail } from '@/lib/email-service';
 import { executeAutomations } from '@/lib/automation-executor';
 import { SlidingWindowRateLimiter } from '@/lib/rate-limit';
 
-const notifyLimiter = new SlidingWindowRateLimiter(10 * 60 * 1000, 30);
+const notifyLimiter = new SlidingWindowRateLimiter(10 * 60 * 1000, 20);
+
+// ملاحظة: المسار عام لأنه يخدم طلبات الضيوف بعد إنشاء الطلب، لكن الحقول
+// مُتحقَّق منها بدقة لمنع حقن محتوى الرسائل أو استنزاف قنوات الإرسال.
+const notifySchema = z.object({
+  type: z.enum(['created', 'status', 'bat', 'ready']),
+  token: z.string().max(2048).optional(),
+  order: z.object({
+    id: z.string().min(1).max(128),
+    phone: z.string().min(6).max(20),
+    customerName: z.string().max(120).optional(),
+    customerEmail: z.string().email().max(254).optional(),
+    customerUserId: z.string().max(128).optional(),
+    status: z.string().max(60).optional(),
+    total: z.number().nonnegative().max(10_000_000).optional(),
+    orderNumber: z.string().max(60).optional(),
+    batUrl: z.string().url().max(2048).optional(),
+  }),
+});
 
 function getIp(req: NextRequest): string {
   const fwd = req.headers.get('x-forwarded-for');
@@ -37,17 +56,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Rate limit exceeded' }, { status: 429 });
   }
 
-  let body: any;
+  let body: unknown;
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ success: false, error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const { type, order, token } = body || {};
-  if (!order?.id || !order?.phone) {
-    return NextResponse.json({ success: false, error: 'Missing order id or phone' }, { status: 400 });
+  const parsed = notifySchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
   }
+  const { type, order, token } = parsed.data;
 
   const customerName = order.customerName || 'Cher client';
   const orderRef = order.orderNumber || order.id.slice(-6).toUpperCase();
@@ -66,10 +86,10 @@ export async function POST(req: NextRequest) {
         results.push({ channel: 'email', success: em.success, detail: em.reason });
       }
     } else if (type === 'status') {
-      const wa = await sendOrderStatusUpdate(order.phone, customerName, orderRef, order.status);
+      const wa = await sendOrderStatusUpdate(order.phone, customerName, orderRef, order.status || '');
       results.push({ channel: 'whatsapp', success: wa.success, detail: wa.error });
       if (order.customerEmail) {
-        const em = await sendOrderStatusEmail(order.customerEmail, customerName, order.id, order.status);
+        const em = await sendOrderStatusEmail(order.customerEmail, customerName, order.id, order.status || '');
         results.push({ channel: 'email', success: em.success, detail: em.reason });
       }
     } else if (type === 'bat') {

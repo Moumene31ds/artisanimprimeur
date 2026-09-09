@@ -28,6 +28,10 @@ const nextConfig = {
             value: 'nosniff'
           },
           {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains; preload'
+          },
+          {
             key: 'Referrer-Policy',
             value: 'strict-origin-when-cross-origin'
           },
@@ -39,6 +43,8 @@ const nextConfig = {
             key: 'X-Robots-Tag',
             value: 'index, follow'
           },
+          // ملاحظة: CSP وCOOP تُدار مركزياً عبر middleware.ts + src/lib/security
+          // (لا تكررهما هنا — المتصفح يطبّق تقاطع السياسات المكررة فتتعطل الميزات)
         ]
       },
       {

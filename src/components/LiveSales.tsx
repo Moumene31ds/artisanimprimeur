@@ -14,40 +14,67 @@ export default function LiveSales() {
   const isInitialLoad = useRef(true); // حارس لمنع ظهور الطلبات القديمة عند إنعاش الصفحة
 
   useEffect(() => {
-    // الاستماع لآخر طلب يدخل قاعدة البيانات فوراً
-    const q = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(1));
-    
-    const unsubscribe = onSnapshot(
-      q, 
-      (snapshot) => {
-        if (snapshot.empty) return;
+    // الاستماع لآخر طلب يدخل قاعدة البيانات — فقط عند الحاجة:
+    // - لا نبدأ الاستماع إلا بعد خمول الصفحة (لا يعيق التحميل الأول).
+    // - نوقف الاستماع عندما تكون النافذة مخفية (خلفية) لتوفير الموارد.
+    let unsubscribe: (() => void) | null = null;
+    let scheduled = false;
 
-        const orderData = snapshot.docs[0].data();
-        const orderId = snapshot.docs[0].id;
+    const subscribe = () => {
+      if (unsubscribe || document.visibilityState !== "visible") return;
+      const q = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(1));
+      unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          if (snapshot.empty) return;
 
-        // إذا كان هذا التحميل الأول للموقع، تجاهل الطلب القديم ولا تزعج الزائر
-        if (isInitialLoad.current) {
-          isInitialLoad.current = false;
-          return;
+          const orderData = snapshot.docs[0].data();
+          const orderId = snapshot.docs[0].id;
+
+          // إذا كان هذا التحميل الأول للموقع، تجاهل الطلب القديم ولا تزعج الزائر
+          if (isInitialLoad.current) {
+            isInitialLoad.current = false;
+            return;
+          }
+
+          setLatestOrder({ id: orderId, ...orderData });
+          setShowNotification(true);
+
+          // إخفاء الإشعار تلقائياً بعد 6 ثوانٍ من ظهوره
+          setTimeout(() => setShowNotification(false), 6000);
+        },
+        (err) => {
+          console.debug("LiveSales order listener restricted by security rules.", err.message);
         }
+      );
+    };
 
-        // تجهيز بيانات الطلب الجديد للعرض
-        setLatestOrder({ id: orderId, ...orderData });
-        setShowNotification(true);
-
-        // إخفاء الإشعار تلقائياً بعد 6 ثوانٍ من ظهوره
-        const timer = setTimeout(() => {
-          setShowNotification(false);
-        }, 6000);
-
-        return () => clearTimeout(timer);
-      },
-      (err) => {
-        console.debug("LiveSales order listener restricted by security rules.", err.message);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        subscribe();
+      } else {
+        unsubscribe?.();
+        unsubscribe = null;
       }
-    );
+    };
 
-    return () => unsubscribe();
+    // نؤجل بدء الاستماع حتى خمول المتصفح حتى لا يعبّئ تحميل الصفحة الأولى.
+    const scheduleStart = () => {
+      if (scheduled) return;
+      scheduled = true;
+      if (typeof requestIdleCallback === "function") {
+        requestIdleCallback(() => subscribe());
+      } else {
+        setTimeout(subscribe, 2000);
+      }
+    };
+    scheduleStart();
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      unsubscribe?.();
+    };
   }, []);
 
   if (!latestOrder || !showNotification) return null;
@@ -75,7 +102,7 @@ export default function LiveSales() {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 20, scale: 0.9 }}
         transition={{ type: "spring", stiffness: 260, damping: 20 }}
-        className={`fixed bottom-[76px] md:bottom-6 ${
+        className={`kb-hide fixed bottom-[76px] md:bottom-6 ${
           isRtl ? "left-4" : "right-4"
         } z-[999] max-w-sm w-[calc(100dvw-2rem)] ios-glass border border-white/40 dark:border-white/10 rounded-[2rem] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.15)] flex items-center gap-4`}
         dir={isRtl ? "rtl" : "ltr"}

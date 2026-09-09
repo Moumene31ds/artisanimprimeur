@@ -1,4 +1,14 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Page introuvable (404)",
+  description: "La page que vous cherchez n'existe pas ou a été déplacée. Retournez à l'accueil de L'Artisan Imprimeur.",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default function NotFound() {
   return (

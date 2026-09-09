@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createOrUpdateCustomer, getCustomerData, getCustomersBySegment, getMarketingAnalytics } from '@/lib/marketing-service';
+import { requireAdmin } from '@/lib/admin-auth';
+import { ApiError } from '@/lib/security/api-error';
 
 export async function POST(request: NextRequest) {
   try {
+    // بيانات عملاء تسويقية حساسة — المشرف فقط (كانت مفتوحة للجميع).
+    const admin = await requireAdmin(request);
+    if (!admin) throw new ApiError(401, 'Admin authentication required');
+
     const body = await request.json();
     const { userId, email, firstName, lastName, segments, tags, preferences } = body;
 
@@ -55,6 +61,9 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const admin = await requireAdmin(request);
+    if (!admin) throw new ApiError(401, 'Admin authentication required');
+
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const segment = searchParams.get('segment');

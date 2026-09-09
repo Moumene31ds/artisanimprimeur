@@ -103,10 +103,11 @@ export default function SettingsManager() {
     setHapticsEnabled(hapticFeedback);
   }, [hapticFeedback]);
 
-  // تطبيق اللغة على مستوى المستند
+  // تطبيق اللغة واتجاه الكتابة على مستوى المستند (دعم RTL كامل).
   useEffect(() => {
     if (typeof document === "undefined") return;
     document.documentElement.lang = language;
+    document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
   }, [language]);
 
   // تطبيق السمة

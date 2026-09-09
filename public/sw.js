@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v10';
 const CACHE_NAME = `artisan-print-${CACHE_VERSION}`;
 const STATIC_CACHE = `artisan-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `artisan-dynamic-${CACHE_VERSION}`;
@@ -8,7 +8,7 @@ const META_CACHE = `artisan-meta-${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline';
 
 // إصدار البناء — يُحدَّث عند كل إصدار جديد ليتمكّن العملاء من التحقق منه.
-const BUILD_ID = 'v8';
+const BUILD_ID = 'v10';
 
 const STATIC_ASSETS = [
   '/offline',
@@ -98,7 +98,7 @@ self.addEventListener('fetch', (event) => {
 
   // تنقّل بين الصفحات — network-first مع الاحتياط للأوفلاين.
   if (isPageRequest(request)) {
-    event.respondWith(networkFirstWithFallback(request, OFFLINE_URL));
+    event.respondWith(networkFirstWithFallback(request, OFFLINE_URL, event));
     return;
   }
 
@@ -170,10 +170,28 @@ async function networkFirst(request) {
   }
 }
 
-async function networkFirstWithFallback(request, fallbackUrl) {
+/**
+ * تنقّل الصفحات: network-first مع استغلال Navigation Preload.
+ * يبدأ المتصفح طلب التنقل بالتوازي مع إقلاع السيرفس ووركر — ننتظر نتيجته
+ * أولاً (event.preloadResponse) بدل إطلاق طلب جديد مكرر، فتقل مدة
+ * "أول رسم للمحتوى" بوضوح على شبكات الهاتف البطيئة.
+ */
+async function networkFirstWithFallback(request, fallbackUrl, event) {
   try {
-    const response = await fetch(request);
-    if (response.ok) {
+    let response = null;
+    if (event && event.preloadResponse) {
+      try {
+        // مهلة احتياطية: إن تعثر الـ preload نكمل بطلب عادي دون انتظار طويل.
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('preload-timeout')), 4000)
+        );
+        response = await Promise.race([event.preloadResponse, timeout]);
+      } catch (e) { /* نُكمل بالطلب العادي */ }
+    }
+    if (!response || !response.ok) {
+      response = await fetch(request);
+    }
+    if (response && response.ok) {
       await safePut(DYNAMIC_CACHE, request, response, DYNAMIC_MAX_ENTRIES);
       return response;
     }
@@ -313,17 +331,24 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   if (event.action === 'close') return;
 
-  const urlToOpen = event.notification.data?.url || '/';
+  const urlToOpen = new URL(event.notification.data?.url || '/', self.location.origin);
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // نافذة مفتوحة على نفس الصفحة → تركيز فقط دون إعادة تنقّل (لا فقدان حالة).
       for (const client of clientList) {
-        if ('focus' in client) {
-          client.navigate(urlToOpen).catch(() => {});
+        if ('focus' in client && client.url === urlToOpen.href) {
           return client.focus();
         }
       }
-      return clients.openWindow(urlToOpen);
+      // نافذة موجودة → تنقّلها للهدف وركّزها.
+      for (const client of clientList) {
+        if ('focus' in client) {
+          client.navigate(urlToOpen.href).catch(() => {});
+          return client.focus();
+        }
+      }
+      return clients.openWindow(urlToOpen.href);
     })
   );
 });
@@ -347,6 +372,8 @@ self.addEventListener('message', (event) => {
     event.waitUntil(syncHomeData());
   } else if (data.type === 'SYNC_ORDERS') {
     event.waitUntil(syncOrders());
+  } else if (data.type === 'REPLAY_OUTBOX') {
+    event.waitUntil(replayOutboxSW());
   }
 });
 
@@ -359,6 +386,153 @@ self.addEventListener('periodicsync', (event) => {
     event.waitUntil(syncHomeData());
   }
 });
+
+/* ---------- طابور الإجراءات غير المتصلة (Background Sync) ---------- */
+
+const OUTBOX_DB_NAME = 'artisan-outbox';
+const OUTBOX_DB_VERSION = 1;
+const OUTBOX_STORE = 'requests';
+
+function openOutboxDb() {
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(OUTBOX_DB_NAME, OUTBOX_DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(OUTBOX_STORE)) {
+          db.createObjectStore(OUTBOX_STORE, { keyPath: 'id', autoIncrement: true });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
+async function outboxGetAll() {
+  const db = await openOutboxDb();
+  if (!db) return [];
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(OUTBOX_STORE, 'readonly');
+      const req = tx.objectStore(OUTBOX_STORE).getAll();
+      req.onsuccess = () => { db.close(); resolve(req.result || []); };
+      req.onerror = () => { db.close(); resolve([]); };
+    } catch (e) {
+      db.close();
+      resolve([]);
+    }
+  });
+}
+
+async function outboxDelete(id) {
+  const db = await openOutboxDb();
+  if (!db) return;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(OUTBOX_STORE, 'readwrite');
+      tx.objectStore(OUTBOX_STORE).delete(id);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); resolve(); };
+    } catch (e) {
+      db.close();
+      resolve();
+    }
+  });
+}
+
+/**
+ * إعادة إرسال الإجراءات المخزنة أثناء الأوفلاين.
+ * الإدخالات الناجحة أو المرفوضة نهائياً (4xx) تُحذف؛ أخطاء الشبكة/الخادم
+ * تبقى لإعادة محاولة لاحقة.
+ */
+async function replayOutboxSW() {
+  const entries = await outboxGetAll();
+  let sent = 0;
+  for (const entry of entries.slice().reverse()) {
+    if (entry.id == null) continue;
+    try {
+      const res = await fetch(entry.url, {
+        method: entry.method,
+        headers: entry.headers,
+        body: entry.body,
+      });
+      if (res.ok || res.status < 500) {
+        await outboxDelete(entry.id);
+        if (res.ok) sent++;
+      }
+    } catch (e) {
+      break; // لا شبكة → توقف (سيعيد المتصفح استدعاء sync لاحقاً).
+    }
+  }
+  // إشعار الواجهات بحدوث مزامنة (لتحديث العدّادات).
+  const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  for (const client of clientsList) {
+    client.postMessage({ type: 'OUTBOX_SYNCED', sent });
+  }
+}
+
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'outbox-sync') {
+    event.waitUntil(replayOutboxSW());
+  }
+});
+
+/* ---------- الرفع بالخلفية (Background Fetch API) ---------- */
+
+const BGFETCH_CACHE = `artisan-bgfetch-${CACHE_VERSION}`;
+
+/**
+ * نجاح رفع/تنزيل خلفي: نحفظ الاستجابة في ذاكرة خاصة ونبلّغ كل النوافذ
+ * (تُقرأ النتيجة لاحقاً حتى لو كانت الصفحة مغلقة لحظة الاكتمال).
+ */
+self.addEventListener('backgroundfetchsuccess', (event) => {
+  event.waitUntil((async () => {
+    try {
+      const cache = await caches.open(BGFETCH_CACHE);
+      const records = await event.registration.matchedRecords();
+      for (const record of records) {
+        try {
+          const response = await record.responseReady;
+          if (response && response.ok) {
+            await cache.put(`/__bgfetch/${event.registration.id}`, response.clone());
+          }
+        } catch (e) { /* ignore */ }
+      }
+      await broadcastMessage({ type: 'BG_FETCH_DONE', id: event.registration.id, ok: true });
+    } catch (e) {
+      await broadcastMessage({ type: 'BG_FETCH_DONE', id: event.registration.id, ok: false });
+    }
+  })());
+});
+
+self.addEventListener('backgroundfetchfail', (event) => {
+  event.waitUntil(
+    broadcastMessage({ type: 'BG_FETCH_DONE', id: event.registration.id, ok: false })
+  );
+});
+
+self.addEventListener('backgroundfetchabort', (event) => {
+  event.waitUntil(
+    broadcastMessage({ type: 'BG_FETCH_ABORTED', id: event.registration.id })
+  );
+});
+
+// تقدم الرفع/التنزيل → بثّه للواجهة لعرض شريط تقدم.
+self.addEventListener('backgroundfetchclick', (event) => {
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) return client.focus();
+    })
+  );
+});
+
+async function broadcastMessage(message) {
+  const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  for (const client of clientList) client.postMessage(message);
+}
 
 async function syncOrders() {
   const cache = await caches.open(API_CACHE);

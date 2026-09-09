@@ -79,7 +79,7 @@ export default function FavoritesPage() {
               </motion.div>
             </div>
             <h2 className="text-2xl font-bold text-slate-700 dark:text-slate-300 mb-4">
-              {isRtl ? "قائمة المفضلة فارغة" : "Votre liste ist vide"}
+              {isRtl ? "قائمة المفضلة فارغة" : "Votre liste est vide"}
             </h2>
             <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-10 leading-relaxed">
               {isRtl 

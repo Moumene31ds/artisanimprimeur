@@ -62,6 +62,22 @@ service cloud.firestore {
       match /productionLog/{logId} {
         allow read, create, update, delete: if isAdmin();
       }
+
+      // سجل تدقيق البروفة (BAT): صاحب الطلب يقرأ ويضيف قراره (اعتماد/رفض)،
+      // والمشرف يدير كل شيء. get() على الوثيقة الأب يضمن ملكية الطلب.
+      match /batAudit/{logId} {
+        allow read, create: if isAdmin() ||
+          (isLoggedIn() &&
+           get(/databases/(default)/documents/orders/$(orderId)).data.customerUserId == request.auth.uid);
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // 2ب. اشتراكات الإشعارات الفورية (Push Subscriptions)
+    // نقاط النهاية ومفاتيح التشفير أسرار — كل مستخدم يرى/يحذف اشتراكاته فقط.
+    match /pushSubscriptions/{subId} {
+      allow read, delete: if isAdmin() || (isLoggedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isLoggedIn() && request.resource.data.userId == request.auth.uid;
     }
 
     // 3. المنتجات والخدمات (Products)
@@ -182,10 +198,24 @@ service cloud.firestore {
     // 7. إعدادات المنصة (Settings)
     match /settings/{docId} {
       // السماح للجميع بقراءة وثيقة إعدادات الواجهة (settings/ui) وإعدادات الولاء (settings/loyalty)
-      // ليتسنى عرض تكلفة العجلة والجوائز والنقاط في واجهات الزبائن ولوحة المكافآت
-      allow get: if docId == 'ui' || docId == 'loyalty';
+      // وإعدادات التسويق (settings/marketing) ووثيقة الذكاء الاصطناعي (settings/ai — بلا أسرار،
+      // المفاتيح تبقى في متغيرات البيئة) ليتسنى للخادم تطبيق إعدادات المشرف الحيّة
+      allow get: if docId == 'ui' || docId == 'loyalty' || docId == 'marketing' || docId == 'ai';
       // الإضافة والتعديل والسرد محصور بالمشرف
       allow list, write: if isAdmin();
+    }
+
+    // 7-bis. سجلات استخدام الذكاء الاصطناعي (AI Usage Logs)
+    match /ai_logs/{logId} {
+      // السماح للخادم فقط بتسجيل الاستخدام (حقول محددة وأحجام صارمة)
+      allow create: if request.resource.data.keys().hasOnly(['day', 'provider', 'model', 'latencyMs', 'ok', 'createdAt'])
+        && request.resource.data.day is string && request.resource.data.day.size() == 10
+        && request.resource.data.provider is string && request.resource.data.provider.size() <= 40
+        && request.resource.data.model is string && request.resource.data.model.size() <= 120
+        && request.resource.data.latencyMs is int && request.resource.data.latencyMs >= 0
+        && request.resource.data.ok is bool;
+      // القراءة والإدارة حصرية للمشرف (لوحة تحليلات الذكاء الاصطناعي)
+      allow read, update, delete: if isAdmin();
     }
 
     // 8. مشتركو الصيانة (Maintenance Subscribers)
@@ -269,6 +299,35 @@ service cloud.firestore {
       allow read, list: if isAdmin();
       // الكتابة من الخادم بحساب المشرف، أو من الـ cron بحساب الخدمة (قواعد خارجية)
       allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // 18. النشرة البريدية (Newsletter Subscribers) — قناة تسويق مجانية
+    match /newsletter_subscribers/{docId} {
+      // أي زائر (حتى بدون حساب) يشترك ببريده — تحقق صارم من الشكل والحجم
+      allow create: if request.resource.data.keys().hasOnly(['email', 'source', 'subscribedAt'])
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$')
+        && (!('source' in request.resource.data) || request.resource.data.source in ['footer', 'popup', 'checkout']);
+      // قراءة القائمة وتعديلها وحذفها حصرية للإدارة (تصدير CSV / إلغاء اشتراك)
+      allow read, list, update, delete: if isAdmin();
+    }
+
+    // 19. تقييمات الزبائن (Reviews)
+    match /reviews/{reviewId} {
+      // القراءة عامة لعرض التقييمات في واجهات الموقع
+      allow read: if true;
+      // إنشاء تقييم: حقول محددة فقط مع ملاحظة صحيحة وحجم معقول للنص
+      // (المعرفات والنص قد يكونان null للزوائر — يجب السماح بذلك صراحة)
+      allow create: if request.resource.data.keys().hasOnly(['userId', 'orderId', 'rating', 'comment', 'isVerified', 'hidden', 'createdAt'])
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && (!('userId' in request.resource.data) || request.resource.data.userId == null || request.resource.data.userId is string)
+        && (!('orderId' in request.resource.data) || request.resource.data.orderId == null || request.resource.data.orderId is string)
+        && (!('comment' in request.resource.data) || request.resource.data.comment == null || (request.resource.data.comment is string && request.resource.data.comment.size() <= 1000));
+      // الإخفاء/التعديل/الحذف حصريان للمشرف (إدارة التقييمات من لوحة التحكم)
       allow update, delete: if isAdmin();
     }
   }

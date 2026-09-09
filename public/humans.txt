@@ -1,0 +1,9 @@
+/* L'Artisan Imprimeur — الحرفي للطباعة
+   Votre partenaire premium pour l'impression et le design en Algérie
+   Oran, Algérie — +213549179000 — contact@artisanimprimeur.dz
+
+   Équipe:
+     Direction & Design: L'Artisan Imprimeur
+   Tech: Next.js (App Router), Firebase, Tailwind CSS
+   Déploiement: Vercel
+*/

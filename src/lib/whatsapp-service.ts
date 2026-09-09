@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { formatWhatsAppPhone } from './phone-utils';
 
 const WHATSAPP_API_BASE = 'https://graph.facebook.com/v18.0';
@@ -210,4 +211,33 @@ export async function verifyWebhook(mode: string, token: string, challenge: stri
     return challenge;
   }
   return null;
+}
+
+/**
+ * التحقق من توقيع Meta الرسمي (X-Hub-Signature-256) — المعيار العالمي
+ * لويب هوكات Meta: HMAC-SHA256 للجسد الخام بمفتاح سر التطبيق، مع
+ * مقارنة ثابتة الزمن (timing-safe) لمنع هجمات القنوات الجانبية.
+ *
+ * - إذا ضُبط WHATSAPP_APP_SECRET → الفحص صارم: أي توقيع ناقص/خاطئ يُرفض (403).
+ * - إذا لم يُضبط بعد → نمرّر مع تحذير (توافق رجعي)؛ يُنصح بإضافة السر فوراً.
+ */
+export function verifyWebhookSignature(rawBody: string, signatureHeader: string | null): boolean {
+  const appSecret = process.env.WHATSAPP_APP_SECRET;
+
+  if (!appSecret) {
+    console.warn('[whatsapp] WHATSAPP_APP_SECRET غير مضبوط — توقيع الـ webhook غير مُتحقق منه.');
+    return true; // توافق رجعي حتى إضافة السر في متغيرات البيئة.
+  }
+
+  if (!signatureHeader || !signatureHeader.startsWith('sha256=')) return false;
+
+  try {
+    const expected = createHmac('sha256', appSecret).update(rawBody, 'utf8').digest('hex');
+    const received = signatureHeader.slice('sha256='.length).toLowerCase();
+    const a = Buffer.from(expected, 'utf8');
+    const b = Buffer.from(received, 'utf8');
+    return a.length === b.length && timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
 }

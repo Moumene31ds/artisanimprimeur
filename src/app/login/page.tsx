@@ -14,12 +14,8 @@ import { doc, getDoc, collection, addDoc, serverTimestamp, setDoc } from "fireba
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  GoogleAuthProvider, 
-  FacebookAuthProvider, 
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
   signInAnonymously,
+  getRedirectResult,
   updateProfile,
   sendPasswordResetEmail
 } from "firebase/auth";
@@ -28,9 +24,10 @@ import { toast } from "sonner";
 import Link from "next/link";
 import { GlobalLoader } from "@/components/GlobalLoader"; 
 import SecurityVerification from "@/components/SecurityVerification";
+import SSOProviders from "@/components/SSOProviders";
 import { getAuthErrorMessage, getPasswordStrength, validateEmail, validateSignupForm } from "@/lib/auth-utils";
 
-type AuthMode = "login" | "signup" | "forgot" | "phone";
+type AuthMode = "login" | "signup" | "forgot";
 
 export default function LoginPage() {
   const { language, setLanguage } = useAppStore();
@@ -293,11 +290,39 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
+      // حارس الدخول الخادمي: قفل مرجعي ضد التخمين (لا يمكن تجاوزه بمسح التخزين).
+      if (authMode === "login") {
+        try {
+          const guard = await fetch("/api/auth/login-guard", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "check", email: email.trim() }),
+          });
+          const guardData = await guard.json().catch(() => ({ locked: false }));
+          if (guardData?.locked) {
+            const minutes = Math.max(1, Math.ceil((guardData.retryAfterSeconds || 60) / 60));
+            const msg = isRtl
+              ? `تم قفل محاولات الدخول مؤقتاً من الخادم — أعد المحاولة بعد ${minutes} دقيقة.`
+              : `Connexion temporairement verrouillée côté serveur — réessayez dans ${minutes} min.`;
+            setFormMessage(msg);
+            toast.error(msg);
+            return;
+          }
+        } catch {
+          // تعذر الوصول للحارس → نكمل (القفل المحلي يبقى فعالاً).
+        }
+      }
+
       if (authMode === "login") {
         await signInWithEmailAndPassword(auth, email.trim(), password);
-        
+
         localStorage.removeItem("login_failed_attempts");
         localStorage.removeItem("login_lockout_until");
+        fetch("/api/auth/login-guard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "reset", email: email.trim() }),
+        }).catch(() => {});
         setFormMessage("");
 
         await addDoc(collection(db, "securityLogs"), {
@@ -342,6 +367,13 @@ export default function LoginPage() {
       if (authMode === "login") {
         const attempts = Number(localStorage.getItem("login_failed_attempts") || 0) + 1;
         localStorage.setItem("login_failed_attempts", attempts.toString());
+
+        // إبلاغ الخادم بالفشل — يبني سجل القفل المرجعي (بريد + IP).
+        fetch("/api/auth/login-guard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "fail", email: email.trim() }),
+        }).catch(() => {});
 
         await addDoc(collection(db, "securityLogs"), {
           event: "login_failed",
@@ -412,122 +444,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setLoading(true);
-    setFormMessage("");
-    try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
-
-      let res;
-      try {
-        // Primary method: popup (faster UX)
-        res = await signInWithPopup(auth, provider);
-      } catch (popupErr: any) {
-        // Fallback: redirect if popup is blocked or unsupported
-        const blockedCodes = [
-          'auth/popup-blocked',
-          'auth/popup-closed-by-user',
-          'auth/cancelled-popup-request',
-        ];
-        if (blockedCodes.includes(popupErr?.code)) {
-          toast.info(
-            isRtl
-              ? "جاري التحويل إلى صفحة تسجيل الدخول..."
-              : "Redirection vers la page de connexion Google..."
-          );
-          await signInWithRedirect(auth, provider);
-          return; // redirect will reload the page
-        }
-        throw popupErr; // rethrow non-popup errors
-      }
-
-      if (!res?.user) throw new Error('No user returned from Google sign-in.');
-
-      await applyReferralIfNewUser(
-        res.user.uid,
-        res.user.email ?? "",
-        res.user.displayName ?? "Google User"
-      );
-
-      await addDoc(collection(db, "securityLogs"), {
-        event: "login_success",
-        email: res.user.email ?? "google-user",
-        timestamp: serverTimestamp(),
-        type: "google",
-        status: "success",
-        ip: "client-logged",
-      });
-
-      toast.success(isRtl ? "أهلاً بك! تم تسجيل الدخول عبر Google." : "Bienvenue ! Connexion Google réussie.");
-      router.push("/");
-    } catch (err: any) {
-      console.error("Google Login Error:", err?.code, err?.message);
-      const friendlyMessage = getAuthErrorMessage(err?.code || "", isRtl);
-      setFormMessage(friendlyMessage);
-      toast.error(friendlyMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFacebookLogin = async () => {
-    setLoading(true);
-    setFormMessage("");
-    try {
-      const provider = new FacebookAuthProvider();
-      provider.addScope('email');
-
-      let res;
-      try {
-        res = await signInWithPopup(auth, provider);
-      } catch (popupErr: any) {
-        const blockedCodes = [
-          'auth/popup-blocked',
-          'auth/popup-closed-by-user',
-          'auth/cancelled-popup-request',
-        ];
-        if (blockedCodes.includes(popupErr?.code)) {
-          toast.info(
-            isRtl
-              ? "جاري التحويل إلى صفحة تسجيل الدخول..."
-              : "Redirection vers la page de connexion Facebook..."
-          );
-          await signInWithRedirect(auth, provider);
-          return;
-        }
-        throw popupErr;
-      }
-
-      if (!res?.user) throw new Error('No user returned from Facebook sign-in.');
-
-      await applyReferralIfNewUser(
-        res.user.uid,
-        res.user.email ?? "",
-        res.user.displayName ?? "Facebook User"
-      );
-
-      await addDoc(collection(db, "securityLogs"), {
-        event: "login_success",
-        email: res.user.email ?? "facebook-user",
-        timestamp: serverTimestamp(),
-        type: "facebook",
-        status: "success",
-        ip: "client-logged",
-      });
-
-      toast.success(isRtl ? "تم تسجيل الدخول بـ Facebook!" : "Connexion Facebook réussie !");
-      router.push("/");
-    } catch (err: any) {
-      console.error("Facebook Login Error:", err?.code, err?.message);
-      const friendlyMessage = getAuthErrorMessage(err?.code || "", isRtl);
-      setFormMessage(friendlyMessage);
-      toast.error(friendlyMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleGuest = async () => {
     setLoading(true);
     setFormMessage("");
@@ -536,6 +452,24 @@ export default function LoginPage() {
       router.push("/");
     } catch(err) {
       toast.error(isRtl ? "فشل الدخول كضيف." : "Échec de la connexion invité.");
+      setLoading(false);
+    }
+  };
+
+  // SSO multi-providers (Google/Facebook/GitHub/Microsoft/Yahoo)
+  const handleSSOSuccess = async (resUser: any) => {
+    setLoading(true);
+    setFormMessage("");
+    try {
+      await applyReferralIfNewUser(
+        resUser.uid,
+        resUser.email ?? "",
+        resUser.displayName ?? "SSO User"
+      );
+      toast.success(isRtl ? "أهلاً بك! تم تسجيل الدخول بنجاح." : "Bienvenue ! Connexion réussie.");
+      router.push("/");
+    } catch(err) {
+      console.error("SSO Success Error:", err);
       setLoading(false);
     }
   };
@@ -661,13 +595,11 @@ export default function LoginPage() {
               {authMode === "login" && t("welcomeBackTitle")}
               {authMode === "signup" && t("createAccountTitle")}
               {authMode === "forgot" && t("forgotPasswordTitle")}
-              {authMode === "phone" && (isRtl ? "الدخول برقم الهاتف" : "Connexion par Téléphone")}
             </h2>
             <p className="text-slate-500 dark:text-slate-400 font-medium text-sm">
               {authMode === "login" && t("welcomeBackSubtitle")}
               {authMode === "signup" && t("createAccountSubtitle")}
               {authMode === "forgot" && t("forgotPasswordDescription")}
-              {authMode === "phone" && (isRtl ? "أدخل رقم هاتفك الجزائري لاستلام رمز التحقق الفوري" : "Entrez votre numéro algérien pour recevoir un code SMS")}
             </p>
           </div>
 
@@ -686,14 +618,7 @@ export default function LoginPage() {
                >
                   {t("signup")}
                </button>
-               <button 
-                 onClick={() => { setAuthMode("phone"); setFormMessage(""); }} 
-                 className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1 ${authMode === "phone" ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
-               >
-                  <Smartphone size={14} />
-                  <span>{isRtl ? "هاتف" : "SMS"}</span>
-               </button>
-            </div>
+             </div>
           ) : (
             <button 
               onClick={() => { setAuthMode("login"); setFormMessage(""); setResetSentSuccess(false); }}
@@ -722,39 +647,8 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Form: Phone Mode vs Email/Password Mode */}
-          {authMode === "phone" ? (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="rounded-2xl border border-blue-200/60 bg-blue-50/60 p-5 text-center space-y-4 dark:border-blue-500/20 dark:bg-blue-950/20"
-            >
-              <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
-                <Smartphone size={24} className="text-white" />
-              </div>
-
-              <div>
-                <p className="text-base font-black text-slate-800 dark:text-slate-100">
-                  {isRtl ? "تسجيل دخول سريع وآمن برقم الهاتف" : "Connexion rapide et sécurisée par téléphone"}
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed font-medium">
-                  {isRtl
-                    ? "استلام رمز تحقق فوري عبر SMS مع استخراج تلقائي للرمز (WebOTP) وحماية خفية من Google reCAPTCHA."
-                    : "Recevez un code SMS instantané avec saisie automatique (WebOTP) et protection invisible Google reCAPTCHA."}
-                </p>
-              </div>
-
-              <button
-                onClick={() => router.push("/login/phone")}
-                className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-black text-base shadow-xl hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Smartphone size={18} />
-                {isRtl ? "الدخول برقم الهاتف" : "Continuer avec le téléphone"}
-                <ArrowRight size={18} className={isRtl ? 'rotate-180' : ''} />
-              </button>
-            </motion.div>
-          ) : (
-            <form onSubmit={handleEmailAuth} className="space-y-4 relative">
+          {/* Form: Email/Password Mode */}
+          <form onSubmit={handleEmailAuth} className="space-y-4 relative">
               <AnimatePresence>
                 {isLocked && (
                   <motion.div 
@@ -797,7 +691,7 @@ export default function LoginPage() {
                   <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:"auto"}} exit={{opacity:0, height:0}} className="relative">
                     <div className={`absolute inset-y-0 ${isRtl ? 'right-0 pr-4' : 'left-0 pl-4'} flex items-center pointer-events-none`}><UserIcon size={18} className="text-slate-400"/></div>
                     <input 
-                      required type="text" value={name} onChange={e=>setName(e.target.value)} placeholder={t("nameLabel")} 
+                      required type="text" autoComplete="name" value={name} onChange={e=>setName(e.target.value)} placeholder={t("nameLabel")} 
                       className={`w-full ${isRtl ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-base`} 
                     />
                   </motion.div>
@@ -808,7 +702,7 @@ export default function LoginPage() {
               <div className="relative">
                 <div className={`absolute inset-y-0 ${isRtl ? 'right-0 pr-4' : 'left-0 pl-4'} flex items-center pointer-events-none`}><Mail size={18} className="text-slate-400"/></div>
                 <input 
-                  required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder={t("email")} 
+                  required type="email" inputMode="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder={t("email")} 
                   className={`w-full ${isRtl ? 'pr-12 pl-4 text-right' : 'pl-12 pr-4 text-left'} py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-base dir-ltr`} 
                   dir="ltr" 
                 />
@@ -825,7 +719,7 @@ export default function LoginPage() {
                     }} placeholder={t("password")} 
                     className={`w-full ${isRtl ? 'pr-12 pl-12 text-right' : 'pl-12 pr-12 text-left'} py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-base dir-ltr`} 
                     dir="ltr" 
-                    autoComplete="current-password"
+                    autoComplete={authMode === "signup" ? "new-password" : "current-password"}
                   />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className={`absolute inset-y-0 ${isRtl ? 'left-0 pl-4' : 'right-0 pr-4'} flex items-center text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200`}>
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -889,7 +783,6 @@ export default function LoginPage() {
                 {!loading && <ArrowRight size={18} className={isRtl ? 'rotate-180' : ''} />}
               </button>
             </form>
-          )}
 
           {/* Social Auth Divider */}
           <div className="relative my-6">
@@ -898,23 +791,12 @@ export default function LoginPage() {
           </div>
 
           {/* Social Auth & Guest Buttons */}
-          <div className="space-y-3">
-            <button onClick={handleGoogleLogin} disabled={loading} type="button" className="w-full py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-white rounded-2xl font-bold text-sm hover:shadow-md transition-all flex items-center justify-center gap-3 disabled:opacity-50">
-              <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-              {t("googleLogin")}
-            </button>
-            
-            <button onClick={handleFacebookLogin} disabled={loading} type="button" className="w-full py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white rounded-2xl font-bold text-sm hover:shadow-md transition-all flex items-center justify-center gap-3 disabled:opacity-50">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-              {t("facebookLogin")}
-            </button>
-
-            <button onClick={handleGuest} disabled={loading} type="button" className="w-full pt-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-bold text-xs transition-colors text-center disabled:opacity-50">
-              <span className="border-b border-dotted border-slate-400 hover:border-solid hover:border-slate-800 dark:hover:border-slate-200 pb-0.5">
-                {t("guestAccessHint")}
-              </span>
-            </button>
-          </div>
+          <SSOProviders
+            isRtl={isRtl}
+            disabled={loading}
+            onSuccess={handleSSOSuccess}
+            onGuest={handleGuest}
+          />
 
         </div>
       </div>

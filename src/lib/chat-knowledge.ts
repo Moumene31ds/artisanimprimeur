@@ -3,6 +3,15 @@
 // about the store. The /api/chat route builds its system prompt from here, so
 // product prices, payment and FAQ data never drift from the real site.
 
+import { getPresetById } from '@/lib/ai-runtime';
+
+/** يرجع تعليمات أسلوب الشخصية المختارة من لوحة التحكم (نص فارغ إن لم وجد). */
+function getPersonalityInstructions(presetId: string): string {
+  const preset = getPresetById(presetId);
+  if (!preset) return '';
+  return `\n===== PERSONALITY (configured by the shop owner — follow it) =====\n${preset.instructions}`;
+}
+
 export interface ChatProduct {
   key: string;
   nameFr: string;
@@ -177,6 +186,48 @@ export interface ChatPromptOptions {
     email?: string | null;
     isGuest?: boolean;
   } | null;
+  /** ====== إعدادات المشرف الحيّة (لوحة التحكم → مركز الذكاء) ====== */
+  admin?: {
+    personality?: string;
+    customStyle?: string;
+    extraInstructions?: string;
+    lengthPref?: 'short' | 'balanced' | 'detailed';
+    languagePolicy?: 'auto' | 'fr' | 'ar';
+    ordersEnabled?: boolean;
+    assistantName?: string;
+    workingHours?: { enabled: boolean; start: string; end: string };
+    outsideHoursNoteFr?: string;
+    outsideHoursNoteAr?: string;
+    handoff?: {
+      whatsappNumber?: string;
+      keywords?: string;
+      messageFr?: string;
+      messageAr?: string;
+      isOpenNow: boolean;
+    };
+  } | null;
+  /** لغة آخر رسالة من المستخدم كما كشفها الخادم (فرض المرآة اللغوية) */
+  detectedUserLang?: 'ar' | 'fr' | null;
+}
+
+/**
+ * كشف لغة رسالة المستخدم بشكل حتمي:
+ * - أي حرف عربي (أو فارسي/عثماني) → عربية
+ * - وإلا فرنسية/لاتينية، مع محاولة التقاط الدارجة اللاتينية الجزائرية
+ */
+export function detectUserLanguage(text: string): 'ar' | 'fr' {
+  if (!text) return 'fr';
+  // نتجاهل بادئة السياق الداخلية وروابط الصور
+  const clean = text
+    .replace(/\[Context:[^\]]*\]\.?/gi, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .trim();
+  if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(clean)) return 'ar';
+  // دارجة لاتينية شائعة (جزائرية) → نعتبرها عربية العامية لكن بالحروف اللاتينية
+  const darijaWords =
+    /\b(salam|slm|chhal|ch7al|chhel|bch|bghit|nheb|nbghik|wach|waalach|kayn|makayn|mezian|mzyan|khouya|khti|zwina|bezzaf|bzaf|choukra|chkoun|3lach|3andek|3andi|rani|hna|dyal|dial|ghir|hwaja|khdma|khedma|taman|thaman|smit|smiya)\b/i;
+  if (darijaWords.test(clean)) return 'ar';
+  return 'fr';
 }
 
 export function buildChatSystemPrompt(options: ChatPromptOptions = {}): string {
@@ -184,12 +235,37 @@ export function buildChatSystemPrompt(options: ChatPromptOptions = {}): string {
     (p) => `- ${p.nameFr} / ${p.nameAr} : ${p.packPriceDZD} DA pour ${p.packSize} unités (${p.unitPriceDZD} DA/unité)`
   ).join('\n');
 
-  const langRule =
-    options.languageHint === 'ar'
-      ? 'Reply in ARABIC (Modern Standard, friendly and natural). Keep French terms in parentheses when useful.'
-      : options.languageHint === 'fr'
-        ? 'Reply in FRENCH. Keep Arabic terms in parentheses when useful.'
-        : 'Reply in the SAME language the user writes in (Arabic or French).';
+  // سياسة اللغة: اختيار المشرف يتقدم، ثم كشف الخادم للغة آخر سؤال (مرآة صارمة)،
+  // وأخيراً تلميح لغة الواجهة كاحتياط.
+  const adminLang = options.admin?.languagePolicy;
+  const detected = options.detectedUserLang;
+  const mirrorAr =
+    'The user\'s LAST message is in ARABIC. MANDATORY: reply ONLY in Arabic (Modern Standard with a natural friendly touch). Absolutely no French sentences — French product names may stay in parentheses.';
+  const mirrorFr =
+    'The user\'s LAST message is in FRENCH (Latin script). MANDATORY: reply ONLY in French. If they use casual Latin-script Algerian dialect (darija), mirror that same casual tone in Latin darija. Absolutely no Arabic-script sentences.';
+  let langRule: string;
+  if (adminLang === 'fr') {
+    langRule = 'Reply in FRENCH always, even if the user writes in Arabic.';
+  } else if (adminLang === 'ar') {
+    langRule = 'Reply in ARABIC (Modern Standard) always, even if the user writes in French.';
+  } else if (detected === 'ar') {
+    langRule = `LANGUAGE RULE (HIGHEST PRIORITY): ${mirrorAr} This applies to EVERY reply.`;
+  } else if (detected === 'fr') {
+    langRule = `LANGUAGE RULE (HIGHEST PRIORITY): ${mirrorFr} This applies to EVERY reply.`;
+  } else if (options.languageHint === 'ar') {
+    langRule = 'Reply in ARABIC (Modern Standard, friendly and natural). Keep French terms in parentheses when useful.';
+  } else if (options.languageHint === 'fr') {
+    langRule = 'Reply in FRENCH. Keep Arabic terms in parentheses when useful.';
+  } else {
+    langRule = 'LANGUAGE RULE (HIGHEST PRIORITY): Mirror the language of the user\'s LAST message exactly — Arabic script → Arabic, Latin script → French or casual Latin darija. Never mix scripts in one sentence.';
+  }
+
+  const lengthRule =
+    options.admin?.lengthPref === 'short'
+      ? 'LENGTH: Keep every reply under ~40 words. Ultra-concise.'
+      : options.admin?.lengthPref === 'detailed'
+        ? 'LENGTH: You may give richer, well-structured answers with sections and bullet lists when it helps the customer.'
+        : '';
 
   const pageContext = options.page
     ? `\nThe user is currently browsing the page "${options.page}". Use this to give contextual help (e.g. on /cart talk about the cart, on /orders about their orders).`
@@ -211,6 +287,50 @@ export function buildChatSystemPrompt(options: ChatPromptOptions = {}): string {
     ? `\n===== CONVERSATION SUMMARY (earlier turns, keep it consistent) =====\n${options.summary}`
     : '';
 
+  // قسم شخصية المساعد الذي يتحكم به المشرف من لوحة التحكم
+  const admin = options.admin;
+  const personalitySection =
+    admin?.personality && admin.personality !== 'custom'
+      ? getPersonalityInstructions(admin.personality)
+      : '';
+  const customStyleSection = admin?.customStyle
+    ? `\n===== OWNER STYLE DIRECTIVE (from the shop owner — follow it) =====\n${admin.customStyle}`
+    : '';
+  const extraSection = admin?.extraInstructions
+    ? `\n===== OWNER EXTRA INSTRUCTIONS (highest priority after STRICT RULES) =====\n${admin.extraInstructions}`
+    : '';
+
+  const ordersRule = admin?.ordersEnabled === false
+    ? '8. Order-taking via chat is temporarily DISABLED by the owner: never collect order details and never call createOrder. Instead, invite the user to order via the website catalog.'
+    : '8. When the user wants to order, collect step by step (name → phone → product → quantity), then confirm with createOrder.';
+
+  // هوية المساعد (اسم يحدده المشرف)
+  const identitySection = admin?.assistantName?.trim()
+    ? `IDENTITY OVERRIDE: Your name is "${admin.assistantName.trim()}". Use it when introducing yourself; never call yourself L'Artisan AI.`
+    : '';
+
+  // أوقات العمل: حالة "مفتوح الآن" يحددها الخادم مسبقاً
+  let hoursSection = '';
+  if (admin?.workingHours?.enabled) {
+    const { start, end } = admin.workingHours;
+    const noteFr = admin.outsideHoursNoteFr?.trim();
+    const noteAr = admin.outsideHoursNoteAr?.trim();
+    const notesLine =
+      noteFr || noteAr
+        ? `\nOutside-hours owner note to share when relevant: FR="${noteFr || '-'}" / AR="${noteAr || '-'}".`
+        : '';
+    hoursSection = `\n===== BUSINESS HOURS =====\nWorkshop hours: ${start}–${end} (Algeria time). It is currently ${admin.handoff?.isOpenNow ? 'WITHIN' : 'OUTSIDE'} working hours. If the user needs human follow-up outside these hours, mention it politely and say the team will reply next business day.${notesLine}`;
+  }
+
+  // التحويل لموظف بشري عبر واتساب عند الطلب أو الإحباط
+  let handoffSection = '';
+  if (admin?.handoff?.whatsappNumber) {
+    const kw = admin.handoff.keywords?.trim();
+    const msgFr = admin.handoff.messageFr?.trim();
+    const msgAr = admin.handoff.messageAr?.trim();
+    handoffSection = `\n===== HUMAN HANDOFF =====\nIf the user explicitly asks for a human${kw ? `, or expresses frustration matching cues like: ${kw}` : ''}, politely propose contacting a human team member on WhatsApp: https://wa.me/${admin.handoff.whatsappNumber.replace(/\D/g, '')}${msgFr || msgAr ? `\nSuggested hand-off pitch: FR="${msgFr || '-'}" / AR="${msgAr || '-'}"` : ''}\nOnly offer this when genuinely needed — do not repeat it every message.`;
+  }
+
   return `You are L'Artisan AI, the smart, bilingual (Arabic + French) premium print consultant for "${COMPANY.name}" in Oran, Algeria.
 ${langRule}
 
@@ -222,9 +342,10 @@ ${langRule}
 5. Do NOT promise home delivery or quote delivery prices/times to other wilayas — it does not exist yet.
 6. Do NOT claim online card payment is available — it is not.
 7. Keep answers concise and scannable: short lines, **bold** for prices/quantities, bullet lists, no long paragraphs.
-8. When the user wants to order, collect step by step (name → phone → product → quantity), then confirm with createOrder.
+${ordersRule}
 9. When the user says something like "خذني إلى..." or "amène-moi à...", use navigateToPage.
-${pageContext}
+10. When the user asks about delivery status (livraison, التوصيل, الاستلام), call deliveryStatus. Never quote delivery times or fees to other wilayas.
+${lengthRule}${pageContext}
 ${userContext}
 
 ===== COMPANY =====
@@ -270,7 +391,8 @@ Also a daily "Wheel of Fortune" on the home page can generate a random welcome c
 - Contact: WhatsApp ${COMPANY.phone}.
 
 ===== TOOLS =====
-Use calculatePrice to give exact prices, searchProducts to find a product, checkPromoCode to validate a code, navigateToPage to move the user to a page, and createOrder to register an order after collecting name, phone, product and quantity.`;
+Use calculatePrice to give exact prices, searchProducts to find a product, checkPromoCode to validate a code, navigateToPage to move the user to a page, deliveryStatus to answer delivery/collection questions, and createOrder to register an order after collecting name, phone, product and quantity.
+${personalitySection}${customStyleSection}${extraSection}${identitySection ? '\n' + identitySection : ''}${hoursSection}${handoffSection}`;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyWebhook } from "@/lib/whatsapp-service";
+import { verifyWebhook, verifyWebhookSignature } from "@/lib/whatsapp-service";
+import { logSecurityEvent } from "@/lib/audit";
 import { db } from "@/lib/firebase";
 import { doc, updateDoc, getDoc } from "firebase/firestore";
 
@@ -24,7 +25,19 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    // التحقق من توقيع Meta الرسمي (X-Hub-Signature-256) قبل أي معالجة —
+    // يمنع انتحال الأحداث (webhook spoofing) من مصادر غير مصرّح بها.
+    const rawBody = await request.text();
+    if (!verifyWebhookSignature(rawBody, request.headers.get("x-hub-signature-256"))) {
+      await logSecurityEvent({
+        type: "whatsapp_webhook_bad_signature",
+        ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown",
+        details: "Rejected WhatsApp webhook with invalid X-Hub-Signature-256.",
+      });
+      return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
+    }
+
+    const body = JSON.parse(rawBody);
 
     if (body.object !== "whatsapp_business_account") {
       return NextResponse.json({ status: "ok" });

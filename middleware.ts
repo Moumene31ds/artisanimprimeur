@@ -61,7 +61,8 @@ export function middleware(request: NextRequest) {
   }
 
   // 2) حجب الطلبات المشبوهة (حقن / ماسحات / روبوتات خبيثة).
-  if (isSuspiciousRequest(request)) {
+  // استثناء: security.txt يجب أن يصل لباحثات الثغرات وأدوات الفحص (curl وغيرها)
+  if (isSuspiciousRequest(request) && pathname !== '/.well-known/security.txt') {
     const response = new NextResponse('Suspicious activity detected', { status: 403 });
     return applySecurityHeaders(applyNoStoreHeaders(response));
   }

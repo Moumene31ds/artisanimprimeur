@@ -11,16 +11,65 @@ import {
 import {
   buildChatSystemPrompt,
   buildConversationSummary,
+  detectUserLanguage,
   parseUserContext,
   stripUserContext,
   computePrice,
   lookupPromo,
 } from '@/lib/chat-knowledge';
 import { getCatalogProducts } from '@/lib/catalog';
+import { moderateMessage, MODERATION_VIOLATION_MESSAGE } from '@/lib/moderation';
+import { getAiRuntimeConfig, type AiRuntimeConfig } from '@/lib/ai-runtime';
+import { getClientIp } from '@/lib/security';
+import { SlidingWindowRateLimiter } from '@/lib/rate-limit';
+import { collection, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 export const maxDuration = 60;
 
+/** حد افتراضي احتياطي + مخزن محدودات حسب القيمة المختارة في اللوحة */
+const chatLimiter = new SlidingWindowRateLimiter(60 * 60 * 1000, 40);
+const chatLimiters = new Map<number, SlidingWindowRateLimiter>([[40, chatLimiter]]);
+
+/** هل نحن ضمن أوقات العمل المحددة في لوحة التحكم؟ (توقيت الجزائر UTC+1 دائماً) */
+function isWithinWorkingHours(start: string, end: string): boolean {
+  try {
+    const now = new Date(Date.now() + 60 * 60 * 1000); // UTC+1
+    const minutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    const s = sh * 60 + sm;
+    const e = eh * 60 + em;
+    if (s === e) return true; // نطاق كامل 24 ساعة
+    return s < e ? minutes >= s && minutes < e : minutes >= s || minutes < e; // يدعم الفترات الليلية
+  } catch {
+    return true;
+  }
+}
+
 const PRODUCT_KEYS = ['cartes', 'flyers', 'stickers', 'affiches', 'invitations'] as const;
+
+/** تسجيل استخدام الذكاء الاصطناعي (أفضل جهد — لا يكسر الشات أبداً). */
+function logAiUsage(data: {
+  provider: string;
+  modelId: string;
+  latencyMs: number;
+  ok: boolean;
+}) {
+  try {
+    const day = new Date().toISOString().slice(0, 10);
+    setDoc(doc(collection(db, 'ai_logs')), {
+      day,
+      provider: String(data.provider).slice(0, 40),
+      model: String(data.modelId).slice(0, 120),
+      latencyMs: Math.max(0, Math.round(data.latencyMs)),
+      ok: data.ok,
+      createdAt: serverTimestamp(),
+    }).catch(() => {});
+  } catch {
+    /* تجاهل */
+  }
+}
 
 export async function POST(req: Request) {
   let messages: any[];
@@ -60,6 +109,13 @@ export async function POST(req: Request) {
     if (totalChars > 80_000) {
       return NextResponse.json({ error: 'Conversation is too large.' }, { status: 400 });
     }
+    // وساطة المحتوى: منع الإساءة/الرسائل الضارة قبل وصولها للنموذج.
+    for (const m of messages) {
+      const text = typeof m?.content === 'string' ? m.content : m?.parts?.[0]?.text ?? '';
+      if (moderateMessage(text)) {
+        return NextResponse.json({ error: MODERATION_VIOLATION_MESSAGE }, { status: 400 });
+      }
+    }
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
   }
@@ -81,7 +137,42 @@ export async function POST(req: Request) {
     return { role: m.role, content: stripUserContext(text) };
   });
 
+  // إعدادات المشرف الحيّة (متاحة أيضاً لكتلة الأخطاء أدناه)
+  let rt!: AiRuntimeConfig;
   try {
+    rt = await getAiRuntimeConfig();
+    if (!rt.enabledChatbot) {
+      return NextResponse.json(
+        {
+          error:
+            'L\'assistant IA est temporairement désactivé par la boutique. Contactez-nous via WhatsApp !',
+          disabledByOwner: true,
+        },
+        { status: 503 }
+      );
+    }
+
+    // حد الاستخدام لكل IP (قابل للتخصيص من لوحة التحكم — 0 يعني بلا حد)
+    if (rt.chatRateLimitPerHour > 0) {
+      let limiter = chatLimiters.get(rt.chatRateLimitPerHour);
+      if (!limiter) {
+        limiter = new SlidingWindowRateLimiter(60 * 60 * 1000, rt.chatRateLimitPerHour);
+        chatLimiters.set(rt.chatRateLimitPerHour, limiter);
+      }
+      const rl = limiter.allow(`chat:${getClientIp(req as any)}`);
+      if (!rl.allowed) {
+        return NextResponse.json(
+          {
+            error:
+              'Vous avez atteint la limite de messages. Merci de réessayer un peu plus tard.',
+            rateLimited: true,
+            retryAfterSeconds: Math.ceil(rl.retryAfterMs / 1000),
+          },
+          { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } }
+        );
+      }
+    }
+
     const toolsDef = {
       calculatePrice: tool({
         description:
@@ -104,24 +195,37 @@ export async function POST(req: Request) {
 
       searchProducts: tool({
         description:
-          'Search the live store catalog for products matching a keyword (name or category) and return the top matches with real prices.',
+          'Search the live store catalog for products matching a keyword (name or category) and return the top matches with real prices. Supports multi-word queries.',
         inputSchema: z.object({
-          query: z.string().describe('Search keyword, e.g. "cartes", "flyers", "stickers", "affiche".'),
+          query: z.string().describe('Search keyword(s), e.g. "cartes", "flyers", "stickers", "affiche", "invitations".'),
         }),
         execute: async ({ query }) => {
           const q = (query ?? '').toLowerCase().trim();
           const all = await getCatalogProducts();
-          const matches = q
-            ? all.filter(
-                (p) =>
-                  p.name.toLowerCase().includes(q) ||
-                  String(p.category ?? '').toLowerCase().includes(q)
-              )
-            : all;
+          const tokens = q.split(/\s+/).filter(Boolean);
+          const scored = all
+            .map((p) => {
+              const name = p.name.toLowerCase();
+              const category = String(p.category ?? '').toLowerCase();
+              let score = 0;
+              for (const t of tokens) {
+                if (name.includes(t)) score += 2;
+                if (category.includes(t)) score += 1;
+              }
+              if (tokens.length > 1 && score === 0) {
+                const allTokensHit = tokens.every((t) => name.includes(t));
+                if (allTokensHit) score += 3;
+              }
+              return { p, score };
+            })
+            .filter((x) => x.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 6)
+            .map((x) => x.p);
           return {
             success: true,
             query: q,
-            results: matches.slice(0, 6).map((p) => ({
+            results: scored.map((p) => ({
               id: String(p.id),
               name: p.name,
               price: p.price,
@@ -158,6 +262,29 @@ export async function POST(req: Request) {
         execute: async ({ route, messageToUser }) => ({ route, messageToUser, navigated: true }),
       }),
 
+      deliveryStatus: tool({
+        description:
+          'Check the current delivery/collection status. Use when the user asks about delivery, livraison, التوصيل, or where to pick up their order.',
+        inputSchema: z.object({
+          wilaya: z.string().optional().describe('Optional wilaya the user asks about, e.g. "Oran" or "Alger".'),
+        }),
+        execute: async ({ wilaya }) => {
+          return {
+            success: true,
+            homeDeliveryAvailable: false,
+            collectionOnly: true,
+            workshopAddress: "Cité Akid Lotfi, Oran",
+            workshopHours: "09:00 – 18:00 (Sat–Thu)",
+            homeDeliverySoon: true,
+            messageFr:
+              'La livraison à domicile n\'est pas encore disponible. Les commandes se retirent à l\'atelier (Cité Akid Lotfi, Oran), ouvert de 09h à 18h du samedi au jeudi. La livraison arrive très bientôt !',
+            messageAr:
+              'التوصيل إلى المنزل غير متاح بعد. تُستلم الطلبات من مقر المطبعة (حيّ العقيد لطفي، وهران) من 09:00 إلى 18:00 من السبت إلى الخميس. التوصيل قريباً جداً!',
+            ...(wilaya ? { queriedWilaya: wilaya } : {}),
+          };
+        },
+      }),
+
       createOrder: tool({
         description: 'Register a print order after collecting customer details.',
         inputSchema: z.object({
@@ -191,33 +318,83 @@ export async function POST(req: Request) {
       }),
     };
 
+    // مفتاح تشغيل "الطلبات عبر المحادثة" — يُزال أداة إنشاء الطلب عند التعطيل
+    if (!rt.enabledOrders) {
+      delete (toolsDef as Record<string, unknown>).createOrder;
+    }
+
     // Pick the healthiest provider (Ollama locally, OpenRouter free in the cloud).
     const { model, providerName, modelId } = await resolveModel();
 
     const summary = buildConversationSummary(messages) ?? undefined;
-    const system = buildChatSystemPrompt({ languageHint: lang, page, summary, user });
+    // فرض مرآة اللغة: نكشف لغة آخر رسالة مستخدم (بعد إزالة بادئة السياق)
+    const lastUserText = [...cleanedMessages].reverse().find((m: any) => m.role === 'user');
+    const detectedUserLang =
+      rt.languagePolicy === 'auto'
+        ? detectUserLanguage(String(lastUserText?.content ?? ''))
+        : null;
+    const isOpenNow = rt.workingHoursEnabled
+      ? isWithinWorkingHours(rt.workingHoursStart, rt.workingHoursEnd)
+      : true;
+    const system = buildChatSystemPrompt({
+      languageHint: lang,
+      page,
+      summary,
+      user,
+      detectedUserLang,
+      admin: {
+        personality: rt.personality,
+        customStyle: rt.customStyle,
+        extraInstructions: rt.extraInstructions,
+        lengthPref: rt.lengthPref,
+        languagePolicy: rt.languagePolicy,
+        ordersEnabled: rt.enabledOrders,
+        assistantName: rt.assistantName,
+        workingHours: {
+          enabled: rt.workingHoursEnabled,
+          start: rt.workingHoursStart,
+          end: rt.workingHoursEnd,
+        },
+        outsideHoursNoteFr: rt.outsideHoursNoteFr,
+        outsideHoursNoteAr: rt.outsideHoursNoteAr,
+        handoff: {
+          whatsappNumber: rt.whatsappNumber,
+          keywords: rt.handoffKeywords,
+          messageFr: rt.handoffMessageFr,
+          messageAr: rt.handoffMessageAr,
+          isOpenNow,
+        },
+      },
+    });
 
+    const startedAt = Date.now();
     const result = streamText({
       model,
       messages: cleanedMessages,
       system,
-      temperature: 0.4,
+      temperature: rt.temperature,
       tools: toolsDef,
-      stopWhen: stepCountIs(3),
+      stopWhen: stepCountIs(5),
       maxRetries: 2,
       onError: (err: any) => {
         console.warn(`[chat] stream error on ${providerName} (${modelId}):`, err?.message ?? err);
         recordProviderFailure(providerName, err);
+        logAiUsage({ provider: providerName, modelId, latencyMs: Date.now() - startedAt, ok: false });
       },
-      onFinish: () => recordProviderSuccess(providerName),
+      onFinish: () => {
+        recordProviderSuccess(providerName);
+        logAiUsage({ provider: providerName, modelId, latencyMs: Date.now() - startedAt, ok: true });
+      },
     });
 
     return result.toUIMessageStreamResponse();
   } catch (error: any) {
     if (error instanceof AIUnavailableError) {
+      const isRtlMsg = lang === 'ar';
       return NextResponse.json(
         {
           error:
+            (isRtlMsg ? rt?.unavailableMessageAr : rt?.unavailableMessageFr) ||
             'Tous les fournisseurs IA sont temporairement saturés (limite de débit). Veuillez réessayer dans quelques minutes.',
           retryAfterSeconds: error.retryAfterSeconds,
         },

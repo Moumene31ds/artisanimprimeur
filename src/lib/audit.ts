@@ -5,7 +5,12 @@
 
 let adminReady = false;
 
-function getAdminInstance(): any | null {
+/**
+ * الوصول إلى نسخة firebase-admin المهيأة بصلاحيات الخدمة (أو null).
+ * مُصدَّرة لاستخدامها في وحدات الخادم التي تحتاج Firestore/Admin APIs
+ * (مثل قفل محاولات الدخول وApp Check) بنفس ضمانات "لا يكسر النشر أبداً".
+ */
+export function getAdminInstance(): any | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const admin = require('firebase-admin');

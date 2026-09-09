@@ -23,6 +23,33 @@ export type ThemeMode = "light" | "dark" | "system";
 export type FontSizeMode = "sm" | "md" | "lg" | "xl";
 export type DeviceTier = "weak" | "medium" | "powerful";
 
+// تفضيلات مركز الإشعارات الذكي
+export interface NotificationPrefs {
+  orders: boolean;      // حالة الطلبات والتوصيل
+  billing: boolean;     // الفواتير والمدفوعات
+  promos: boolean;      // العروض والتسويق
+  system: boolean;      // إشعارات النظام
+  priceDrops: boolean;  // تنبيهات انخفاض الأسعار (محلية)
+  sound: boolean;       // نغمة الإشعار
+  vibration: boolean;   // اهتزاز الإشعار
+  quietHoursEnabled: boolean;
+  quietFrom: string;    // بداية السكون "HH:mm"
+  quietTo: string;      // نهاية السكون "HH:mm"
+}
+
+export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  orders: true,
+  billing: true,
+  promos: true,
+  system: true,
+  priceDrops: true,
+  sound: true,
+  vibration: true,
+  quietHoursEnabled: false,
+  quietFrom: "22:00",
+  quietTo: "07:00",
+};
+
 // 2. تعريف بنية الحالة للمتجر (Store State Interface)
 interface AppState {
   // حالة اللغة
@@ -49,6 +76,8 @@ interface AppState {
   setHapticFeedback: (enabled: boolean) => void;
   notificationsEnabled: boolean;
   setNotificationsEnabled: (enabled: boolean) => void;
+  notificationPrefs: NotificationPrefs;
+  setNotificationPref: <K extends keyof NotificationPrefs>(key: K, value: NotificationPrefs[K]) => void;
   deviceScore: number | null;
   deviceTier: DeviceTier | null;
   deviceDetectedAt: number | null;
@@ -118,6 +147,7 @@ export const useAppStore = create<AppState>()(
         autoOptimize: true,
         hapticFeedback: true,
         notificationsEnabled: true,
+        notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
         backgroundEffects: true,
         reduceBlur: false,
         keepAwake: false,
@@ -136,6 +166,9 @@ export const useAppStore = create<AppState>()(
       setHapticFeedback: (hapticFeedback) => set({ hapticFeedback }),
       notificationsEnabled: true,
       setNotificationsEnabled: (notificationsEnabled) => set({ notificationsEnabled }),
+      notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
+      setNotificationPref: (key, value) =>
+        set((state) => ({ notificationPrefs: { ...state.notificationPrefs, [key]: value } })),
       deviceScore: null,
       deviceTier: null,
       deviceDetectedAt: null,

@@ -6,6 +6,8 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { useAppStore } from "@/lib/store";
 import { triggerHapticFeedback, playNotificationSound } from "@/lib/utils";
+import { setAppBadge, clearAppBadge } from "@/lib/pwa";
+import { isQuietNow } from "@/lib/notification-engine";
 import { toast } from "sonner";
 
 // -----------------------------------------------
@@ -73,6 +75,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
       setNotifications([]);
       setUnreadCount(0);
       setLoading(false);
+      clearAppBadge();
       knownIdsRef.current = new Set();
       announcedIdsRef.current = new Set();
       firstLoadRef.current = true;
@@ -97,7 +100,10 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
         const prevIds = knownIdsRef.current;
         knownIdsRef.current = new Set(list.map((n) => n.id));
         setNotifications(list);
-        setUnreadCount(list.filter((n) => !n.read).length);
+        const unread = list.filter((n) => !n.read).length;
+        setUnreadCount(unread);
+        // شارة أيقونة التطبيق (Badging API) بعدد الإشعارات غير المقروءة.
+        if (unread > 0) setAppBadge(unread); else clearAppBadge();
         setLoading(false);
 
         const isFirst = firstLoadRef.current;
@@ -112,8 +118,20 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
         const lang = languageRef.current;
         const isRtl = lang === "ar";
 
+        // تفضيلات مركز الإشعارات: الفئات المعطلة تُسجَّل بصمت (بدون toast).
+        const prefs = useAppStore.getState().notificationPrefs;
+        const masterOn = useAppStore.getState().notificationsEnabled;
+        const categoryAllowed = (n: LiveNotification) => {
+          if (!masterOn) return false;
+          const cat = (n.category || "system") as "orders" | "billing" | "system";
+          if (cat === "system" && n.type === "promo") return prefs.promos;
+          return prefs[cat] !== false;
+        };
+
         freshUnread.forEach((n) => {
           announcedIdsRef.current.add(n.id);
+          if (!categoryAllowed(n)) return;
+
           const title = resolveText(n.title, lang, isRtl ? "إشعار جديد" : "Nouvelle notification");
           const message = resolveText(n.message, lang, "");
           const hasAction = Boolean(n.orderId || n.invoiceId || n.link);
@@ -140,9 +158,15 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
           });
         });
 
-        if (optsRef.current.alertOnNew !== false) {
-          playNotificationSound();
-          triggerHapticFeedback("light");
+        // الصوت والاهتزاز: يُكتمان في ساعات السكون أو عند تعطيل القناة.
+        const allowedFresh = freshUnread.filter(categoryAllowed);
+        if (
+          optsRef.current.alertOnNew !== false &&
+          allowedFresh.length > 0 &&
+          !isQuietNow(useAppStore.getState().notificationPrefs)
+        ) {
+          if (useAppStore.getState().notificationPrefs.sound) playNotificationSound();
+          if (useAppStore.getState().notificationPrefs.vibration) triggerHapticFeedback("light");
         }
       },
       (error) => {

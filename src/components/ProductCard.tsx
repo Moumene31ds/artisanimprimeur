@@ -10,8 +10,9 @@ import { useState, useEffect } from "react";
 import BottomSheet from "@/components/BottomSheet";
 import { triggerHapticFeedback } from "@/lib/utils"; // افتراض أنك أنشأت هذه الدالة، وإلا يمكنك إزالتها
 import { nativeShare } from "@/lib/native";
+import { trackProductView } from "@/lib/recently-viewed";
 
-export default function ProductCard({ product }: { product: Product }) {
+export default function ProductCard({ product, priority = false }: { product: Product; priority?: boolean }) {
   const { language, addToCart, toggleFavorite, isFavorite } = useAppStore();
   const [mounted, setMounted] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -81,7 +82,8 @@ export default function ProductCard({ product }: { product: Product }) {
             alt={product.name}
             fill
             sizes="(max-width: 768px) 50vw, 33vw"
-            priority={false}
+            priority={priority}
+            fetchPriority={priority ? "high" : "auto"}
             className="object-cover transition-transform duration-700 group-hover:scale-110"
           />
           
@@ -94,9 +96,17 @@ export default function ProductCard({ product }: { product: Product }) {
             >
               {isAdding ? <Check size={22} /> : <ShoppingCart size={22} />}
             </motion.button>
-            <motion.button 
+            <motion.button
                whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-               onClick={() => setIsQuickViewOpen(true)}
+               onClick={() => {
+                 trackProductView({
+                   id: String(product.id),
+                   name: product.name,
+                   price: product.price,
+                   image: product.image,
+                 });
+                 setIsQuickViewOpen(true);
+               }}
                className="p-4 bg-white text-slate-900 rounded-2xl shadow-xl flex items-center justify-center"
             >
               <Eye size={22} />

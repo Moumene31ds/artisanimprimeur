@@ -2,22 +2,36 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, LayoutGrid, ShoppingBag, Heart, User, Bell } from "lucide-react";
+import { Home, Printer, Box, User, Gift, CreditCard } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useNotifications } from "@/hooks/useNotifications";
-import { motion } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { triggerHapticFeedback } from "@/lib/utils";
+
+interface NavItem {
+  icon: typeof Home;
+  label: string;
+  href: string;
+  badge?: number;
+}
 
 export default function BottomNav() {
   const pathname = usePathname();
   const { language } = useAppStore();
-  const isRtl = language === 'ar';
-  const { unreadCount } = useNotifications({ limitCount: 30, toastOnNew: false });
+  const isRtl = language === "ar";
+  const prefersReducedMotion = useReducedMotion();
+  const [mounted, setMounted] = useState(false);
   const [hidden, setHidden] = useState(false);
   const lastScrollY = useRef(0);
+  const { unreadCount } = useNotifications({ limitCount: 30, toastOnNew: false });
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (prefersReducedMotion) return;
     let ticking = false;
     const onScroll = () => {
       if (ticking) return;
@@ -34,61 +48,90 @@ export default function BottomNav() {
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [prefersReducedMotion]);
 
-  const navItems = [
+  const navItems: NavItem[] = [
     { icon: Home, label: isRtl ? "الرئيسية" : "Accueil", href: "/" },
-    { icon: LayoutGrid, label: isRtl ? "خدماتنا" : "Services", href: "/services" },
-    { icon: Heart, label: isRtl ? "المفضلة" : "Favoris", href: "/favorites" },
-    { icon: Bell, label: isRtl ? "الإشعارات" : "Notifications", href: "/notifications", badge: unreadCount },
-    { icon: ShoppingBag, label: isRtl ? "السلة" : "Panier", href: "/cart" },
-    { icon: User, label: isRtl ? "بروفيلي" : "Profil", href: "/profile" },
+    { icon: Printer, label: isRtl ? "خدماتنا" : "Services", href: "/services" },
+    { icon: Box, label: isRtl ? "المعرض" : "Showroom", href: "/showroom" },
+    { icon: Gift, label: isRtl ? "مزايا" : "Récompenses", href: "/rewards" },
+    { icon: CreditCard, label: isRtl ? "تأكيد الدفع" : "Paiement", href: "/payment-verify" },
+    { icon: User, label: isRtl ? "حسابي" : "Profil", href: "/profile", badge: unreadCount },
   ];
 
+  const handleTap = useCallback(() => {
+    try { triggerHapticFeedback("light"); } catch {}
+  }, []);
+
+  if (!mounted) return null;
+
   return (
-    <motion.div
-      animate={{ y: hidden ? 110 : 0 }}
-      transition={{ type: "spring", stiffness: 300, damping: 30 }}
-      className="md:hidden fixed bottom-0 left-0 right-0 z-50 premium-glass h-[76px] pb-safe border-t border-white/20 dark:border-white/5 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]"
+    <motion.nav
+      initial={prefersReducedMotion ? false : { y: 100, opacity: 0 }}
+      animate={{ y: hidden ? 100 : 0, opacity: hidden ? 0 : 1 }}
+      transition={{ type: "spring", stiffness: 320, damping: 30 }}
+      dir={isRtl ? "rtl" : "ltr"}
+      role="navigation"
+      aria-label={isRtl ? "التنقل الرئيسي" : "Navigation principale"}
+      className="md:hidden fixed z-50 left-0 right-0 mx-auto w-fit
+        bottom-[max(1rem,env(safe-area-inset-bottom))]"
     >
-      <div className="flex justify-around items-center h-full px-2 max-w-lg mx-auto">
+      <div className="glass-bottom-nav flex items-center gap-1 px-2 py-1.5 rounded-full">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
-          
+          const hasBadge = typeof item.badge === "number" && item.badge > 0;
+
           return (
             <Link
               key={item.href}
               href={item.href}
-              onClick={() => { try { triggerHapticFeedback('light'); } catch (e) {} }}
-              className="relative flex flex-col items-center justify-center w-full h-full group"
+              aria-current={isActive ? "page" : undefined}
+              aria-label={`${item.label}${hasBadge ? ` — ${item.badge} ${isRtl ? "جديد" : "nouveau"}` : ""}`}
+              onClick={handleTap}
+              className="relative flex flex-col items-center justify-center min-w-[3.25rem] h-12 px-2 rounded-full transition-colors duration-200 active:scale-95 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
             >
-              {isActive && (
-                <motion.div 
-                  layoutId="activeTab"
-                  className="absolute top-0 w-12 h-1 bg-accent rounded-b-full shadow-[0_2px_10px_rgba(59,130,246,0.5)]"
-                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                />
-              )}
-              <motion.div
-                whileTap={{ scale: 0.82 }}
-                animate={isActive ? { y: -2 } : { y: 0 }}
-                className={`relative p-2 rounded-2xl transition-colors duration-300 ${isActive ? "text-accent bg-accent/10" : "text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300"}`}
-              >
-                <Icon size={24} strokeWidth={isActive ? 2.5 : 2} />
-                {typeof item.badge === "number" && item.badge > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center shadow-md ring-2 ring-white dark:ring-slate-900 animate-pulse">
-                    {item.badge > 99 ? "99+" : item.badge}
-                  </span>
+              <AnimatePresence>
+                {isActive && (
+                  <motion.div
+                    layoutId="activeTab"
+                    className="glass-bottom-nav-active-pill absolute inset-0 rounded-full"
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                  />
                 )}
+              </AnimatePresence>
+
+              <motion.div
+                whileTap={prefersReducedMotion ? undefined : { scale: 0.82 }}
+                animate={isActive ? { y: -1 } : { y: 0 }}
+                transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                className={`relative z-10 flex flex-col items-center justify-center gap-px ${
+                  isActive
+                    ? "text-slate-900 dark:text-white"
+                    : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
+                }`}
+              >
+                <span className="relative">
+                  <Icon
+                    size={20}
+                    strokeWidth={isActive ? 2.4 : 1.8}
+                  />
+                  {hasBadge && (
+                    <span className="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 flex items-center justify-center bg-red-500 text-white text-[8px] font-black rounded-full shadow-md ring-1.5 ring-white dark:ring-slate-900 animate-pulse">
+                      {item.badge! > 99 ? "99+" : item.badge}
+                    </span>
+                  )}
+                </span>
+                <span className={`text-[10px] leading-none font-semibold transition-opacity duration-200 ${
+                  isActive ? "opacity-100" : "opacity-70"
+                }`}>
+                  {item.label}
+                </span>
               </motion.div>
-              <span className={`text-[10px] mt-1 font-bold transition-colors ${isActive ? "text-accent" : "text-slate-400 dark:text-slate-500"}`}>
-                {item.label}
-              </span>
             </Link>
           );
         })}
       </div>
-    </motion.div>
+    </motion.nav>
   );
 }

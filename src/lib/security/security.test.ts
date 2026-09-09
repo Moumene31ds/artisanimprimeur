@@ -345,6 +345,14 @@ describe('strict CORS', () => {
     assert.ok(origins.includes('https://app.example.com'));
     delete process.env.CORS_ALLOWED_ORIGINS;
   });
+
+  test('getAllowedOrigins always includes the official production domain as fallback', () => {
+    delete process.env.CORS_ALLOWED_ORIGINS;
+    delete process.env.NEXT_PUBLIC_APP_URL;
+    const origins = getAllowedOrigins();
+    assert.ok(origins.includes('https://artisanimprimeur.vercel.app'));
+    assert.ok(origins.includes('http://localhost:3000'));
+  });
 });
 
 // ---------------------------------------------------------------

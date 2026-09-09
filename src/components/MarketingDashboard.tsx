@@ -111,7 +111,12 @@ export const MarketingDashboard: React.FC = () => {
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
-        const response = await fetch('/api/marketing/customers?analytics=true');
+        const user = auth.currentUser;
+        const token = user ? await user.getIdToken() : null;
+        if (!token) return;
+        const response = await fetch('/api/marketing/customers?analytics=true', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (response.ok) {
           const analytics = await response.json();
           setData(analytics);
