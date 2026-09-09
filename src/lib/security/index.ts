@@ -56,6 +56,8 @@ export interface RouteRateLimit {
 }
 
 export const ROUTE_RATE_LIMITS: RouteRateLimit[] = [
+  // مسار المصادقة الرسمي لـ Google: حد مريح للمستخدم الحقيقي (30 طلب/دقيقة)
+  { match: /^\/api\/auth\/google/, limit: 30, windowMs: 60_000 },
   // مصادقة (تسجيل/دخول): صارم لمنع تخمين كلمات المرور.
   { match: /^\/api\/auth\//, limit: 10, windowMs: 60_000 },
   // محادثة الذكاء الاصطناعي: يحمي حصة المزود المجاني من الاستغلال.

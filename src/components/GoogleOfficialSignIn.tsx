@@ -100,10 +100,24 @@ export default function GoogleOfficialSignIn({
           }),
         });
 
-        const data = await verifyRes.json();
+        let data: any = null;
+        const textBody = await verifyRes.text();
+        try {
+          data = JSON.parse(textBody);
+        } catch {
+          data = { error: textBody };
+        }
 
-        if (!verifyRes.ok || !data.ok) {
-          throw new Error(data.error || "Échec de la validation Google.");
+        if (verifyRes.status === 429) {
+          throw new Error(
+            isRtl
+              ? "طلبات كثيرة في وقت قصير. يرجى الانتظار لحظات ثم المحاولة مجدداً."
+              : "Trop de requêtes. Veuillez patienter un instant avant de réessayer."
+          );
+        }
+
+        if (!verifyRes.ok || !data?.ok) {
+          throw new Error(data?.error || (isRtl ? "فشل التحقق من Google" : "Échec de la validation Google."));
         }
 
         // 2. مزامنة بيانات الاعتماد مع Firebase Client SDK محلياً بدون أي Popup

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
 
   // 1. تقييد المعدل لحماية المسار من الاستنزاف والتخمين
-  const rateLimit = enforceRateLimit(request, 10, 60_000);
+  const rateLimit = enforceRateLimit(request, 30, 60_000, `google_auth_endpoint:${ip}`);
   if (!rateLimit.allowed) {
     await logSecurityEvent({
       type: "google_auth_rate_limited",
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       details: "Rate limit exceeded on Google auth endpoint",
     });
     const res = NextResponse.json(
-      { error: "Too many authentication attempts. Please wait." },
+      { error: "Too many authentication attempts. Please wait a moment." },
       { status: 429 }
     );
     res.headers.set("Retry-After", String(rateLimit.retryAfterSeconds));

@@ -99,10 +99,20 @@ export function middleware(request: NextRequest) {
   const routeRule = isApiPath ? getRouteRateLimit(pathname) : null;
   const limit = routeRule?.limit ?? (isApiPath ? 60 : 180);
   const windowMs = routeRule?.windowMs ?? 60_000;
+  const clientIp = getClientIp(request);
+  const rateLimitKey = `ip:${clientIp}:${routeRule ? pathname : 'global'}`;
 
-  const rateLimit = enforceRateLimit(request, limit, windowMs);
+  const rateLimit = enforceRateLimit(request, limit, windowMs, rateLimitKey);
   if (!rateLimit.allowed) {
-    const response = new NextResponse('Too many requests', { status: 429 });
+    const response = isApiPath
+      ? NextResponse.json(
+          {
+            error: 'Too many requests. Please wait a moment.',
+            retryAfterSeconds: rateLimit.retryAfterSeconds,
+          },
+          { status: 429 }
+        )
+      : new NextResponse('Too many requests', { status: 429 });
     response.headers.set('Retry-After', String(rateLimit.retryAfterSeconds));
     return applySecurityHeaders(applyNoStoreHeaders(addRateLimitHeaders(response, rateLimit)));
   }

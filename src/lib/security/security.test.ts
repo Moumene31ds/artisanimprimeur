@@ -205,6 +205,7 @@ describe('enforceRateLimit (in-memory bucket)', () => {
 
   test('route-specific limits are applied per path', () => {
     assert.equal(getRouteRateLimit('/api/auth/login')?.limit, 10);
+    assert.equal(getRouteRateLimit('/api/auth/google')?.limit, 30);
     assert.equal(getRouteRateLimit('/api/payments/verify-receipt')?.limit, 5);
     assert.equal(getRouteRateLimit('/api/products'), null);
   });
