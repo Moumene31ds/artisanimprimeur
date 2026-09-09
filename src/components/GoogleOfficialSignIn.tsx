@@ -33,6 +33,10 @@ interface GoogleOfficialSignInProps {
   }) => Promise<void> | void;
   disabled?: boolean;
   enableOneTap?: boolean;
+  shape?: "rectangular" | "pill" | "circle" | "square";
+  theme?: "outline" | "filled_blue" | "filled_black";
+  size?: "large" | "medium" | "small";
+  text?: "signin_with" | "signup_with" | "continue_with" | "signin";
   className?: string;
 }
 
@@ -50,6 +54,10 @@ export default function GoogleOfficialSignIn({
   onSuccess,
   disabled = false,
   enableOneTap = true,
+  shape = "pill",
+  theme = "outline",
+  size = "large",
+  text = "continue_with",
   className = "",
 }: GoogleOfficialSignInProps) {
   const [scriptLoaded, setScriptLoaded] = useState(false);
