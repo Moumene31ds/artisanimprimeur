@@ -14,6 +14,11 @@ export const config = {
     measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || process.env.FIREBASE_MEASUREMENT_ID,
   },
 
+  // Google Identity Services (Official Sign-In)
+  google: {
+    clientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '',
+  },
+
   // Free AI Provider (Ollama local → OpenRouter free fallback)
   ai: {
     provider: (process.env.AI_PROVIDER || 'auto') as 'auto' | 'ollama' | 'openrouter',

@@ -21,6 +21,7 @@ import { auth, db } from "@/lib/firebase";
 import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+import GoogleOfficialSignIn from "./GoogleOfficialSignIn";
 
 // Brand SVG marks
 function GoogleMark({ className }: { className?: string }) {
@@ -84,16 +85,6 @@ type ProviderDef = {
 
 const PROVIDERS: ProviderDef[] = [
   {
-    id: "google",
-    name: "Google",
-    color: "bg-white dark:bg-slate-800",
-    hover: "hover:bg-slate-50 dark:hover:bg-slate-700",
-    border: "border-slate-200 dark:border-slate-700",
-    text: "text-slate-700 dark:text-white",
-    mark: (c) => <GoogleMark className={c} />,
-    build: () => new GoogleAuthProvider(),
-  },
-  {
     id: "facebook",
     name: "Facebook",
     color: "bg-[#1877F2]",
@@ -141,7 +132,7 @@ const PROVIDERS: ProviderDef[] = [
 
 interface SSOProvidersProps {
   isRtl: boolean;
-  onSuccess: (user: User) => Promise<void> | void;
+  onSuccess: (user: any) => Promise<void> | void;
   onGuest: () => Promise<void> | void;
   disabled?: boolean;
 }
@@ -149,7 +140,7 @@ interface SSOProvidersProps {
 export default function SSOProviders({ isRtl, onSuccess, onGuest, disabled }: SSOProvidersProps) {
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
 
-  const ensureUserProfile = async (user: User) => {
+  const ensureUserProfile = async (user: any) => {
     try {
       const ref = doc(db, "users", user.uid);
       const snap = await getDoc(ref);
@@ -251,6 +242,19 @@ export default function SSOProviders({ isRtl, onSuccess, onGuest, disabled }: SS
     }
   };
 
+  const handleGoogleOfficialSuccess = async (googleUser: any) => {
+    try {
+      await ensureUserProfile(googleUser);
+      await logSecurity("google_gis_login_success", {
+        email: googleUser.email || "google-user",
+        type: "google_official_gis",
+      });
+      await onSuccess(googleUser);
+    } catch (err) {
+      console.error("Error in handleGoogleOfficialSuccess:", err);
+    }
+  };
+
   const handleGuest = async () => {
     if (disabled) return;
     try {
@@ -261,8 +265,31 @@ export default function SSOProviders({ isRtl, onSuccess, onGuest, disabled }: SS
   };
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-5 gap-2">
+    <div className="space-y-3.5">
+      {/* ─── خدمة التسجيل الرسمية والمباشرة عبر Google (GIS) ─── */}
+      <div className="w-full">
+        <GoogleOfficialSignIn
+          isRtl={isRtl}
+          disabled={disabled || loadingProvider !== null}
+          onSuccess={handleGoogleOfficialSuccess}
+          enableOneTap={true}
+          shape="rectangular"
+          theme="outline"
+          size="large"
+          text="continue_with"
+        />
+      </div>
+
+      <div className="relative flex py-1 items-center">
+        <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+        <span className="flex-shrink mx-3 text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500">
+          {isRtl ? "أو عبر شبكات أخرى" : "Ou autres réseaux"}
+        </span>
+        <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+      </div>
+
+      {/* بقية مزودي SSO (Facebook, GitHub, Microsoft, Yahoo) */}
+      <div className="grid grid-cols-4 gap-2">
         {PROVIDERS.map((p) => (
           <motion.button
             key={p.id}
