@@ -13,7 +13,7 @@ import { RefreshCw } from "lucide-react";
 interface PullToRefreshProps {
   onRefresh: () => Promise<void> | void;
   children: React.ReactNode;
-  language?: "ar" | "fr";
+  language?: "ar" | "fr" | "en";
 }
 
 const THRESHOLD = 72; // px

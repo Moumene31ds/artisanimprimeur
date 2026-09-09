@@ -268,14 +268,18 @@ export async function POST(req: Request) {
 
   if (storeInOrder) {
     const orderPatch: Record<string, any> = {
-      paymentStatus: 'Envoyé',
+      paymentStatus: shouldAdvance ? 'Payé' : 'Envoyé',
       baridimobTxId: cleanTx,
       baridimobRipSender: sanitizeTxId(ripSender),
       paymentProofUrl: paymentProofUrl || orderData.paymentProofUrl || 'Uploaded',
       aiVerification: report,
       paidAmount: report.extractedAmount || 0,
     };
-    if (shouldAdvance) orderPatch.status = 'Conception';
+    if (shouldAdvance) {
+      orderPatch.status = 'Conception';
+      orderPatch.autoApprovedByAI = true;
+      orderPatch.approvedAt = new Date().toISOString();
+    }
     try {
       await fsPatch(token, `orders/${orderId}`, orderPatch);
     } catch (e) {

@@ -28,15 +28,15 @@ export interface LiveNotification {
   link?: string;
 }
 
-/** ترجمة حقل ثنائي اللغة (string أو {ar, fr}) حسب لغة الواجهة. */
+/** ترجمة حقل متعدد اللغات (string أو {ar, fr, en}) حسب لغة الواجهة. */
 export function resolveText(
-  value: string | { ar: string; fr: string } | undefined,
-  language: "ar" | "fr",
+  value: string | { ar?: string; fr?: string; en?: string } | undefined,
+  language: "ar" | "fr" | "en",
   fallback: string
 ): string {
   if (!value) return fallback;
   if (typeof value === "string") return value;
-  return value[language] || value.ar || value.fr || fallback;
+  return value[language] || value.fr || value.ar || fallback;
 }
 
 interface UseNotificationsOptions {

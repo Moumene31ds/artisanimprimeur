@@ -4,7 +4,7 @@ import Link from "next/link";
 import { 
   ShoppingCart, Menu, User, Globe, 
   LogOut, ShieldCheck, X, ChevronDown, Bell, Sparkles,
-  Heart, Shield, FileCheck, Coins, Settings // الأيقونات الجديدة
+  Heart, Shield, FileCheck, Coins, Settings, Briefcase, Palette, Award
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useEffect, useState } from "react";
@@ -189,6 +189,14 @@ export default function Navbar() {
               <Sparkles size={12} className="animate-pulse" />
               {isRtl ? "استوديو التصميم" : "Studio Design"}
             </Link>
+            <Link 
+              href="/acquisition" 
+              onMouseMove={handleMouseMove} 
+              className={`glass-spotlight px-3.5 py-2.5 rounded-full text-xs font-black bg-gradient-to-r from-amber-500/15 via-emerald-500/15 to-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1.5 transition-all hover:scale-105 shadow-sm ${pathname === "/acquisition" ? "ring-2 ring-amber-400" : ""}`}
+            >
+              <Award size={13} className="text-amber-500 animate-pulse" />
+              <span>{isRtl ? "💎 صفقة الاستحواذ" : "💎 Acquisition"}</span>
+            </Link>
           </div>
 
           {/* أدوات التحكم الجانبية والأيقونات */}
@@ -286,6 +294,9 @@ export default function Navbar() {
                     <Link href="/payment-verify" onClick={() => setIsProfileDropdownOpen(false)} className="flex items-center gap-2 p-3 text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 rounded-xl transition-colors">
                       <FileCheck size={16} /> {isRtl ? "تأكيد دفع بريدي موب" : "Vérifier paiement"}
                     </Link>
+                    <Link href="/b2b" onClick={() => setIsProfileDropdownOpen(false)} className="flex items-center gap-2 p-3 text-sm font-black text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 rounded-xl transition-colors">
+                      <Briefcase size={16} /> {isRtl ? "بوابة الشركات B2B" : "Espace B2B"}
+                    </Link>
                     <Link href="/settings" onClick={() => setIsProfileDropdownOpen(false)} className="flex items-center gap-2 p-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 rounded-xl transition-colors">
                       <Settings size={16} /> {isRtl ? "الإعدادات" : "Paramètres"}
                     </Link>
@@ -335,8 +346,26 @@ export default function Navbar() {
               transition={{ duration: 0.2, ease: "easeOut" }}
               className="lg:hidden absolute top-[110%] left-0 right-0 mx-4 p-5 deep-glass rounded-[2rem] shadow-2xl border border-white/20 dark:border-white/10 flex flex-col gap-2 z-50 overflow-hidden pointer-events-auto"
             >
+                <Link 
+                  href="/acquisition" 
+                  onClick={() => setIsMobileMenuOpen(false)} 
+                  className="p-3.5 font-black rounded-2xl bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-amber-500/20 border border-amber-400/40 text-amber-600 dark:text-amber-300 flex items-center justify-between shadow-sm"
+                >
+                  <div className="flex items-center gap-2">
+                    <Award size={18} className="text-amber-500 animate-pulse" />
+                    <span>{isRtl ? "💎 صفقة الاستحواذ والبيع" : "💎 Platform Acquisition"}</span>
+                  </div>
+                  <span className="text-[10px] bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full font-black">VIP</span>
+                </Link>
+
                <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-slate-700 dark:text-slate-200 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors">{isRtl ? 'الرئيسية' : 'Accueil'}</Link>
                <Link href="/services" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-slate-700 dark:text-slate-200 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors">{isRtl ? 'خدماتنا' : 'Services'}</Link>
+               <Link href="/b2b" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-black rounded-xl text-blue-600 dark:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors flex items-center gap-2">
+                 <Briefcase size={16} /> {isRtl ? 'بوابة الشركات B2B' : 'Espace B2B'}
+               </Link>
+               <Link href="/designers" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-amber-600 dark:text-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-950/20 transition-colors flex items-center gap-2">
+                 <Palette size={16} /> {isRtl ? 'سوق المصممين' : 'Marketplace'}
+               </Link>
                <Link href="/showroom" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-indigo-650 dark:text-indigo-400 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors">{isRtl ? 'معرض المنتجات 3D' : 'Showroom 3D'}</Link>
                <Link href="/bat-scanner" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-emerald-650 dark:text-emerald-400 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors">{isRtl ? 'فحص التصاميم (BAT)' : 'Vérificateur (BAT)'}</Link>
                <Link href="/rewards" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-slate-700 dark:text-slate-200 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors">{isRtl ? 'نادي المكافآت' : 'Club VIP'}</Link>

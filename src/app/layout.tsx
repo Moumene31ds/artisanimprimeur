@@ -17,6 +17,7 @@ import AnnouncementBar from "@/components/AnnouncementBar";
 import MaintenanceGuard from "@/components/MaintenanceGuard"; 
 
 import PWAPrompt from "@/components/PWAPrompt";
+import AcquisitionBanner from "@/components/AcquisitionBanner";
 
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -87,6 +88,7 @@ export default function RootLayout({
             
             <SettingsManager />
             <PWAPrompt />
+            <AcquisitionBanner />
             <AnnouncementBar /> 
             
             <OfflineDetector />

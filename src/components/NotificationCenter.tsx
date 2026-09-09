@@ -13,8 +13,8 @@ import { useRouter } from "next/navigation";
 
 export interface Notification {
   id: string;
-  title?: string | { ar: string; fr: string };
-  message?: string | { ar: string; fr: string };
+  title?: string | { ar?: string; fr?: string; en?: string };
+  message?: string | { ar?: string; fr?: string; en?: string };
   category?: string;
   type?: string;
   read?: boolean;
@@ -29,7 +29,7 @@ interface NotificationCenterProps {
   onClose: () => void;
   notifications: Notification[];
   loading: boolean;
-  language: "ar" | "fr";
+  language: "ar" | "fr" | "en";
 }
 
 export default function NotificationCenter({ 
@@ -215,8 +215,8 @@ export default function NotificationCenter({
           </div>
         ) : (
           notifications.slice(0, 10).map((n) => {
-            const titleText = typeof n.title === 'object' ? n.title[language] : n.title || "";
-            const messageText = typeof n.message === 'object' ? n.message[language] : n.message || "";
+            const titleText = typeof n.title === 'object' ? (n.title[language] || n.title.fr || n.title.ar || "") : n.title || "";
+            const messageText = typeof n.message === 'object' ? (n.message[language] || n.message.fr || n.message.ar || "") : n.message || "";
             
             return (
               <div

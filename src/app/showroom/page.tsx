@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, Suspense, useEffect } from 'react';
+import Link from 'next/link';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useTexture, OrbitControls, Environment, ContactShadows, Center } from '@react-three/drei';
 import * as THREE from 'three';
@@ -10,8 +11,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import Link from "next/link";
 import { useAppStore } from "@/lib/store";
+import LuxuryFinishing3D from "@/components/LuxuryFinishing3D";
 
 // Preset textures for testing
 const PRESETS = [
@@ -555,6 +556,11 @@ export default function ShowroomPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Luxury Finishing 3D Simulator Section */}
+      <section className="mt-16 pt-8 border-t border-slate-200/60 dark:border-slate-800">
+        <LuxuryFinishing3D isRtl={isRtl} />
+      </section>
 
     </div>
   );

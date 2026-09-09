@@ -16,6 +16,7 @@ import { loadOptionalFonts } from "@/lib/fonts";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Environment, ContactShadows, Center } from "@react-three/drei";
 import * as THREE from "three";
+import WebToPrintStudio from "@/components/WebToPrintStudio";
 
 // --- CUSTOM 3D CANVAS TEXTURE MAPPING COMPONENTS ---
 
@@ -376,6 +377,7 @@ export default function CustomizerPage() {
   const st = STUDIO_T[language];
 
   const [mounted, setMounted] = useState(false);
+  const [studioMode, setStudioMode] = useState<"3d" | "w2p">("3d");
   const [activeTab, setActiveTab] = useState<"text" | "image" | "bg" | "ar" | "options">("text");
 
   // --- STUDIO CUSTOMIZER STATES ---
@@ -775,8 +777,41 @@ export default function CustomizerPage() {
             </p>
           </div>
 
-          {/* Core Customizer Workspace grid layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Mode Switcher */}
+          <div className="flex justify-center mb-10">
+            <div className="flex bg-slate-200/70 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-300/50 dark:border-slate-700/50 shadow-inner">
+              <button
+                type="button"
+                onClick={() => setStudioMode("3d")}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all ${
+                  studioMode === "3d"
+                    ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-md"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                }`}
+              >
+                <Sparkles size={16} />
+                {isRtl ? "المحاكي ثلاثي الأبعاد والواقع المعزز 3D & AR" : "Studio 3D & Réalité Augmentée"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setStudioMode("w2p")}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all ${
+                  studioMode === "w2p"
+                    ? "bg-purple-600 text-white shadow-md shadow-purple-600/20"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                }`}
+              >
+                <Layers size={16} />
+                {isRtl ? "استوديو القوالب والطباعة السريعة Web-to-Print" : "Studio Web-to-Print & Gabarits"}
+              </button>
+            </div>
+          </div>
+
+          {studioMode === "w2p" ? (
+            <WebToPrintStudio />
+          ) : (
+            /* Core Customizer Workspace grid layout */
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             
             {/* LEFT / UPPER BLOCK: 3D Viewport canvas */}
             <div className="lg:col-span-6 space-y-6">
@@ -1408,10 +1443,10 @@ export default function CustomizerPage() {
               </div>
 
             </div>
-
           </div>
-        </>
-      )}
+        )}
+      </>
+    )}
 
     </div>
   );

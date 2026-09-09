@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { Loader2, Printer, ArrowLeft, CheckCircle, MessageCircle, AlertCircle, Share2 } from "lucide-react";
+import { Loader2, Printer, ArrowLeft, CheckCircle, MessageCircle, AlertCircle, Share2, Download } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import Barcode from "react-barcode"; // المكتبة الجديدة للباركود
 import { toast } from "sonner";
 import { nativeShare } from "@/lib/native";
+import { jsPDF } from "jspdf";
 
 interface OrderItem {
   name: { fr?: string } | string;
@@ -88,6 +89,184 @@ export default function InvoicePage() {
 
   const handlePrint = () => window.print();
 
+  const handleDownloadPDF = () => {
+    if (!order) return;
+    try {
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      // Top banner
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(0, 0, 210, 8, "F");
+
+      // Header logo & company
+      doc.setFillColor(15, 23, 42);
+      doc.roundedRect(15, 16, 14, 14, 2, 2, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.text("LA", 19, 25);
+
+      doc.setTextColor(15, 23, 42);
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text("L'Artisan Imprimeur", 34, 24);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 116, 139);
+      doc.text("IMPRESSION PROFESSIONNELLE & PACKAGING HAUT DE GAMME", 34, 29);
+
+      // Invoice title & info on the right
+      doc.setFontSize(22);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(203, 213, 225); // slate-300
+      doc.text("FACTURE", 195, 24, { align: "right" });
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(15, 23, 42);
+      doc.text(invoiceNumber, 195, 30, { align: "right" });
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Date : ${invoiceDate.toLocaleDateString("fr-FR")}`, 195, 35, { align: "right" });
+      doc.text(`Échéance : ${dueDate.toLocaleDateString("fr-FR")}`, 195, 40, { align: "right" });
+
+      // Divider line
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.5);
+      doc.line(15, 45, 195, 45);
+
+      // Emetteur / Facture a
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(148, 163, 184);
+      doc.text("ÉMETTEUR", 15, 52);
+      doc.text("FACTURÉ À", 115, 52);
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(15, 23, 42);
+      doc.text("L'Artisan Imprimeur SARL", 15, 58);
+      doc.text(order.customerName, 115, 58);
+
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105);
+      doc.text("Quartier Akid Lotfi, Oran 31000", 15, 63);
+      doc.text("Algérie", 15, 67);
+      doc.text("Tél : +213 549 17 90 00", 15, 71);
+      doc.text("Email : contact@lartisan.dz", 15, 75);
+
+      doc.text(`Téléphone : ${order.phone}`, 115, 63);
+      doc.text(`Wilaya : ${order.wilaya}`, 115, 67);
+      doc.text(`Statut : ${order.status}`, 115, 71);
+
+      // Table Header
+      let curY = 85;
+      doc.setFillColor(15, 23, 42);
+      doc.rect(15, curY, 180, 8, "F");
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.text("DÉSIGNATION DE L'ARTICLE", 18, curY + 5.5);
+      doc.text("QTÉ", 125, curY + 5.5, { align: "center" });
+      doc.text("P.U (DA)", 155, curY + 5.5, { align: "right" });
+      doc.text("TOTAL (DA)", 192, curY + 5.5, { align: "right" });
+
+      curY += 8;
+      // Items rows
+      doc.setFontSize(8.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(30, 41, 59);
+
+      (order.items || []).forEach((item, idx) => {
+        const rowBg = idx % 2 === 0 ? 255 : 248;
+        doc.setFillColor(rowBg, rowBg, rowBg);
+        doc.rect(15, curY, 180, 8, "F");
+
+        const itemName = typeof item.name === "object" ? (item.name.fr || "") : item.name;
+        doc.text(itemName.slice(0, 48), 18, curY + 5.5);
+        doc.text(String(item.quantity), 125, curY + 5.5, { align: "center" });
+        doc.text(Number(item.price).toLocaleString("fr-FR"), 155, curY + 5.5, { align: "right" });
+        const rowTotal = Number(item.price) * Number(item.quantity);
+        doc.setFont("helvetica", "bold");
+        doc.text(rowTotal.toLocaleString("fr-FR"), 192, curY + 5.5, { align: "right" });
+        doc.setFont("helvetica", "normal");
+
+        curY += 8;
+      });
+
+      // Bottom Totals
+      curY += 6;
+      const totalsX = 120;
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(totalsX, curY, 75, 36, 2, 2, "F");
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(totalsX, curY, 75, 36, 2, 2, "S");
+
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 116, 139);
+      doc.text("Sous-total :", totalsX + 4, curY + 7);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(30, 41, 59);
+      doc.text(`${order.subtotal.toLocaleString("fr-FR")} DA`, 191, curY + 7, { align: "right" });
+
+      if (order.discount > 0) {
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(16, 185, 129);
+        doc.text("Remise :", totalsX + 4, curY + 14);
+        doc.text(`- ${order.discount.toLocaleString("fr-FR")} DA`, 191, curY + 14, { align: "right" });
+      }
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 116, 139);
+      doc.text("Livraison :", totalsX + 4, curY + 21);
+      doc.setTextColor(30, 41, 59);
+      doc.text(Number(order.deliveryFee) > 0 ? `${Number(order.deliveryFee).toLocaleString("fr-FR")} DA` : "Gratuit", 191, curY + 21, { align: "right" });
+
+      doc.setDrawColor(203, 213, 225);
+      doc.line(totalsX + 4, curY + 25, 191, curY + 25);
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(15, 23, 42);
+      doc.text("NET À PAYER :", totalsX + 4, curY + 31);
+      doc.text(`${order.total.toLocaleString("fr-FR")} DA`, 191, curY + 31, { align: "right" });
+
+      // PAID stamp if paid
+      if (isPaid) {
+        doc.setFontSize(28);
+        doc.setTextColor(16, 185, 129);
+        doc.setFont("helvetica", "bold");
+        doc.text("PAYÉ", 50, curY + 20, { angle: 15 });
+      }
+
+      // Legal & banking footer
+      const footerY = 270;
+      doc.setDrawColor(226, 232, 240);
+      doc.line(15, footerY, 195, footerY);
+
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 116, 139);
+      doc.text("L'Artisan Imprimeur SARL — RC: 31/00-1234567A20 | NIF: 0000 987654321 00 | NIS: 0019310100234", 105, footerY + 6, { align: "center" });
+      doc.text("Banque de Développement Local (BDL) Agence Akid Lotfi Oran — RIB: 005 00000 123456789 00", 105, footerY + 11, { align: "center" });
+      doc.text("Facture certifiée conforme pour la comptabilité.", 105, footerY + 16, { align: "center" });
+
+      doc.save(`FACTURE_${invoiceNumber}.pdf`);
+      toast.success("Facture PDF téléchargée !");
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      toast.error("Erreur lors de la génération du PDF");
+    }
+  };
+
   const handleWhatsAppShare = () => {
     const message = `Bonjour ${order.customerName},\n\nVoici le résumé de votre commande chez L'Artisan :\n- Facture N°: ${order.id.slice(-8).toUpperCase()}\n- Montant Total: ${order.total.toLocaleString()} DA\n- Statut: ${order.status}\n\nLien de la facture: ${currentUrl}\n\nMerci pour votre confiance !`;
     const whatsappUrl = `https://wa.me/${order.phone.replace(/^0/, "+213")}?text=${encodeURIComponent(message)}`;
@@ -132,24 +311,30 @@ export default function InvoicePage() {
         >
           <ArrowLeft size={18} /> Retour
         </button>
-        <div className="flex gap-3 w-full sm:w-auto">
+        <div className="flex flex-wrap gap-2.5 w-full sm:w-auto">
           <button
             onClick={handleNativeShare}
-            className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl shadow-md hover:bg-blue-700 transition-all font-medium"
+            className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl shadow hover:bg-blue-700 transition-all text-xs font-semibold"
           >
-            <Share2 size={18} /> Partager
+            <Share2 size={16} /> Partager
           </button>
           <button
             onClick={handleWhatsAppShare}
-            className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-[#25D366] text-white px-5 py-2.5 rounded-xl shadow-md hover:bg-[#1ebd5c] transition-all font-medium"
+            className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-[#25D366] text-white px-4 py-2.5 rounded-xl shadow hover:bg-[#1ebd5c] transition-all text-xs font-semibold"
           >
-            <MessageCircle size={18} /> WhatsApp
+            <MessageCircle size={16} /> WhatsApp
+          </button>
+          <button
+            onClick={handleDownloadPDF}
+            className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2.5 rounded-xl shadow hover:shadow-md transition-all text-xs font-semibold"
+          >
+            <Download size={16} /> Télécharger PDF
           </button>
           <button
             onClick={handlePrint}
-            className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-slate-900 text-white px-6 py-2.5 rounded-xl shadow-md hover:bg-slate-800 transition-all font-medium"
+            className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow hover:bg-slate-800 transition-all text-xs font-semibold"
           >
-            <Printer size={18} /> Imprimer / PDF
+            <Printer size={16} /> Imprimer
           </button>
         </div>
       </div>

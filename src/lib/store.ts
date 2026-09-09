@@ -26,8 +26,8 @@ export type DeviceTier = "weak" | "medium" | "powerful";
 // 2. تعريف بنية الحالة للمتجر (Store State Interface)
 interface AppState {
   // حالة اللغة
-  language: "ar" | "fr";
-  setLanguage: (lang: "ar" | "fr") => void;
+  language: "ar" | "fr" | "en";
+  setLanguage: (lang: "ar" | "fr" | "en") => void;
 
   // --- إعدادات التطبيق (Settings) ---
   theme: ThemeMode;

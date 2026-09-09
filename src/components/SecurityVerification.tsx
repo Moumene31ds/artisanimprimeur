@@ -9,7 +9,7 @@ interface SecurityVerificationProps {
   onVerify: (verified: boolean) => void;
   /** إرجاع رمز reCAPTCHA الفعلي (يُستخدم مع Firebase Phone Auth) */
   onToken?: (token: string) => void;
-  language: "ar" | "fr";
+  language: "ar" | "fr" | "en";
   captchaMode: "disabled" | "slider" | "recaptcha" | "recaptcha_v3";
   siteKey?: string;
 }

@@ -88,7 +88,7 @@ export function clearChatHistory(userKey?: string): void {
 }
 
 /** تحويل سجل المحادثة إلى نص قابل للنسخ/التصدير (بدون بادئات السياق). */
-export function buildChatExportText(messages: StoredChatMessage[], lang: "ar" | "fr"): string {
+export function buildChatExportText(messages: StoredChatMessage[], lang: "ar" | "fr" | "en"): string {
   const isRtl = lang === "ar";
   const lines: string[] = [];
   messages.forEach((m) => {
@@ -97,7 +97,9 @@ export function buildChatExportText(messages: StoredChatMessage[], lang: "ar" | 
       .replace(/\s+/g, " ")
       .trim();
     if (!text) return;
-    const role = m.role === "assistant" ? (isRtl ? "المساعد" : "Assistant") : isRtl ? "أنت" : "Vous";
+    const role = m.role === "assistant" 
+      ? (isRtl ? "المساعد" : "Assistant") 
+      : (lang === "ar" ? "أنت" : lang === "fr" ? "Vous" : "You");
     let time = "";
     if (m.createdAt) {
       const d = new Date(m.createdAt);

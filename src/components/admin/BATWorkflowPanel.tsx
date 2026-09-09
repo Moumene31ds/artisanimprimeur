@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FileImage, CheckCircle, XCircle, Clock, Send,
-  MessageSquare, Eye, ThumbsUp, ThumbsDown, Loader2, Upload
+  MessageSquare, Eye, ThumbsUp, ThumbsDown, Loader2, Upload, Layers
 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import {
@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { toast } from "sonner";
 import { useAppStore } from "@/lib/store";
+import { downloadSRA3ImpositionPDF } from "@/lib/imposition-engine";
 
 interface BATOrder {
   id: string;
@@ -365,6 +366,34 @@ export default function BATWorkflowPanel({
                     </button>
                   </div>
                 )}
+
+                {/* زر توليد لوحة الطباعة SRA3 للأوامر المعتمدة أو قيد الطباعة */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const firstItem = order.items?.[0] || {};
+                      const itemName = typeof firstItem.name === "object" ? firstItem.name.fr : (firstItem.name || "Carte de Visite");
+                      await downloadSRA3ImpositionPDF({
+                        orderId: order.id,
+                        customerName: order.customerName || "Client",
+                        productType: itemName.toLowerCase().includes("flyer") ? "flyer_a5" : "carte",
+                        quantity: Number(firstItem.quantity) || 250,
+                        itemTitle: itemName,
+                        paperFinish: "Couché Mat 350g + Pelliculage Soft-Touch",
+                        designImageUrl: order.printProofUrl || order.designUrl,
+                      });
+                      toast.success(isRtl ? "تم تحميل لوحة SRA3 للطباعة الصناعية بنجاح" : "Planche SRA3 générée et téléchargée !");
+                    } catch (err) {
+                      console.error("Error generating imposition PDF:", err);
+                      toast.error(isRtl ? "فشل توليد لوحة الطباعة" : "Erreur lors de la génération de la planche SRA3");
+                    }
+                  }}
+                  className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-sm border border-slate-700/50"
+                >
+                  <Layers size={14} className="text-blue-400" />
+                  <span>{isRtl ? "توليد لوحة الطباعة SRA3 (Imposition)" : "Générer Planche SRA3 (Imposition)"}</span>
+                </button>
 
                 <div className="flex gap-2">
                   <input
