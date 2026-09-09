@@ -13,7 +13,7 @@ import { ThemeSwitcher } from "./ThemeSwitcher";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
 import { auth, db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { toast } from "sonner";
 import NotificationCenter from "./NotificationCenter";
@@ -28,6 +28,8 @@ export default function Navbar() {
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [points, setPoints] = useState<number | null>(null);
+  const [b2bEnabled, setB2bEnabled] = useState<boolean>(false);
+  const [designersEnabled, setDesignersEnabled] = useState<boolean>(false);
   
   const router = useRouter();
   const { notifications, unreadCount, loading: loadingNotifications } = useNotifications({
@@ -50,6 +52,18 @@ export default function Navbar() {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // مراقبة حالة بوابات B2B والمصممين
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "ui"), (snap) => {
+      if (snap.exists()) {
+        const d = snap.data();
+        setB2bEnabled(d.b2bEnabled === true);
+        setDesignersEnabled(d.designersEnabled === true);
+      }
+    });
+    return () => unsub();
   }, []);
 
   // إغلاق القوائم المنسدلة بمفتاح Escape (تنقّل لوحة المفاتيح).
@@ -318,8 +332,15 @@ export default function Navbar() {
                     <Link href="/payment-verify" onClick={() => setIsProfileDropdownOpen(false)} className="flex items-center gap-2 p-3 text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 rounded-xl transition-colors">
                       <FileCheck size={16} /> {isRtl ? "تأكيد دفع بريدي موب" : "Vérifier paiement"}
                     </Link>
-                    <Link href="/b2b" onClick={() => setIsProfileDropdownOpen(false)} className="flex items-center gap-2 p-3 text-sm font-black text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 rounded-xl transition-colors">
-                      <Briefcase size={16} /> {isRtl ? "بوابة الشركات B2B" : "Espace B2B"}
+                    <Link href="/b2b" onClick={() => setIsProfileDropdownOpen(false)} className="flex items-center justify-between p-3 text-sm font-black text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 rounded-xl transition-colors">
+                      <div className="flex items-center gap-2">
+                        <Briefcase size={16} /> {isRtl ? "بوابة الشركات B2B" : "Espace B2B"}
+                      </div>
+                      {!b2bEnabled && (
+                        <span className="text-[9px] bg-blue-500/15 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-black">
+                          {isRtl ? "قريباً" : "Bientôt"}
+                        </span>
+                      )}
                     </Link>
                     <Link href="/settings" onClick={() => setIsProfileDropdownOpen(false)} className="flex items-center gap-2 p-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 rounded-xl transition-colors">
                       <Settings size={16} /> {isRtl ? "الإعدادات" : "Paramètres"}
@@ -386,12 +407,26 @@ export default function Navbar() {
 
                <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-slate-700 dark:text-slate-200 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors">{isRtl ? 'الرئيسية' : 'Accueil'}</Link>
                <Link href="/services" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-slate-700 dark:text-slate-200 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors">{isRtl ? 'خدماتنا' : 'Services'}</Link>
-               <Link href="/b2b" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-black rounded-xl text-blue-600 dark:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors flex items-center gap-2">
-                 <Briefcase size={16} /> {isRtl ? 'بوابة الشركات B2B' : 'Espace B2B'}
-               </Link>
-               <Link href="/designers" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-amber-600 dark:text-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-950/20 transition-colors flex items-center gap-2">
-                 <Palette size={16} /> {isRtl ? 'سوق المصممين' : 'Marketplace'}
-               </Link>
+                <Link href="/b2b" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-black rounded-xl text-blue-600 dark:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Briefcase size={16} /> {isRtl ? 'بوابة الشركات B2B' : 'Espace B2B'}
+                  </div>
+                  {!b2bEnabled && (
+                    <span className="text-[10px] bg-blue-500/15 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-black uppercase">
+                      {isRtl ? "قريباً" : "Bientôt"}
+                    </span>
+                  )}
+                </Link>
+                <Link href="/designers" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-amber-600 dark:text-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-950/20 transition-colors flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Palette size={16} /> {isRtl ? 'سوق المصممين' : 'Marketplace'}
+                  </div>
+                  {!designersEnabled && (
+                    <span className="text-[10px] bg-amber-500/15 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full font-black uppercase">
+                      {isRtl ? "قريباً" : "Bientôt"}
+                    </span>
+                  )}
+                </Link>
                <Link href="/showroom" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-indigo-650 dark:text-indigo-400 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors">{isRtl ? 'معرض المنتجات 3D' : 'Showroom 3D'}</Link>
                <Link href="/bat-scanner" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-emerald-650 dark:text-emerald-400 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors">{isRtl ? 'فحص التصاميم (BAT)' : 'Vérificateur (BAT)'}</Link>
                <Link href="/rewards" onClick={() => setIsMobileMenuOpen(false)} className="p-3.5 font-bold rounded-xl text-slate-700 dark:text-slate-200 hover:bg-white/40 dark:hover:bg-slate-800/40 transition-colors">{isRtl ? 'نادي المكافآت' : 'Club VIP'}</Link>

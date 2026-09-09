@@ -3,9 +3,12 @@
 import React, { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { useAuth } from "@/context/AuthContext";
+import { db } from "@/lib/firebase";
+import { doc, onSnapshot } from "firebase/firestore";
 import { B2BOrganization, B2BBranch, B2BOrderApproval } from "@/lib/b2b-types";
 import CorporateOrderApproval from "@/components/b2b/CorporateOrderApproval";
 import DevisGeneratorModal from "@/components/b2b/DevisGeneratorModal";
+import B2BComingSoon from "@/components/b2b/B2BComingSoon";
 import { 
   Building2, Users, FileText, Wallet, Plus, ShieldCheck, 
   CheckCircle2, ArrowRight, Download, HandCoins, Sparkles, 
@@ -16,11 +19,26 @@ import { triggerHapticFeedback } from "@/lib/utils";
 
 export default function B2BPortalPage() {
   const { language } = useAppStore();
-  const { user, isLoggedIn } = useAuth();
+  const { user, isLoggedIn, isAdmin } = useAuth();
   const isRtl = language === "ar";
+
+  const [b2bEnabled, setB2bEnabled] = useState<boolean | null>(null);
+  const [adminPreview, setAdminPreview] = useState(false);
 
   const [activeTab, setActiveTab] = useState<"approvals" | "branches" | "quotes" | "credit">("approvals");
   const [isDevisModalOpen, setIsDevisModalOpen] = useState(false);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "ui"), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setB2bEnabled(data.b2bEnabled === true);
+      } else {
+        setB2bEnabled(false);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // Mock corporate organization data (connectable to Firestore)
   const [organization, setOrganization] = useState<B2BOrganization>({
@@ -136,11 +154,34 @@ export default function B2BPortalPage() {
     );
   };
 
+  if (b2bEnabled === false && !adminPreview) {
+    return (
+      <B2BComingSoon
+        isRtl={isRtl}
+        isAdmin={isAdmin}
+        onPreviewFullPortal={() => setAdminPreview(true)}
+      />
+    );
+  }
+
   return (
     <div
       className={`animate-fadeIn pb-24 max-w-7xl mx-auto px-4 ${isRtl ? "text-right" : "text-left"}`}
       dir={isRtl ? "rtl" : "ltr"}
     >
+      {/* Admin Preview Mode Notice Banner */}
+      {adminPreview && (
+        <div className="mb-4 mt-2 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs font-bold text-amber-700 dark:text-amber-300 shadow-sm">
+          <span>{isRtl ? "⚠️ أنت الآن في وضع معاينة المشرف (البوابة في حالة 'قريباً' للجمهور)" : "⚠️ Mode Aperçu Admin actif (Le portail B2B est fermé au public)"}</span>
+          <button
+            onClick={() => setAdminPreview(false)}
+            className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl font-black text-xs cursor-pointer active:scale-95 transition-all"
+          >
+            {isRtl ? "العودة لواجهة قريباً" : "Quitter l'aperçu"}
+          </button>
+        </div>
+      )}
+
       {/* Top Hero Banner */}
       <div className="relative overflow-hidden premium-glass rounded-[2.5rem] p-6 sm:p-10 border border-white/60 dark:border-white/10 shadow-2xl mb-8 mt-4">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">

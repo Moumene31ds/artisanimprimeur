@@ -636,6 +636,28 @@ export default function CustomizerPage() {
     setActiveTab("text");
   };
 
+  const takeARSnapshot = () => {
+    try {
+      const video = videoRef.current;
+      const webgl = document.querySelector(".ar-webgl-container canvas") as HTMLCanvasElement;
+      if (!video || !webgl) return;
+      const composite = document.createElement("canvas");
+      composite.width = video.videoWidth || 1280;
+      composite.height = video.videoHeight || 720;
+      const ctx = composite.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0, composite.width, composite.height);
+      ctx.drawImage(webgl, 0, 0, composite.width, composite.height);
+      const link = document.createElement("a");
+      link.download = `Artisan_Custom_AR_${Date.now()}.png`;
+      link.href = composite.toDataURL("image/png");
+      link.click();
+      toast.success(isRtl ? "تم حفظ لقطة المنتج في الواقع المعزز!" : "Photo AR enregistrée !");
+    } catch {
+      toast.error(isRtl ? "فشل التقاط الصورة" : "Erreur de capture");
+    }
+  };
+
   // Add customized design to Zustand store Cart
   const handleAddToCart = () => {
     const canvas = canvasRef.current;
@@ -790,8 +812,8 @@ export default function CustomizerPage() {
           />
 
           {/* transparent Three.js WebGL canvas over the video */}
-          <div className="absolute inset-0 w-full h-full z-20 bg-transparent">
-            <Canvas gl={{ alpha: true }} camera={{ position: [0, 1.5, 4.5], fov: 45 }}>
+          <div className="absolute inset-0 w-full h-full z-20 bg-transparent ar-webgl-container">
+            <Canvas gl={{ alpha: true, preserveDrawingBuffer: true }} camera={{ position: [0, 1.5, 4.5], fov: 45 }}>
               <ambientLight intensity={0.8} />
               <spotLight position={[5, 10, 5]} angle={0.25} penumbra={1} intensity={1.5} />
               
@@ -814,7 +836,7 @@ export default function CustomizerPage() {
           <div className="relative z-30 w-full p-4 bg-gradient-to-b from-black/80 to-transparent flex items-center justify-between">
             <button 
               onClick={stopCameraAR}
-              className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-black text-xs px-4 py-2.5 rounded-full shadow-lg"
+              className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-black text-xs px-4 py-2.5 rounded-full shadow-lg cursor-pointer"
             >
               <ArrowLeft size={16} />
               {st.closeAR}
@@ -827,7 +849,7 @@ export default function CustomizerPage() {
           <div className="relative z-30 w-full max-w-md p-6 bg-gradient-to-t from-black/90 via-black/60 to-transparent text-center space-y-4 rounded-t-[2.5rem]">
             <p className="text-xs font-bold text-slate-200">{st.arInstruction}</p>
             
-            <div className="flex items-center justify-center gap-6">
+            <div className="flex items-center justify-center gap-4">
               {/* Scale Control */}
               <div className="flex items-center gap-2.5 bg-white/10 px-4 py-2 rounded-full border border-white/10">
                 <button onClick={() => setArScale(prev => Math.max(0.4, prev - 0.15))} className="text-white text-xs font-black p-1">➖</button>
@@ -838,10 +860,19 @@ export default function CustomizerPage() {
               {/* Reset Control */}
               <button 
                 onClick={() => { setArScale(1); setModelBaseColor("#ffffff"); }}
-                className="w-10 h-10 rounded-full bg-white/20 border border-white/15 flex items-center justify-center text-white"
+                className="w-10 h-10 rounded-full bg-white/20 border border-white/15 flex items-center justify-center text-white cursor-pointer active:scale-90 transition-transform"
                 title="Reset model position"
               >
                 <RotateCcw size={16} />
+              </button>
+
+              {/* Snapshot Button */}
+              <button 
+                onClick={takeARSnapshot}
+                className="w-10 h-10 rounded-full bg-white text-slate-900 border border-white/20 flex items-center justify-center shadow-lg active:scale-90 transition-transform cursor-pointer"
+                title={isRtl ? "التقاط صورة" : "Prendre une photo"}
+              >
+                <Camera size={18} />
               </button>
             </div>
 

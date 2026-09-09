@@ -1,9 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { useAuth } from "@/context/AuthContext";
+import { db } from "@/lib/firebase";
+import { doc, onSnapshot } from "firebase/firestore";
 import { SHOWCASE_TEMPLATES, DesignerTemplate } from "@/lib/marketplace-service";
+import DesignersComingSoon from "@/components/designers/DesignersComingSoon";
 import { 
   Palette, Sparkles, Coins, Upload, Star, CheckCircle, 
   TrendingUp, Users, ArrowRight, ShoppingCart, Eye, DollarSign 
@@ -14,11 +17,26 @@ import { triggerHapticFeedback } from "@/lib/utils";
 
 export default function DesignersMarketplacePage() {
   const { language, addToCart } = useAppStore();
-  const { user, isLoggedIn } = useAuth();
+  const { user, isLoggedIn, isAdmin } = useAuth();
   const isRtl = language === "ar";
+
+  const [designersEnabled, setDesignersEnabled] = useState<boolean | null>(null);
+  const [adminPreview, setAdminPreview] = useState(false);
 
   const [activeTab, setActiveTab] = useState<"browse" | "submit">("browse");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "ui"), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setDesignersEnabled(data.designersEnabled === true);
+      } else {
+        setDesignersEnabled(false);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // Submission form states
   const [newTitle, setNewTitle] = useState("");
@@ -79,11 +97,34 @@ export default function DesignersMarketplacePage() {
     );
   };
 
+  if (designersEnabled === false && !adminPreview) {
+    return (
+      <DesignersComingSoon
+        isRtl={isRtl}
+        isAdmin={isAdmin}
+        onPreviewFullMarketplace={() => setAdminPreview(true)}
+      />
+    );
+  }
+
   return (
     <div
       className={`animate-fadeIn pb-24 max-w-7xl mx-auto px-4 ${isRtl ? "text-right" : "text-left"}`}
       dir={isRtl ? "rtl" : "ltr"}
     >
+      {/* Admin Preview Mode Notice Banner */}
+      {adminPreview && (
+        <div className="mb-4 mt-2 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs font-bold text-amber-700 dark:text-amber-300 shadow-sm">
+          <span>{isRtl ? "⚠️ أنت الآن في وضع معاينة المشرف (سوق المصممين في حالة 'قريباً' للجمهور)" : "⚠️ Mode Aperçu Admin actif (La Marketplace Designers est fermée au public)"}</span>
+          <button
+            onClick={() => setAdminPreview(false)}
+            className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl font-black text-xs cursor-pointer active:scale-95 transition-all"
+          >
+            {isRtl ? "العودة لواجهة قريباً" : "Quitter l'aperçu"}
+          </button>
+        </div>
+      )}
+
       {/* Hero Banner */}
       <div className="relative overflow-hidden premium-glass rounded-[2.5rem] p-6 sm:p-12 border border-white/60 dark:border-white/10 shadow-2xl mb-10 mt-4 text-center">
         <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-full text-xs font-black uppercase tracking-wider mb-4">

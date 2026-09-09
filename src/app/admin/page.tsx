@@ -12,7 +12,7 @@ import {
   ShoppingBag, Settings, LayoutDashboard, Package, 
   ShieldCheck, Download, Tag, ScanLine, X, CheckCircle, Sparkles, Megaphone,
   Printer, FileImage, BarChart3, HandCoins, Crown, User, Loader2, Plus, Phone, Mail,
-  Users as UsersIcon, Star, ShieldAlert, Database, Power, Store, Bot
+  Users as UsersIcon, Star, ShieldAlert, Database, Power, Store, Bot, Briefcase, Palette
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -29,6 +29,7 @@ import AdminOrders from "@/components/admin/AdminOrders";
 import AdminProducts from "@/components/admin/AdminProducts";
 import AdminPromo from "@/components/admin/AdminPromo";
 import AdminSettings from "@/components/admin/AdminSettings";
+import AdminPortalsControl from "@/components/admin/AdminPortalsControl";
 import PaymentAudit from "@/components/admin/PaymentAudit";
 // لوحات التحليلات الثقيلة (recharts) تُحمَّل عند الحاجة فقط — تقليل حجم حزمة الأدمن.
 const MarketingDashboard = dynamic(
@@ -558,6 +559,30 @@ export default function AdminPage() {
           >
             <Store size={14} /> {(uiConfig.storeOpen !== false) ? (isRtl ? "المتجر مفتوح" : "Ouvert") : (isRtl ? "المتجر مغلق" : "Fermé")}
           </button>
+          {/* مفتاح بوابة الشركات B2B */}
+          <button
+            onClick={() => toggleQuickSetting('b2bEnabled', !uiConfig.b2bEnabled, uiConfig.b2bEnabled ? "Portail B2B passé en Bientôt" : "Portail B2B ACTIVÉ")}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-black text-xs shadow transition-all cursor-pointer ${
+              uiConfig.b2bEnabled
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200'
+            }`}
+            title={isRtl ? "حالة بوابة الشركات B2B" : "Statut B2B"}
+          >
+            <Briefcase size={14} /> {uiConfig.b2bEnabled ? (isRtl ? "B2B متاح" : "B2B ON") : (isRtl ? "B2B قريباً" : "B2B Bientôt")}
+          </button>
+          {/* مفتاح سوق المصممين */}
+          <button
+            onClick={() => toggleQuickSetting('designersEnabled', !uiConfig.designersEnabled, uiConfig.designersEnabled ? "Marketplace passée en Bientôt" : "Marketplace ACTIVÉE")}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-black text-xs shadow transition-all cursor-pointer ${
+              uiConfig.designersEnabled
+                ? 'bg-amber-500 text-slate-950 hover:bg-amber-600'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200'
+            }`}
+            title={isRtl ? "حالة سوق المصممين" : "Statut Designers"}
+          >
+            <Palette size={14} /> {uiConfig.designersEnabled ? (isRtl ? "المصممون متاح" : "Designers ON") : (isRtl ? "المصممون قريباً" : "Designers Bientôt")}
+          </button>
         </div>
 
         <div className="flex flex-wrap gap-3">
@@ -588,7 +613,7 @@ export default function AdminPage() {
           { id: 'reviews', icon: Star, label: isRtl ? 'التقييمات' : 'Avis' },
           { id: 'newsletter', icon: Mail, label: 'Newsletter' },
           { id: 'security', icon: ShieldAlert, label: isRtl ? 'الأمان' : 'Sécurité' },
-
+          { id: 'portals', icon: Briefcase, label: isRtl ? 'B2B والمصممين' : 'B2B & Designers' },
           { id: 'ai', icon: Bot, label: isRtl ? 'مركز الذكاء' : 'AI Studio' },
           { id: 'settings', icon: Settings, label: 'Site' }
         ].map(t => (
@@ -968,6 +993,17 @@ export default function AdminPage() {
         {tab === 'ai' && (
           <motion.div key="ai" initial={{opacity:0, y:15}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-15}}>
             <AdminAICenter isRtl={isRtl} />
+          </motion.div>
+        )}
+
+        {/* ==================== PORTALS (B2B & DESIGNERS) TAB ==================== */}
+        {tab === 'portals' && (
+          <motion.div key="portals" initial={{opacity:0, y:15}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-15}}>
+            <AdminPortalsControl 
+              uiConfig={uiConfig} 
+              saveUiConfig={saveUiConfig} 
+              isRtl={isRtl} 
+            />
           </motion.div>
         )}
 

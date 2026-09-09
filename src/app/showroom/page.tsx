@@ -13,6 +13,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useAppStore } from "@/lib/store";
 import LuxuryFinishing3D from "@/components/LuxuryFinishing3D";
+import WebARViewer, { ARModelType } from "@/components/WebARViewer";
+import { QRCodeSVG } from "qrcode.react";
 
 // Preset textures for testing
 const PRESETS = [
@@ -211,10 +213,21 @@ export default function ShowroomPage() {
   const [designUrl, setDesignUrl] = useState<string>(PRESETS[0].url);
   const [lightPreset, setLightPreset] = useState<'studio' | 'sunset' | 'neon'>('studio');
   
-  // Capture states
+  // Capture & AR states
   const [triggerCapture, setTriggerCapture] = useState(false);
   const [showARModal, setShowARModal] = useState(false);
+  const [isWebAROpen, setIsWebAROpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleOpenAR = () => {
+    // If mobile device, open direct Web-AR immediately
+    const isMobile = typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    if (isMobile) {
+      setIsWebAROpen(true);
+    } else {
+      setShowARModal(true);
+    }
+  };
 
   // Handle design texture upload
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -334,11 +347,11 @@ export default function ShowroomPage() {
               </button>
               
               <button 
-                onClick={() => setShowARModal(true)}
-                className="pointer-events-auto px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs shadow-lg flex items-center gap-2 transition-transform active:scale-95 cursor-pointer"
+                onClick={handleOpenAR}
+                className="pointer-events-auto px-5 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-2xl font-black text-xs shadow-lg flex items-center gap-2 transition-transform active:scale-95 cursor-pointer"
               >
                 <Smartphone size={14} />
-                {isRtl ? "عرض في الواقع المعزز AR" : "Simuler en AR"}
+                {isRtl ? "معاينة في الواقع المعزز AR" : "Simuler en Web-AR"}
               </button>
             </div>
 
@@ -514,48 +527,53 @@ export default function ShowroomPage() {
                   : "Scannez ce code QR avec votre mobile pour projeter la maquette 3D directement sur votre bureau en réalité augmentée !"}
               </p>
 
-              {/* Simulated QR Code placeholder */}
-              <div className="bg-slate-100 dark:bg-slate-950 p-6 rounded-2xl w-44 h-44 mx-auto flex items-center justify-center border border-slate-200 dark:border-slate-800 mb-6">
-                {/* QR graphic with boxes */}
-                <div className="grid grid-cols-5 grid-rows-5 gap-1.5 w-full h-full p-2 opacity-85">
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div></div>
-                  <div></div>
-                  <div></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                  <div></div>
-                  <div className="bg-slate-900 dark:bg-white rounded-sm"></div>
-                </div>
+              {/* Direct AR Button */}
+              <button
+                onClick={() => {
+                  setShowARModal(false);
+                  setIsWebAROpen(true);
+                }}
+                className="w-full mb-4 py-3 px-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-black text-xs shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
+              >
+                <Camera size={16} />
+                {isRtl ? "تشغيل كاميرا هذا الجهاز فوراً (Direct AR)" : "Ouvrir avec la caméra de cet appareil"}
+              </button>
+
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+                <span className="flex-shrink mx-3 text-[10px] text-slate-400 font-bold uppercase">{isRtl ? "أو امسح بهاتفك" : "Ou avec mobile"}</span>
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+              </div>
+
+              {/* Real QR Code */}
+              <div className="bg-white p-4 rounded-2xl w-fit mx-auto flex items-center justify-center border border-slate-200 dark:border-slate-800 my-4 shadow-sm">
+                <QRCodeSVG
+                  value={typeof window !== "undefined" ? window.location.href : "https://artisanimprimeur.vercel.app/showroom"}
+                  size={150}
+                  level="M"
+                  includeMargin={false}
+                />
               </div>
 
               <button 
                 onClick={() => setShowARModal(false)}
-                className="w-full bg-slate-900 dark:bg-accent text-white py-3.5 rounded-2xl font-black text-sm active:scale-95 transition-all shadow-md"
+                className="w-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 py-3 rounded-2xl font-black text-xs active:scale-95 transition-all"
               >
-                {isRtl ? "متابعة" : "Fermer"}
+                {isRtl ? "إغلاق" : "Fermer"}
               </button>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Web-AR Fullscreen Experience */}
+      <WebARViewer
+        isOpen={isWebAROpen}
+        onClose={() => setIsWebAROpen(false)}
+        modelType={modelType as ARModelType}
+        modelColor={modelColor}
+        isRtl={isRtl}
+      />
 
       {/* Luxury Finishing 3D Simulator Section */}
       <section className="mt-16 pt-8 border-t border-slate-200/60 dark:border-slate-800">

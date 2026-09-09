@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { triggerHapticFeedback } from "@/lib/utils";
+import WebARViewer from "@/components/WebARViewer";
 
 export type LuxuryFinishingType = "gold_foil" | "silver_foil" | "rose_gold" | "spot_uv" | "emboss";
 
@@ -185,6 +186,7 @@ export default function LuxuryFinishing3D({ isRtl = true }: LuxuryFinishing3DPro
   const [baseColor, setBaseColor] = useState<string>("#0f172a"); // Deep Navy Blue
   const [gyroEnabled, setGyroEnabled] = useState(false);
   const [gyroTilt, setGyroTilt] = useState({ x: 0, y: 0 });
+  const [isAROpen, setIsAROpen] = useState(false);
 
   // Handle smartphone Gyroscope motion
   useEffect(() => {
@@ -304,21 +306,35 @@ export default function LuxuryFinishing3D({ isRtl = true }: LuxuryFinishing3DPro
           </p>
         </div>
 
-        {/* Gyroscope toggle for smartphone */}
-        <button
-          type="button"
-          onClick={requestGyroPermission}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black transition-all shadow-md shrink-0 ${
-            gyroEnabled
-              ? "bg-emerald-600 text-white shadow-emerald-600/20"
-              : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100"
-          }`}
-        >
-          <Smartphone size={16} className={gyroEnabled ? "animate-bounce" : ""} />
-          {gyroEnabled
-            ? (isRtl ? "حساس الهاتف: نشط ✓" : "Gyroscope : Actif ✓")
-            : (isRtl ? "تفعيل إمالة الهاتف" : "Activer Gyroscope")}
-        </button>
+        {/* Action buttons: AR Camera + Gyroscope for smartphone */}
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              try { triggerHapticFeedback("medium"); } catch {}
+              setIsAROpen(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black transition-all shadow-md bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-600 hover:to-amber-600 text-slate-950 shadow-amber-500/20 active:scale-95 cursor-pointer"
+          >
+            <Camera size={16} />
+            {isRtl ? "معاينة بالكاميرا الواقعية AR" : "Voir en Réalité Augmentée AR"}
+          </button>
+
+          <button
+            type="button"
+            onClick={requestGyroPermission}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black transition-all shadow-md shrink-0 cursor-pointer ${
+              gyroEnabled
+                ? "bg-emerald-600 text-white shadow-emerald-600/20"
+                : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            <Smartphone size={16} className={gyroEnabled ? "animate-bounce" : ""} />
+            {gyroEnabled
+              ? (isRtl ? "حساس الهاتف: نشط ✓" : "Gyroscope : Actif ✓")
+              : (isRtl ? "تفعيل إمالة الهاتف" : "Activer Gyroscope")}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
@@ -450,6 +466,16 @@ export default function LuxuryFinishing3D({ isRtl = true }: LuxuryFinishing3DPro
           </div>
         </div>
       </div>
+
+      {/* Real Mobile Web-AR Camera Experience */}
+      <WebARViewer
+        isOpen={isAROpen}
+        onClose={() => setIsAROpen(false)}
+        modelType="card"
+        modelColor={baseColor}
+        finishing={finishing}
+        isRtl={isRtl}
+      />
     </div>
   );
 }
